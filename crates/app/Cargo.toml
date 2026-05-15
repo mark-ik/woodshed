@@ -1,0 +1,18 @@
+[package]
+name = "guitar-toolkit"
+version = "0.1.0"
+description = "Tuner, theory library, exercises, and rhythm sequencer for stringed instruments."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "guitar-toolkit"
+path = "src/main.rs"
+
+[dependencies]
+music-theory = { workspace = true }
+audio = { workspace = true }
+iced = { workspace = true }
