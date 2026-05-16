@@ -2,12 +2,20 @@
 //!
 //! Pure data + math. No audio dependencies. The audio engine consumes
 //! these types and renders them.
+//!
+//! All public types derive `serde::Serialize` and `serde::Deserialize`,
+//! so patterns can be saved as JSON presets and round-tripped. Sample
+//! buffers are not embedded — only sample ids — so a deserialized
+//! pattern that uses [`Sound::Sample`] must be rehydrated by looking
+//! ids up in a [`crate::samples::SampleBank`].
 
 use core::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::sound::Sound;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Subdivision {
     /// Steps per beat. 1=quarter, 2=eighth, 4=sixteenth, 8=thirty-second,
     /// 3=eighth-note triplet, 6=sixteenth-note triplet.
@@ -23,7 +31,7 @@ impl Subdivision {
     pub const SIXTEENTH_TRIPLET: Self = Self { divisions_per_beat: 6 };
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TimeSignature {
     /// Beats per bar.
     pub numerator: u8,
@@ -44,13 +52,13 @@ impl Default for TimeSignature {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Step {
     Empty,
     Active { accent: bool },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Track {
     pub name: String,
     pub steps: Vec<Step>,
@@ -58,7 +66,7 @@ pub struct Track {
     pub muted: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SequencerPattern {
     pub bpm: f32,
     pub time_signature: TimeSignature,
@@ -249,6 +257,24 @@ mod tests {
                 _ => panic!("step {i} should be active"),
             }
         }
+    }
+
+    #[test]
+    fn pattern_round_trips_through_serde_json() {
+        let original = SequencerPattern::metronome(
+            128.0,
+            TimeSignature::new(7, 8),
+            Subdivision::EIGHTH,
+        );
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: SequencerPattern = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.bpm, original.bpm);
+        assert_eq!(restored.time_signature, original.time_signature);
+        assert_eq!(restored.subdivision, original.subdivision);
+        assert_eq!(restored.tracks.len(), original.tracks.len());
+        assert_eq!(restored.tracks[0].name, original.tracks[0].name);
+        assert_eq!(restored.tracks[0].steps, original.tracks[0].steps);
+        assert_eq!(restored.tracks[0].muted, original.tracks[0].muted);
     }
 
     #[test]

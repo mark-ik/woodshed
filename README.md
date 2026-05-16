@@ -1,32 +1,36 @@
-# guitar-toolkit (placeholder name)
+# Woodshed
 
-A guitarist's toolkit: tuner, comprehensive chord and scale libraries with
-formulas, chord progressions, classic practice exercises, and a metronome
-extensible into a simple drum machine. Theory model generalizes to other
+A guitarist's practice toolkit, named for the musician's term for focused
+solitary practice. Tuner, comprehensive chord and scale libraries with
+formulas, chord progressions, classic practice exercises, a metronome
+extensible into a simple drum machine, and a **Practice Mode** that
+walks you through rotations of material at tempo so the app drives you
+rather than the other way around. The theory model generalizes to other
 stringed instruments (bass, ukulele, banjo).
 
-Built in Rust with [Iced](https://iced.rs) for the UI. Targets desktop first
-(Windows, macOS, Linux) with a planned path to mobile.
+Built in Rust with [Iced](https://iced.rs) for the UI. Targets desktop
+first (Windows, macOS, Linux) with a planned path to mobile.
 
 ## Status
 
-Pre-alpha. See [`design_docs/`](design_docs/) for project description, doc
-policy, and the active plan.
+Pre-alpha. See [`design_docs/`](design_docs/) for the product
+description, doc policy, and the active plan.
 
 ## Layout
 
 ```
 crates/
-  music-theory/   Pure-Rust theory primitives (no I/O, no UI)
-  app/            Iced application — depends on music-theory
-design_docs/      Plans, policy, project description
+  woodshedding/    Pure-Rust theory primitives (no I/O, no UI, no audio)
+  woodshed-audio/  Tuner-grade pitch detection + sequencer/click engine
+  woodshed/        Iced application — depends on the two above
+design_docs/       Plans, policy, project description
 ```
 
 ## Build
 
 ```
 cargo build
-cargo run -p guitar-toolkit
+cargo run -p woodshed
 ```
 
 ## License

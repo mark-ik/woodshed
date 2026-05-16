@@ -1,0 +1,14 @@
+[package]
+name = "woodshedding"
+version = "0.1.0"
+description = "Music theory primitives for stringed instruments: pitches, intervals, tunings, scales, chords, progressions, fretboard mapping, and practice exercises. Pure data and math; no I/O, no UI, no audio."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "../../README.md"
+keywords = ["music", "theory", "guitar", "scale", "chord"]
+categories = ["multimedia::audio", "data-structures"]
+
+[dependencies]

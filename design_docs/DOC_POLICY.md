@@ -1,6 +1,6 @@
 # Documentation Policy
 
-Adapted from the graphshell DOC_POLICY for guitar-toolkit's narrower scope.
+Adapted from the graphshell DOC_POLICY for Woodshed's narrower scope.
 This project has a single subsystem (the app) plus a shared theory crate, so
 the policy is intentionally light.
 

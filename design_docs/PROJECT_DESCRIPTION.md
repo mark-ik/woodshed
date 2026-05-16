@@ -76,7 +76,7 @@ want a packaged, signed, offline-installable app without compiling.
 - **Audio I/O**: cpal
 - **DSP**: fundsp (drum/click synthesis)
 - **Pitch detection**: pitch-detector (or pitch-detection)
-- **Theory**: in-house `music-theory` crate (no external theory dep)
+- **Theory**: in-house `woodshedding` crate (no external theory dep)
 
 ## Non-Goals (Initial Release)
 

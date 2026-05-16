@@ -1,5 +1,13 @@
 # Initial Plan
 
+> **Naming note (2026-05-15):** the project was renamed from the
+> `guitar-toolkit` placeholder to **Woodshed**. The theory crate is
+> now `woodshedding`, the audio crate is `woodshed-audio`, and the app
+> binary is `woodshed`. Historical narrative below still refers to the
+> crates by their original names — that's intentional, since rewriting
+> the timeline would distort what happened when. New plan entries
+> should use the current names.
+
 Scaffold the workspace, then incrementally build out the theory crate,
 audio plumbing, and Iced UI in feature-targeted phases.
 
@@ -1101,9 +1109,10 @@ investigation is the next step.
 
 User flagged a unifying feature: a **practice mode** that drives the
 existing pieces in concert. Captured as Feature Target 10 (after
-release packaging in FT9). The user suggested the integrated practice
-tool deserves the name **Fretwork** — a candidate to retire the
-"guitar-toolkit" placeholder.
+release packaging in FT9). The user briefly considered naming the
+integrated practice tool **Fretwork**; the project was ultimately
+renamed to **Woodshed** on 2026-05-15, with the practice mode living
+as the Practice tab inside it.
 
 **Concept.** The user picks a *practice set* — a bounded, iterable
 collection of musical material — and the app cycles through it at

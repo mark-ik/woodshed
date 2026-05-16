@@ -1,0 +1,22 @@
+[package]
+name = "woodshed-audio"
+version = "0.1.0"
+description = "Real-time audio engine for stringed-instrument practice tools: cpal-backed sequencer with BPM-stable click synthesis, plus tuner-grade pitch detection with harmonic-confusion suppression and fundamental-bias smoothing."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "../../README.md"
+keywords = ["audio", "tuner", "metronome", "pitch-detection", "guitar"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+cpal = { workspace = true }
+pitch-detector = { workspace = true }
+hound = { workspace = true }
+midir = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

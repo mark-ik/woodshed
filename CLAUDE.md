@@ -1,4 +1,4 @@
-# CLAUDE.md — guitar-toolkit Repository Role
+# CLAUDE.md — Woodshed Repository Role
 
 This file defines how Claude Code should behave in this repository. Read
 it first when starting any session.
@@ -7,10 +7,14 @@ it first when starting any session.
 
 ## Project Identity
 
-**guitar-toolkit** (placeholder name) is an open-source guitarist's
-toolkit: tuner, comprehensive theory libraries, exercises, and a
-metronome / drum machine. Theory model generalizes across stringed
-instruments. Built in Rust with Iced.
+**Woodshed** is an open-source guitarist's toolkit: tuner, comprehensive
+theory libraries, exercises, chord/scale browsers, progression reference,
+metronome, and a Practice Mode that drives the user through rotations
+of musical material at tempo. The theory model generalizes across
+stringed instruments. Built in Rust with Iced.
+
+The name comes from "woodshedding" — musicians' slang for focused,
+solitary practice.
 
 See `design_docs/PROJECT_DESCRIPTION.md` for the product description and
 `design_docs/DOC_README.md` for the doc index.
@@ -32,12 +36,14 @@ All authoritative design material lives in `design_docs/`. Read
 
 ```
 crates/
-  music-theory/   Pure Rust theory primitives. No I/O, no UI, no audio.
-  app/            Iced application. Depends on music-theory.
+  woodshedding/    Pure-Rust theory primitives. No I/O, no UI, no audio.
+  woodshed-audio/  Audio engine: tuner-grade pitch detection and the
+                   click/sequencer used by the metronome and practice mode.
+  woodshed/        Iced application. Depends on woodshedding + woodshed-audio.
 ```
 
-Keep `music-theory` pure. UI- or audio-coupled code belongs in `app` or
-in a future dedicated crate.
+Keep `woodshedding` pure: no `cpal`, no `iced`, no file I/O. UI- or
+audio-coupled code belongs in `woodshed-audio` or `woodshed`.
 
 ## General Guidelines
 

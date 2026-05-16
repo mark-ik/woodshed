@@ -45,8 +45,12 @@ impl std::fmt::Display for AudioError {
 
 impl std::error::Error for AudioError {}
 
-/// Internal voice — one playing instance of a sound.
-#[derive(Copy, Clone, Debug)]
+/// Internal voice — one playing instance of a sound. Holds the
+/// triggering [`Sound`] by value so the mixer can render without
+/// re-resolving anything off the pattern. `Sound` is `Clone` (not
+/// `Copy`) because the `Sample` variant carries an id `String` and an
+/// `Arc<Vec<f32>>` buffer — both cheap to clone.
+#[derive(Clone, Debug)]
 pub(crate) struct Voice {
     sound: Sound,
     accent: bool,
@@ -74,7 +78,7 @@ pub(crate) struct EngineState {
 }
 
 impl EngineState {
-    fn new(pattern: SequencerPattern, sample_rate: f32) -> Self {
+    pub(crate) fn new(pattern: SequencerPattern, sample_rate: f32) -> Self {
         Self {
             pattern,
             sample_rate,
@@ -223,6 +227,8 @@ pub(crate) fn process_buffer(
 
         if step_idx > state.last_step {
             let step_in_bar = step_idx as usize % steps_per_bar;
+            // Clone Sound by value into each new Voice. Cheap: Click
+            // is bytes-sized, Sample's buffer is Arc-shared.
             let triggers: Vec<(Sound, bool)> = state
                 .pattern
                 .tracks
@@ -230,7 +236,7 @@ pub(crate) fn process_buffer(
                 .filter(|t| !t.muted)
                 .filter_map(|t| match t.steps.get(step_in_bar)? {
                     Step::Empty => None,
-                    Step::Active { accent } => Some((t.sound, *accent)),
+                    Step::Active { accent } => Some((t.sound.clone(), *accent)),
                 })
                 .collect();
             for (sound, accent) in triggers {

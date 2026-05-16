@@ -30,7 +30,7 @@ section whenever a durable working insight emerges from a session.
   chords, and arbitrary tunings; the upstream models do not support
   those, and inheriting their data shape costs more than it saves. Build
   the theory crate from scratch.
-- **Pure core, thin shell**: `crates/music-theory` must remain pure data
+- **Pure core, thin shell**: `crates/woodshedding` must remain pure data
   + math — no I/O, no UI, no audio. The app crate consumes it.
 - **Desktop first, mobile later**: ship to itch.io / Gumroad for desktop
   before attempting mobile. Iced mobile support is the eventual path;

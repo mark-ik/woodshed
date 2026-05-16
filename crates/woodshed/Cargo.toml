@@ -1,0 +1,21 @@
+[package]
+name = "woodshed"
+version = "0.1.0"
+description = "A feature-complete practice toolkit for guitar and stringed instruments: tuner, chord and scale libraries, fretboard mapping, chord progressions, practice exercises, and a metronome with sequencer. Pure Rust desktop app built on Iced."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "../../README.md"
+keywords = ["guitar", "music", "tuner", "metronome", "practice"]
+categories = ["multimedia::audio", "gui"]
+
+[[bin]]
+name = "woodshed"
+path = "src/main.rs"
+
+[dependencies]
+woodshedding = { workspace = true }
+woodshed-audio = { workspace = true }
+iced = { workspace = true }

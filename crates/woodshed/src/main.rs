@@ -11,25 +11,25 @@ use iced::{
     Theme,
 };
 
-use audio::{
+use woodshed_audio::{
     DetectedNote, DetectedNoteName, DetectorKind, EngineHandle, SequencerEngine,
     SequencerPattern, Sound, Step, Subdivision, TimeSignature, Track, TunerEngine,
     TunerHandle,
 };
-use audio::input::DEFAULT_SILENCE_RMS_THRESHOLD;
-use music_theory::chord::{catalog as chord_catalog, ChordFormula};
-use music_theory::exercise::{catalog as exercise_catalog, ExerciseParams};
-use music_theory::fretboard::{
+use woodshed_audio::input::DEFAULT_SILENCE_RMS_THRESHOLD;
+use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
+use woodshedding::exercise::{catalog as exercise_catalog, ExerciseParams};
+use woodshedding::fretboard::{
     BassConstraint, ChordVoicing, Fretboard, Position, StringPlay,
 };
-use music_theory::interval::Interval;
-use music_theory::pitch::{Accidental, NoteName, Pitch};
-use music_theory::practice::{catalog as practice_catalog, PracticeItem, PracticeSet};
-use music_theory::progression::{
+use woodshedding::interval::Interval;
+use woodshedding::pitch::{Accidental, NoteName, Pitch};
+use woodshedding::practice::{catalog as practice_catalog, PracticeItem, PracticeSet};
+use woodshedding::progression::{
     catalog as progression_catalog, Progression, ProgressionChord,
 };
-use music_theory::scale::{catalog as scale_catalog, ScaleFormula};
-use music_theory::tuning::{catalog as tuning_catalog, Instrument, Tuning};
+use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
+use woodshedding::tuning::{catalog as tuning_catalog, Instrument, Tuning};
 
 /// 12-tone pitch class with sharp spelling, suitable for the tuner's
 /// custom-target dropdown. Sharps only because pitch-detector exposes
@@ -145,7 +145,7 @@ fn valid_key_scales_for_progression(prog: &Progression) -> Vec<&'static str> {
 /// whose range overlaps it.
 fn voicings_by_position(
     fretboard: &Fretboard,
-    chord: &music_theory::chord::ChordFormula,
+    chord: &woodshedding::chord::ChordFormula,
     root: Pitch,
 ) -> BTreeMap<u8, Vec<ChordVoicing>> {
     let mut all: Vec<ChordVoicing> = Vec::new();
@@ -312,7 +312,7 @@ fn pitch_to_chromatic_sharps(pitch: &Pitch) -> (ChromaticPc, i8) {
 }
 
 fn main() -> iced::Result {
-    iced::application("Guitar Toolkit", App::update, App::view)
+    iced::application("Woodshed", App::update, App::view)
         .subscription(App::subscription)
         .theme(|_| Theme::Dark)
         .window_size(Size::new(1100.0, 600.0))
@@ -1904,10 +1904,10 @@ impl App {
             PracticeItem::Exercise { exercise, starting_fret } => {
                 let steps = exercise.generate(
                     &self.fretboard.tuning,
-                    &music_theory::exercise::ExerciseParams {
+                    &woodshedding::exercise::ExerciseParams {
                         starting_fret: *starting_fret,
                         direction:
-                            music_theory::exercise::ExerciseDirection::Both,
+                            woodshedding::exercise::ExerciseDirection::Both,
                         trill_repeats: 8,
                     },
                 );
@@ -3132,7 +3132,7 @@ impl<Message> canvas::Program<Message> for ChordDiagram {
                 StringPlay::Played { fret, interval_from_root, .. } => {
                     let is_root = matches!(
                         interval_from_root,
-                        Some(iv) if *iv == music_theory::interval::Interval::PERFECT_UNISON
+                        Some(iv) if *iv == woodshedding::interval::Interval::PERFECT_UNISON
                     );
                     let this_dot_color =
                         if is_root { self.colors.root_dot } else { dot_color };
@@ -3190,8 +3190,8 @@ impl<Message> canvas::Program<Message> for ChordDiagram {
     }
 }
 
-fn accidental_str(a: music_theory::pitch::Accidental) -> &'static str {
-    use music_theory::pitch::Accidental as A;
+fn accidental_str(a: woodshedding::pitch::Accidental) -> &'static str {
+    use woodshedding::pitch::Accidental as A;
     match a {
         A::DoubleFlat => "bb",
         A::Flat => "b",

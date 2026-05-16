@@ -1,22 +1,22 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/music-theory",
-    "crates/audio",
-    "crates/app",
+    "crates/woodshedding",
+    "crates/woodshed-audio",
+    "crates/woodshed",
 ]
 
 [workspace.package]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Mark <sgt.mark3@gmail.com>"]
-repository = "https://github.com/TBD/guitar-toolkit"
+repository = "https://github.com/mark-ik/woodshed"
 rust-version = "1.80"
 
 [workspace.dependencies]
 # Internal crates
-music-theory = { path = "crates/music-theory" }
-audio = { path = "crates/audio" }
+woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
+woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 
 # UI
 iced = { version = "0.13", features = ["canvas", "tokio"] }
@@ -24,7 +24,13 @@ iced = { version = "0.13", features = ["canvas", "tokio"] }
 # Audio
 cpal = "0.15"
 pitch-detector = { version = "0.3", features = ["hinted"] }
+hound = "3.5"
+midir = "0.10"
+
+# Persistence
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 # Future:
 #   fundsp          — DSP for fancier sounds (deferred — raw sin is enough for click)
-#   serde           — tuning / preset persistence
+#   symphonia       — FLAC / OGG / MP3 sample loading (deferred — WAV via hound is enough for now)
