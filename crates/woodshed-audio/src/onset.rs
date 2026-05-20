@@ -47,10 +47,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Stream, StreamConfig};
-
-use crate::engine::AudioError;
+use crate::input::Analyzer;
 
 /// Default detection frame in samples. 256 samples ≈ 5.3 ms at
 /// 48 kHz. Small enough to localize onsets; large enough to smooth
@@ -254,13 +251,13 @@ impl OnsetDetector {
 }
 
 // =================================================================
-// I/O layer — cpal-backed `OnsetEngine`
+// Analyzer layer — wires the pure detector into the shared InputEngine
 // =================================================================
 //
-// Wraps the pure DSP detector in an audio-input stream so the rest of
-// the app can ask "what onsets has the user played?" without managing
-// cpal directly. Mirrors the shape of `TunerEngine` / `SequencerEngine`
-// (engine struct that owns the stream, plus a clone-able handle).
+// [`OnsetAnalyzer`] implements [`crate::input::Analyzer`] so it can be
+// registered alongside the pitch analyzer on a single
+// [`crate::InputEngine`]. State is published behind an `Arc<Mutex<...>>`
+// readable from any thread via [`OnsetHandle`].
 
 /// A single detected onset, timestamped both in sample-clock and
 /// wall-clock. Wall-clock makes it easy to correlate against the
@@ -286,15 +283,24 @@ pub struct OnsetSnapshot {
     pub input_level: f32,
 }
 
+/// How many recent onsets to retain in the snapshot history. 32 is
+/// plenty for tap-tempo estimation (you want at most ~8 hits) and for
+/// a "last few hits" UI display.
+pub const ONSET_SNAPSHOT_CAPACITY: usize = 32;
+
 struct OnsetInternals {
     detector: OnsetDetector,
     snapshot: OnsetSnapshot,
     /// Most recent onsets, used both for the snapshot and for BPM
-    /// estimation. Trimmed to `SNAPSHOT_CAPACITY` from the front.
+    /// estimation. Trimmed to [`ONSET_SNAPSHOT_CAPACITY`] from the front.
     history: VecDeque<DetectedOnset>,
+    /// If false, [`OnsetAnalyzer::process`] is a no-op. Lets the UI
+    /// turn onset detection off until a timing-feedback or loop-record
+    /// session needs it.
+    enabled: bool,
 }
 
-/// Thread-safe handle to control / inspect an `OnsetEngine`.
+/// Thread-safe handle into an [`OnsetAnalyzer`]'s shared state.
 #[derive(Clone)]
 pub struct OnsetHandle {
     inner: Arc<Mutex<OnsetInternals>>,
@@ -306,8 +312,8 @@ impl OnsetHandle {
         self.inner.lock().unwrap().snapshot.clone()
     }
 
-    /// Drop all stored history. Use when starting a fresh
-    /// listening session (e.g. tap-tempo session begins).
+    /// Drop all stored history. Use when starting a fresh listening
+    /// session (e.g. tap-tempo session begins, calibration starts).
     pub fn reset(&self) {
         let mut s = self.inner.lock().unwrap();
         s.detector.reset();
@@ -332,106 +338,93 @@ impl OnsetHandle {
     pub fn threshold(&self) -> f32 {
         self.inner.lock().unwrap().detector.threshold_multiplier
     }
-}
 
-/// Audio-input engine that runs an [`OnsetDetector`] over a cpal
-/// input stream and exposes detected onsets via an [`OnsetHandle`].
-///
-/// # Resource sharing
-///
-/// On most platforms cpal can open multiple input streams on the same
-/// device, so running an `OnsetEngine` alongside a `TunerEngine` works
-/// fine. On platforms where it doesn't, the right move is to share one
-/// stream and fan samples out — a refactor we can do when we hit it.
-pub struct OnsetEngine {
-    handle: OnsetHandle,
-    _stream: Stream,
-}
-
-impl OnsetEngine {
-    /// How many recent onsets to retain in the snapshot history.
-    /// 32 is plenty for tap-tempo estimation (you want at most ~8
-    /// hits) and for a "last few hits" UI display.
-    pub const SNAPSHOT_CAPACITY: usize = 32;
-
-    pub fn new() -> Result<Self, AudioError> {
-        let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .ok_or(AudioError::NoInputDevice)?;
-        let supported = device
-            .default_input_config()
-            .map_err(AudioError::StreamConfig)?;
-        let sample_format = supported.sample_format();
-        let config: StreamConfig = supported.into();
-        let channels = config.channels as usize;
-        let sample_rate = config.sample_rate.0 as f32;
-
-        let internals = Arc::new(Mutex::new(OnsetInternals {
-            detector: OnsetDetector::new(sample_rate),
-            snapshot: OnsetSnapshot::default(),
-            history: VecDeque::with_capacity(Self::SNAPSHOT_CAPACITY),
-        }));
-        let internals_for_callback = Arc::clone(&internals);
-
-        // Reusable scratch buffer downmixed to mono — sized roughly
-        // for one cpal callback; will grow on demand.
-        let mut mono_scratch: Vec<f32> = Vec::with_capacity(2048);
-
-        let stream = match sample_format {
-            cpal::SampleFormat::F32 => device
-                .build_input_stream(
-                    &config,
-                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        // Downmix to mono.
-                        mono_scratch.clear();
-                        mono_scratch.reserve(data.len() / channels);
-                        for frame in data.chunks(channels) {
-                            let mean =
-                                frame.iter().copied().sum::<f32>() / channels as f32;
-                            mono_scratch.push(mean);
-                        }
-                        // RMS for level display.
-                        let level = if mono_scratch.is_empty() {
-                            0.0
-                        } else {
-                            let sum_sq: f32 =
-                                mono_scratch.iter().map(|s| s * s).sum();
-                            (sum_sq / mono_scratch.len() as f32).sqrt()
-                        };
-
-                        let now = Instant::now();
-                        let mut s = internals_for_callback.lock().unwrap();
-                        let new_onsets = s.detector.feed(&mono_scratch);
-                        for sample_index in new_onsets {
-                            let detected = DetectedOnset {
-                                sample_index,
-                                at: now,
-                            };
-                            if s.history.len() >= Self::SNAPSHOT_CAPACITY {
-                                s.history.pop_front();
-                            }
-                            s.history.push_back(detected);
-                        }
-                        s.snapshot.input_level = level;
-                        s.snapshot.recent = s.history.iter().copied().collect();
-                    },
-                    |err| eprintln!("onset input error: {err}"),
-                    None,
-                )
-                .map_err(AudioError::StreamBuild)?,
-            other => return Err(AudioError::UnsupportedSampleFormat(other)),
-        };
-        stream.play().map_err(AudioError::StreamPlay)?;
-
-        Ok(Self {
-            handle: OnsetHandle { inner: internals },
-            _stream: stream,
-        })
+    /// Enable or disable onset detection. When disabled the analyzer
+    /// is a near-no-op (only does enabled-flag check, no DSP).
+    pub fn set_enabled(&self, enabled: bool) {
+        self.inner.lock().unwrap().enabled = enabled;
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.inner.lock().unwrap().enabled
+    }
+}
+
+/// Onset-detection analyzer. Plug into [`crate::InputEngine`] via
+/// [`crate::InputEngineBuilder::with_analyzer`].
+///
+/// Disabled by default — the UI flips the enable flag through
+/// [`OnsetHandle::set_enabled`] when timing feedback or loop record
+/// goes live. This keeps the audio thread cheap when the feature is
+/// not in use.
+pub struct OnsetAnalyzer {
+    state: Arc<Mutex<OnsetInternals>>,
+}
+
+impl Default for OnsetAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OnsetAnalyzer {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(OnsetInternals {
+                // Sample rate is provisional; OnsetDetector reconfigures
+                // through its `sample_rate_hz` accessor when the first
+                // `process()` call delivers the real rate.
+                detector: OnsetDetector::new(48_000.0),
+                snapshot: OnsetSnapshot::default(),
+                history: VecDeque::with_capacity(ONSET_SNAPSHOT_CAPACITY),
+                enabled: false,
+            })),
+        }
+    }
+
+    /// Clone-able handle into this analyzer's shared state.
     pub fn handle(&self) -> OnsetHandle {
-        self.handle.clone()
+        OnsetHandle {
+            inner: Arc::clone(&self.state),
+        }
+    }
+}
+
+impl Analyzer for OnsetAnalyzer {
+    fn process(&mut self, samples: &[f32], sample_rate_hz: f32, at: Instant) {
+        let mut s = self.state.lock().unwrap();
+        if !s.enabled {
+            return;
+        }
+
+        // Rebuild the detector if the sample rate has shifted (e.g.
+        // device hot-swap). Preserves no state — calibration / tempo
+        // sessions need to restart on rate change anyway.
+        if (s.detector.sample_rate_hz() - sample_rate_hz).abs() > 0.5 {
+            s.detector = OnsetDetector::new(sample_rate_hz);
+        }
+
+        // RMS for level display.
+        let level = if samples.is_empty() {
+            0.0
+        } else {
+            let sum_sq: f32 = samples.iter().map(|x| x * x).sum();
+            (sum_sq / samples.len() as f32).sqrt()
+        };
+
+        let new_onsets = s.detector.feed(samples);
+        for sample_index in new_onsets {
+            let detected = DetectedOnset {
+                sample_index,
+                at,
+            };
+            if s.history.len() >= ONSET_SNAPSHOT_CAPACITY {
+                s.history.pop_front();
+            }
+            s.history.push_back(detected);
+        }
+        s.snapshot.input_level = level;
+        s.snapshot.recent = s.history.iter().copied().collect();
     }
 }
 

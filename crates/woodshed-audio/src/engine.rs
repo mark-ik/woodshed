@@ -52,9 +52,19 @@ impl std::error::Error for AudioError {}
 /// `Arc<Vec<f32>>` buffer — both cheap to clone.
 #[derive(Clone, Debug)]
 pub(crate) struct Voice {
-    sound: Sound,
-    accent: bool,
-    start_sample: u64,
+    pub(crate) sound: Sound,
+    pub(crate) accent: bool,
+    pub(crate) start_sample: u64,
+}
+
+impl Voice {
+    pub(crate) fn new(sound: Sound, accent: bool, start_sample: u64) -> Self {
+        Self {
+            sound,
+            accent,
+            start_sample,
+        }
+    }
 }
 
 /// Mutable engine state shared between audio callback and UI thread.

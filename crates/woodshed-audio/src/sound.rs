@@ -58,6 +58,43 @@ impl SampleBuffer {
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
+
+    // --- Loop-shaping ops (sampler) ---
+    //
+    // All length-preserving, so a bar-locked loop buffer stays the
+    // right length for `sample_in_bar % len` playback. Each mutates
+    // through `Arc::make_mut` (clones the Vec only if another Arc — a
+    // UI snapshot, say — still references it). Written as plain
+    // per-sample passes so they're trivially promotable to a shared
+    // `audio-primitives` crate when Strophe needs the same.
+
+    /// Multiply every sample by `gain`, soft-clamping to `[-1, 1]`.
+    /// A negative gain also inverts phase.
+    pub fn apply_gain(&mut self, gain: f32) {
+        let data = Arc::make_mut(&mut self.data);
+        for s in data.iter_mut() {
+            *s = (*s * gain).clamp(-1.0, 1.0);
+        }
+    }
+
+    /// Scale so the loudest sample sits at `peak` (e.g. `1.0`). No-op
+    /// for a silent buffer (avoids divide-by-zero / inf blow-up).
+    pub fn normalize(&mut self, peak: f32) {
+        let max = self.data.iter().fold(0.0_f32, |m, &s| m.max(s.abs()));
+        if max <= f32::EPSILON {
+            return;
+        }
+        let scale = peak / max;
+        let data = Arc::make_mut(&mut self.data);
+        for s in data.iter_mut() {
+            *s = (*s * scale).clamp(-1.0, 1.0);
+        }
+    }
+
+    /// Reverse the buffer in place.
+    pub fn reverse(&mut self) {
+        Arc::make_mut(&mut self.data).reverse();
+    }
 }
 
 impl Default for SampleBuffer {
@@ -275,6 +312,37 @@ impl Sound {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gain_scales_and_clamps() {
+        let mut b = SampleBuffer::new(vec![0.25, -0.5, 0.8], 48_000);
+        b.apply_gain(2.0);
+        assert!((b.data[0] - 0.5).abs() < 1e-6);
+        assert!((b.data[1] - -1.0).abs() < 1e-6); // -1.0 (clamped from -1.0)
+        assert!((b.data[2] - 1.0).abs() < 1e-6); // clamped from 1.6
+    }
+
+    #[test]
+    fn normalize_brings_peak_to_target() {
+        let mut b = SampleBuffer::new(vec![0.1, -0.4, 0.2], 48_000);
+        b.normalize(1.0);
+        let max = b.data.iter().fold(0.0_f32, |m, &s| m.max(s.abs()));
+        assert!((max - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn normalize_silent_is_noop() {
+        let mut b = SampleBuffer::new(vec![0.0, 0.0], 48_000);
+        b.normalize(1.0);
+        assert!(b.data.iter().all(|&s| s == 0.0));
+    }
+
+    #[test]
+    fn reverse_flips_order() {
+        let mut b = SampleBuffer::new(vec![1.0, 2.0, 3.0], 48_000);
+        b.reverse();
+        assert_eq!(*b.data, vec![3.0, 2.0, 1.0]);
+    }
 
     #[test]
     fn click_render_starts_nonzero() {

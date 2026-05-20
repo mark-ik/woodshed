@@ -14,11 +14,30 @@ before any other doc in this directory.
 - [2026-04-30_initial_plan.md](2026-04-30_initial_plan.md) — Initial
   scaffold and roadmap from theory crate through Iced UI to first
   desktop release.
+- [2026-05-15_midi_design.md](2026-05-15_midi_design.md) — MIDI in/out
+  design and clock-sync model.
+- [2026-05-15_polyphonic_pitch_spike.md](2026-05-15_polyphonic_pitch_spike.md)
+  — Spike on polyphonic pitch detection.
+- [2026-05-16_song_mode_integration.md](2026-05-16_song_mode_integration.md)
+  — Song Mode integration into the practice app. (§3 "UI" superseded by the
+  timeline-layers plan below; engine wiring + save format still current.)
+- [2026-05-19_song_timeline_layers_plan.md](2026-05-19_song_timeline_layers_plan.md)
+  — Bar-quantized layered timeline (section / chord / click lanes) + sampler;
+  the "one-person DLR" evolution of the Song tab. Sampler incubates in
+  `woodshed-audio` (shared crate Strophe consumes).
+- [2026-05-16_xilem_migration_plan.md](2026-05-16_xilem_migration_plan.md)
+  — Migration from Iced to Xilem; feature-parity ladder and web/mobile
+  follow-on.
 
 ## Archive
 
-- `archive_docs/` — retired plans and superseded notes (created on
-  first archive).
+- `archive_docs/` — retired plans and superseded notes.
+- `archive_docs/2026-05-18/2026-05-17_woodshed_daw_plan.md` —
+  Original "sibling DAW project under the Woodshed umbrella" plan.
+  Superseded same-week: the maintainer chose a separate sibling repo
+  (`repos/strophe/`), and the project scope pivoted from "general
+  DAW" to a Deeler-inspired collaborative loop recorder. See
+  `repos/strophe/design_docs/` for the live plan.
 
 ## Working Principles for AI Assistants
 

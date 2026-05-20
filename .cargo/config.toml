@@ -1,0 +1,9 @@
+# Xilem's deeply-nested generic view types blow the Windows PDB
+# symbol limit on dev builds (LNK4319). The linker has a "truncate
+# long symbol names rather than fail" mode that solves this without
+# stripping debug info. The other approach is `debug = 0` on the
+# crate, which loses too much info.
+#
+# Only applied on Windows MSVC; no-op on Linux/macOS toolchains.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]

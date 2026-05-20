@@ -8,8 +8,10 @@ walks you through rotations of material at tempo so the app drives you
 rather than the other way around. The theory model generalizes to other
 stringed instruments (bass, ukulele, banjo).
 
-Built in Rust with [Iced](https://iced.rs) for the UI. Targets desktop
-first (Windows, macOS, Linux) with a planned path to mobile.
+Built in Rust with [Xilem](https://github.com/linebender/xilem) +
+[Masonry](https://github.com/linebender/xilem/tree/main/masonry) for the
+UI (migrated from Iced 2026-05-18). Targets desktop first (Windows,
+macOS, Linux) with a planned path to mobile and web.
 
 ## Status
 
@@ -22,7 +24,7 @@ description, doc policy, and the active plan.
 crates/
   woodshedding/    Pure-Rust theory primitives (no I/O, no UI, no audio)
   woodshed-audio/  Tuner-grade pitch detection + sequencer/click engine
-  woodshed/        Iced application — depends on the two above
+  woodshed-xilem/  Xilem + Masonry application — depends on the two above
 design_docs/       Plans, policy, project description
 ```
 
@@ -30,7 +32,7 @@ design_docs/       Plans, policy, project description
 
 ```
 cargo build
-cargo run -p woodshed
+cargo run -p woodshed-xilem
 ```
 
 ## License

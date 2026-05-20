@@ -3,7 +3,8 @@ resolver = "2"
 members = [
     "crates/woodshedding",
     "crates/woodshed-audio",
-    "crates/woodshed",
+    "crates/audio-widgets",
+    "crates/woodshed-xilem",
 ]
 
 [workspace.package]
@@ -17,15 +18,34 @@ rust-version = "1.80"
 # Internal crates
 woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
+# Shared audio widgets (waveform, …) — also consumed cross-repo by
+# Strophe via path-dep; the first `audio-widgets` extraction.
+audio-widgets = { path = "crates/audio-widgets", version = "0.1.0" }
+# (pitch-detection is declared further down under "Audio".)
 
-# UI
-iced = { version = "0.13", features = ["canvas", "tokio"] }
+# UI — Xilem (decision locked 2026-05-18; iced retired).
+# Xilem path-deps: depend on Mark's local xilem checkout. Once Xilem
+# stabilizes (currently alpha), we can switch to crates.io. We keep
+# default features (which include `imaging_vello` for the renderer
+# backend) — disabling defaults causes the Masonry imaging layer to
+# panic with "a renderer backend feature is required" at first paint.
+xilem = { path = "../xilem/xilem", version = "0.4.0" }
+masonry = { path = "../xilem/masonry", version = "0.4.0" }
+masonry_winit = { path = "../xilem/masonry_winit", version = "0.4.0" }
+winit = "0.30"
 
 # Audio
 cpal = "0.15"
 pitch-detector = { version = "0.3", features = ["hinted"] }
+# `pitch-detection` (separate crate from `pitch-detector` above)
+# ships the time-domain detectors — Autocorrelation, McLeod (NSDF),
+# YIN — that pitch-detector left commented-out. We use the
+# `McLeodDetector` for octave-confusion-resistant tuning on guitar
+# low strings. Conversion from raw frequency to note/cents is done
+# locally; this crate just supplies the frequency estimate.
+pitch-detection = "0.3"
 hound = "3.5"
-midir = "0.10"
+midir = "0.11"
 
 # Persistence
 serde = { version = "1.0", features = ["derive"] }
@@ -34,3 +54,9 @@ serde_json = "1.0"
 # Future:
 #   fundsp          — DSP for fancier sounds (deferred — raw sin is enough for click)
 #   symphonia       — FLAC / OGG / MP3 sample loading (deferred — WAV via hound is enough for now)
+
+# PDB symbol-length limit on Windows MSVC is handled by the
+# /DEBUG:LongSymbolTruncate linker flag set in .cargo/config.toml.
+# Xilem's deeply-nested generic view types would otherwise overflow
+# the per-symbol PDB budget (LNK4319) on dev builds; the truncate
+# mode keeps debug info usable while bumping the limit.

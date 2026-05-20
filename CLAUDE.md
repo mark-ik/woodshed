@@ -11,7 +11,8 @@ it first when starting any session.
 theory libraries, exercises, chord/scale browsers, progression reference,
 metronome, and a Practice Mode that drives the user through rotations
 of musical material at tempo. The theory model generalizes across
-stringed instruments. Built in Rust with Iced.
+stringed instruments. Built in Rust with Xilem + Masonry (migrated from
+Iced on 2026-05-18; see `design_docs/2026-05-16_xilem_migration_plan.md`).
 
 The name comes from "woodshedding" — musicians' slang for focused,
 solitary practice.
@@ -39,11 +40,12 @@ crates/
   woodshedding/    Pure-Rust theory primitives. No I/O, no UI, no audio.
   woodshed-audio/  Audio engine: tuner-grade pitch detection and the
                    click/sequencer used by the metronome and practice mode.
-  woodshed/        Iced application. Depends on woodshedding + woodshed-audio.
+  woodshed-xilem/  Xilem + Masonry application. Depends on woodshedding
+                   + woodshed-audio. This is the application crate.
 ```
 
-Keep `woodshedding` pure: no `cpal`, no `iced`, no file I/O. UI- or
-audio-coupled code belongs in `woodshed-audio` or `woodshed`.
+Keep `woodshedding` pure: no `cpal`, no UI, no file I/O. UI- or
+audio-coupled code belongs in `woodshed-audio` or `woodshed-xilem`.
 
 ## General Guidelines
 

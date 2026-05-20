@@ -14,6 +14,7 @@ categories = ["multimedia::audio"]
 [dependencies]
 cpal = { workspace = true }
 pitch-detector = { workspace = true }
+pitch-detection = { workspace = true }
 hound = { workspace = true }
 midir = { workspace = true }
 serde = { workspace = true }

@@ -1,0 +1,31 @@
+[package]
+name = "woodshed-xilem"
+version = "0.1.0"
+description = "Xilem + Masonry application crate for Woodshed."
+edition = "2024"
+rust-version = "1.92"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+publish = false
+
+[[bin]]
+name = "woodshed-xilem"
+path = "src/main.rs"
+
+[dependencies]
+woodshedding = { workspace = true }
+woodshed-audio = { workspace = true }
+audio-widgets = { workspace = true }
+xilem = { workspace = true }
+masonry = { workspace = true }
+masonry_winit = { workspace = true }
+winit = { workspace = true }
+tokio = { version = "1.50", features = ["rt", "rt-multi-thread", "time", "sync"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Cross-platform user-config dir lookup (Windows %APPDATA%, macOS
+# Application Support, Linux XDG_CONFIG_HOME). Used by the Settings
+# persistence layer to find a stable path for `state.json`.
+directories = "5"
