@@ -19,9 +19,13 @@
 //! domain-neutral components (combobox, …) usable by Mere too live one
 //! layer down in `xilem-components`.
 
+pub mod fader;
+pub mod knob;
 pub mod meter;
 pub mod theme;
 
+pub use fader::fader;
+pub use knob::knob;
 pub use meter::{db_to_norm, meter_view};
 
 use masonry::imaging::record::Scene;
