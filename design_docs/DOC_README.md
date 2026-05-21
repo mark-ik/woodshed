@@ -8,6 +8,8 @@ before any other doc in this directory.
 - [PROJECT_DESCRIPTION.md](PROJECT_DESCRIPTION.md) — Product goals,
   major features, scope. Maintainer-owned.
 - [DOC_POLICY.md](DOC_POLICY.md) — Documentation governance.
+- [xilem_fork_patches.md](xilem_fork_patches.md) — Ledger of meaningful local
+  edits in the shared `../xilem` checkout (runtime theming, etc.).
 
 ## Active Plans
 
@@ -25,6 +27,9 @@ before any other doc in this directory.
   — Bar-quantized layered timeline (section / chord / click lanes) + sampler;
   the "one-person DLR" evolution of the Song tab. Sampler incubates in
   `woodshed-audio` (shared crate Strophe consumes).
+- [2026-05-20_theme_system_design.md](2026-05-20_theme_system_design.md)
+  — Seed-derived palette formula (OKLCH + contrast) + theme management model
+  (built-in vs user themes, edit/rename/remove). Proposal, pending sign-off.
 - [2026-05-16_xilem_migration_plan.md](2026-05-16_xilem_migration_plan.md)
   — Migration from Iced to Xilem; feature-parity ladder and web/mobile
   follow-on.

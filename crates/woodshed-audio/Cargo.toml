@@ -12,6 +12,10 @@ keywords = ["audio", "tuner", "metronome", "pitch-detection", "guitar"]
 categories = ["multimedia::audio"]
 
 [dependencies]
+# Shared pure-DSP primitives — onset/tempo cores, latency estimation,
+# click synthesis. The driver layers (OnsetAnalyzer, CalibrationSession,
+# Sound::Click voice) in this crate are built on top of these.
+audio-primitives = { workspace = true }
 cpal = { workspace = true }
 pitch-detector = { workspace = true }
 pitch-detection = { workspace = true }

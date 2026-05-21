@@ -23,7 +23,6 @@
 //! nothing rather than panicking. This keeps the engine resilient to
 //! missing samples.
 
-use core::f32::consts::TAU;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -61,39 +60,28 @@ impl SampleBuffer {
 
     // --- Loop-shaping ops (sampler) ---
     //
-    // All length-preserving, so a bar-locked loop buffer stays the
-    // right length for `sample_in_bar % len` playback. Each mutates
-    // through `Arc::make_mut` (clones the Vec only if another Arc — a
-    // UI snapshot, say — still references it). Written as plain
-    // per-sample passes so they're trivially promotable to a shared
-    // `audio-primitives` crate when Strophe needs the same.
+    // Thin wrappers over `audio_primitives::buffer` — the shared
+    // pure-slice kernels, so Strophe gets the same DSP. All
+    // length-preserving, so a bar-locked loop stays the right length
+    // for `sample_in_bar % len` playback. Mutate through
+    // `Arc::make_mut` (clones the Vec only if another Arc — a UI
+    // snapshot, say — still references it).
 
     /// Multiply every sample by `gain`, soft-clamping to `[-1, 1]`.
     /// A negative gain also inverts phase.
     pub fn apply_gain(&mut self, gain: f32) {
-        let data = Arc::make_mut(&mut self.data);
-        for s in data.iter_mut() {
-            *s = (*s * gain).clamp(-1.0, 1.0);
-        }
+        audio_primitives::buffer::apply_gain(Arc::make_mut(&mut self.data).as_mut_slice(), gain);
     }
 
     /// Scale so the loudest sample sits at `peak` (e.g. `1.0`). No-op
-    /// for a silent buffer (avoids divide-by-zero / inf blow-up).
+    /// for a silent buffer.
     pub fn normalize(&mut self, peak: f32) {
-        let max = self.data.iter().fold(0.0_f32, |m, &s| m.max(s.abs()));
-        if max <= f32::EPSILON {
-            return;
-        }
-        let scale = peak / max;
-        let data = Arc::make_mut(&mut self.data);
-        for s in data.iter_mut() {
-            *s = (*s * scale).clamp(-1.0, 1.0);
-        }
+        audio_primitives::buffer::normalize(Arc::make_mut(&mut self.data).as_mut_slice(), peak);
     }
 
     /// Reverse the buffer in place.
     pub fn reverse(&mut self) {
-        Arc::make_mut(&mut self.data).reverse();
+        audio_primitives::buffer::reverse(Arc::make_mut(&mut self.data).as_mut_slice());
     }
 }
 
@@ -259,19 +247,16 @@ impl Sound {
                 duration_seconds,
                 amplitude,
             } => {
+                // Click synthesis (sine burst + exponential decay) is
+                // shared with Strophe via audio-primitives. This voice
+                // renders it one sample at a time for the mixer.
                 let t = local_sample as f32 / sample_rate;
-                if t >= *duration_seconds {
-                    return None;
-                }
                 let freq = if accent {
                     *accent_frequency_hz
                 } else {
                     *frequency_hz
                 };
-                let decay_rate = 5.0 / *duration_seconds;
-                let envelope = (-t * decay_rate).exp();
-                let phase = t * freq * TAU;
-                Some(phase.sin() * envelope * amplitude)
+                audio_primitives::click::click_sample(t, freq, *duration_seconds, *amplitude)
             }
             Sound::Sample {
                 gain,

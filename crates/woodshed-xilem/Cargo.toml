@@ -18,6 +18,7 @@ path = "src/main.rs"
 woodshedding = { workspace = true }
 woodshed-audio = { workspace = true }
 audio-widgets = { workspace = true }
+xilem-components = { workspace = true }
 xilem = { workspace = true }
 masonry = { workspace = true }
 masonry_winit = { workspace = true }

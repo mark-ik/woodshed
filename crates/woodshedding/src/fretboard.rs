@@ -20,10 +20,10 @@
 //! # Example
 //!
 //! ```
-//! use music_theory::pitch::{NoteName, Pitch};
-//! use music_theory::tuning::{Instrument, Tuning};
-//! use music_theory::scale::catalog as scale_catalog;
-//! use music_theory::fretboard::Fretboard;
+//! use woodshedding::pitch::{NoteName, Pitch};
+//! use woodshedding::tuning::{Instrument, Tuning};
+//! use woodshedding::scale::catalog as scale_catalog;
+//! use woodshedding::fretboard::Fretboard;
 //!
 //! let std_guitar = Tuning::find_for("Standard", Instrument::Guitar).unwrap();
 //! let board = Fretboard::new(std_guitar, 22);

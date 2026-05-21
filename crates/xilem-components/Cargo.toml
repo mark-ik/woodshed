@@ -1,0 +1,14 @@
+[package]
+name = "xilem-components"
+version = "0.1.0"
+description = "Domain-neutral reusable Xilem/Masonry UI components for the Strophos family (Woodshed, Strophe, Mere): combobox, and more. No audio dependency — the generic design-system layer beneath audio-widgets."
+edition = "2024"
+rust-version = "1.92"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+xilem = { workspace = true }
+masonry = { workspace = true }

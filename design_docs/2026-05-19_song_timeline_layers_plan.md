@@ -249,6 +249,12 @@ Candidate scopes, lightest → heaviest:
   bar-locked loop stays the right length; written as pure per-sample passes
   (extraction-ready). 4 new tests (15 in `sound.rs` pass). Trim deferred (a
   length-changing op fights the `sample_in_bar % len` bar-lock).
+- 2026-05-20: **Promoted to `audio-primitives`.** The DSP slice kernels now
+  live in `audio_primitives::buffer` (`apply_gain`/`normalize`/`reverse`,
+  pure `&mut [f32]`, 4 tests); `SampleBuffer`'s methods are thin wrappers over
+  them. Completes the `audio-primitives` extraction (alongside Mark's already-
+  consumed click / onset / calibration cores) so Strophe gets the same DSP.
+  Both repos build green.
 - 2026-05-19: **Replace-vs-overdub** — `Song.record_replace` (`#[serde(default)]`
   = overdub, preserving current behavior); engine recording write overwrites
   per-sample when set. "Rec: overdub/replace" toggle in the transport row.

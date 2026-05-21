@@ -11,8 +11,8 @@
 //! # Example
 //!
 //! ```
-//! use music_theory::pitch::{NoteName, Pitch};
-//! use music_theory::chord::catalog;
+//! use woodshedding::pitch::{NoteName, Pitch};
+//! use woodshedding::chord::catalog;
 //!
 //! let cmaj7 = catalog().iter().find(|c| c.name == "Major 7").unwrap();
 //! let pitches = cmaj7.apply_to(Pitch::natural(NoteName::C, 4)).unwrap();

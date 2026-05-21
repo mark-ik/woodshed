@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/woodshedding",
     "crates/woodshed-audio",
+    "crates/audio-primitives",
+    "crates/xilem-components",
     "crates/audio-widgets",
     "crates/woodshed-xilem",
 ]
@@ -21,6 +23,14 @@ woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 # Shared audio widgets (waveform, …) — also consumed cross-repo by
 # Strophe via path-dep; the first `audio-widgets` extraction.
 audio-widgets = { path = "crates/audio-widgets", version = "0.1.0" }
+# Shared pure-DSP primitives (click synth, onset/tempo, latency) — the
+# `audio-primitives` extraction. Pure std; consumed by woodshed-audio
+# here and cross-repo by strophe-engine via path-dep.
+audio-primitives = { path = "crates/audio-primitives", version = "0.1.0" }
+# Domain-neutral reusable UI components (combobox, …) — the generic
+# design-system layer shared by all three Xilem apps (Woodshed,
+# Strophe, Mere). audio-widgets sits one layer above this.
+xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # (pitch-detection is declared further down under "Audio".)
 
 # UI — Xilem (decision locked 2026-05-18; iced retired).

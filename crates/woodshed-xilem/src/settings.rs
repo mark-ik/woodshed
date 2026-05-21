@@ -31,8 +31,70 @@ use serde::{Deserialize, Serialize};
 use woodshed_audio::DetectorKind;
 use woodshedding::tuning::Instrument;
 
+use audio_widgets::theme::{Seeds, color_from_hex, color_to_hex};
+
 use crate::theme::ThemeMode;
 use crate::{ChromaticPc, ClickPattern, AccentMode, LabelMode, SidebarVisibility, Tab};
+
+/// A user-authored theme, persisted as hex seed strings (peniko `Color`
+/// isn't serde-friendly, and hex round-trips legibly in the JSON). The
+/// `name` doubles as its id — selection in [`Settings::active_user_theme`]
+/// refers to it by name. Built-in themes are not stored here; they live
+/// in code as [`ThemeMode`] variants.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserThemeDef {
+    pub name: String,
+    pub primary: String,
+    pub secondary: String,
+    pub tertiary: String,
+    pub neutral: String,
+    pub success: String,
+    pub danger: String,
+    pub dark: bool,
+    /// Optional explicit heading / body text colors (hex). `None`
+    /// derives them from `neutral`. Additive (`#[serde(default)]`) so
+    /// older saved themes without them still load.
+    #[serde(default)]
+    pub text_header: Option<String>,
+    #[serde(default)]
+    pub text_body: Option<String>,
+}
+
+impl UserThemeDef {
+    /// Build from runtime [`Seeds`] (e.g. cloning the active built-in
+    /// as the starting point for a new custom theme).
+    pub fn from_seeds(name: impl Into<String>, s: &Seeds) -> Self {
+        Self {
+            name: name.into(),
+            primary: color_to_hex(s.primary),
+            secondary: color_to_hex(s.secondary),
+            tertiary: color_to_hex(s.tertiary),
+            neutral: color_to_hex(s.neutral),
+            success: color_to_hex(s.success),
+            danger: color_to_hex(s.danger),
+            dark: s.dark,
+            text_header: s.text_header.map(color_to_hex),
+            text_body: s.text_body.map(color_to_hex),
+        }
+    }
+
+    /// Resolve to runtime [`Seeds`]. Any unparseable hex falls back to
+    /// mid-grey so a hand-corrupted field can't crash theming.
+    pub fn to_seeds(&self) -> Seeds {
+        let c = |h: &str| color_from_hex(h).unwrap_or(masonry::peniko::Color::from_rgb8(0x80, 0x80, 0x80));
+        Seeds {
+            primary: c(&self.primary),
+            secondary: c(&self.secondary),
+            tertiary: c(&self.tertiary),
+            neutral: c(&self.neutral),
+            text_header: self.text_header.as_deref().and_then(color_from_hex),
+            text_body: self.text_body.as_deref().and_then(color_from_hex),
+            success: c(&self.success),
+            danger: c(&self.danger),
+            dark: self.dark,
+        }
+    }
+}
 
 /// String adapter for [`Instrument`] — the upstream enum doesn't
 /// derive serde and we don't want to add a feature flag to the
@@ -90,6 +152,12 @@ pub fn detector_from_str(s: &str) -> DetectorKind {
 pub struct Settings {
     pub tab: Tab,
     pub theme_mode: ThemeMode,
+    /// User-authored themes (additive; built-ins live in code).
+    pub user_themes: Vec<UserThemeDef>,
+    /// Name of the active user theme, or `None` to use the built-in
+    /// `theme_mode`. A name that no longer resolves falls back to the
+    /// built-in on load.
+    pub active_user_theme: Option<String>,
 
     // Shared / global. `active_instrument` is a string adapter for
     // [`Instrument`] (see `instrument_to_str` / `_from_str`) so we
@@ -146,6 +214,8 @@ impl Default for Settings {
         Self {
             tab: Tab::default(),
             theme_mode: ThemeMode::default(),
+            user_themes: Vec::new(),
+            active_user_theme: None,
             active_instrument: instrument_to_str(Instrument::Guitar).to_string(),
             tuning_name: None,
             sidebars: SidebarVisibility::default(),

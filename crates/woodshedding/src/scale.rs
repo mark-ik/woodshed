@@ -12,8 +12,8 @@
 //! # Example
 //!
 //! ```
-//! use music_theory::pitch::{NoteName, Pitch};
-//! use music_theory::scale::{catalog, ScaleFormula};
+//! use woodshedding::pitch::{NoteName, Pitch};
+//! use woodshedding::scale::{catalog, ScaleFormula};
 //!
 //! let major = catalog().iter().find(|s| s.name == "Major").unwrap();
 //! let c_major = major.apply_to(Pitch::natural(NoteName::C, 4)).unwrap();

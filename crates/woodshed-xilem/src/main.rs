@@ -586,6 +586,11 @@ struct AppState {
     /// `Settings` and toggled by the Settings tab. Kept in sync with
     /// `palette` via `AppState::set_theme`.
     theme_mode: theme::ThemeMode,
+    /// User-authored themes (runtime mirror of `Settings.user_themes`).
+    user_themes: Vec<settings::UserThemeDef>,
+    /// Name of the active user theme, or `None` = use the built-in
+    /// `theme_mode`.
+    active_user: Option<String>,
     /// Cached default-properties set for the active theme, rebuilt in
     /// `set_theme`. Held as an `Arc` so the per-frame window view can
     /// hand the same pointer to Xilem each frame (cheap `ptr_eq`
@@ -729,6 +734,8 @@ impl AppState {
             editing_buffer: String::new(),
             palette: Palette::default(),
             theme_mode: theme::ThemeMode::default(),
+            user_themes: Vec::new(),
+            active_user: None,
             default_properties: Arc::new(build_default_properties(&Palette::default())),
             window_id: WindowId::next(),
             running: true,
@@ -743,7 +750,18 @@ impl AppState {
     /// version doesn't strand the user on a deleted entry.
     fn apply_settings(&mut self, s: Settings) {
         self.tab = s.tab;
-        self.set_theme(s.theme_mode);
+        // Themes: restore user themes, then resolve the active one. An
+        // `active_user_theme` naming a theme that still exists wins;
+        // otherwise fall back to the built-in `theme_mode`.
+        self.user_themes = s.user_themes;
+        self.theme_mode = s.theme_mode;
+        match s
+            .active_user_theme
+            .filter(|name| self.user_themes.iter().any(|t| &t.name == name))
+        {
+            Some(name) => self.set_user_theme(name),
+            None => self.set_theme(s.theme_mode),
+        }
         self.active_instrument = settings::instrument_from_str(&s.active_instrument);
         // Rebuild the fretboard against the persisted tuning if it
         // exists in the current catalog, otherwise fall back to the
@@ -818,6 +836,8 @@ impl AppState {
         Settings {
             tab: self.tab,
             theme_mode: self.theme_mode,
+            user_themes: self.user_themes.clone(),
+            active_user_theme: self.active_user.clone(),
             active_instrument: settings::instrument_to_str(self.active_instrument).to_string(),
             tuning_name: Some(self.fretboard.tuning.name.clone()),
             sidebars: self.sidebars,
@@ -856,17 +876,127 @@ impl AppState {
         widgets::DiagramColors::from_palette(&self.palette)
     }
 
-    /// Switch theme. Updates both the active palette and the mode
-    /// tag together so they can never drift; the Settings tab's
-    /// picker is the only thing that should call this.
+    /// Seeds for the currently-active theme — the active user theme if
+    /// one is selected and resolves, else the built-in `theme_mode`.
+    fn current_seeds(&self) -> audio_widgets::theme::Seeds {
+        self.active_user
+            .as_ref()
+            .and_then(|name| self.user_themes.iter().find(|t| &t.name == name))
+            .map(|t| t.to_seeds())
+            .unwrap_or_else(|| self.theme_mode.seeds())
+    }
+
+    /// Rebuild the palette + default-properties from the active seeds.
+    /// The new `Arc<DefaultProperties>` is what the window view detects
+    /// (by `Arc` identity) to re-theme masonry-default widgets live.
+    fn rebuild_palette(&mut self) {
+        self.palette = theme::palette_from_seeds(&self.current_seeds());
+        self.default_properties = Arc::new(build_default_properties(&self.palette));
+    }
+
+    /// Select a built-in theme (clears any active user theme).
     fn set_theme(&mut self, mode: theme::ThemeMode) {
         self.theme_mode = mode;
-        self.palette = theme::palette_for(mode);
-        // Rebuild the default-properties set (new `Arc`) so the window
-        // view detects the change and the render root re-themes the
-        // masonry-default-driven widgets (bare labels, buttons, prose)
-        // live, without a restart.
-        self.default_properties = Arc::new(build_default_properties(&self.palette));
+        self.active_user = None;
+        self.rebuild_palette();
+    }
+
+    /// Select a user theme by name.
+    fn set_user_theme(&mut self, name: String) {
+        self.active_user = Some(name);
+        self.rebuild_palette();
+    }
+
+    /// Duplicate the active theme's seeds into a new editable user
+    /// theme and select it. Names it "Custom N" (next free index).
+    fn new_user_theme(&mut self) {
+        let seeds = self.current_seeds();
+        let mut n = 1;
+        let name = loop {
+            let candidate = format!("Custom {n}");
+            if !self.user_themes.iter().any(|t| t.name == candidate) {
+                break candidate;
+            }
+            n += 1;
+        };
+        self.user_themes
+            .push(settings::UserThemeDef::from_seeds(name.clone(), &seeds));
+        self.set_user_theme(name);
+    }
+
+    /// Mutate the active user theme in place (no-op if a built-in is
+    /// active), then rebuild. Used by the seed hex editors + dark
+    /// toggle + rename.
+    fn edit_active_user(&mut self, f: impl FnOnce(&mut settings::UserThemeDef)) {
+        let Some(name) = self.active_user.clone() else {
+            return;
+        };
+        if let Some(def) = self.user_themes.iter_mut().find(|t| t.name == name) {
+            f(def);
+            // A rename changes the def's name; keep `active_user` in sync.
+            self.active_user = Some(def.name.clone());
+            self.rebuild_palette();
+        }
+    }
+
+    /// Set one RGB channel (0=R, 1=G, 2=B) of one seed (0=primary,
+    /// 1=secondary, 2=tertiary, 3=neutral) on the active user theme,
+    /// then re-derive. Drives the live color sliders.
+    fn set_seed_channel(&mut self, field: u8, channel: u8, value: u8) {
+        self.edit_active_user(|d| {
+            let hex = match field {
+                0 => &mut d.primary,
+                1 => &mut d.secondary,
+                2 => &mut d.tertiary,
+                _ => &mut d.neutral,
+            };
+            let mut rgb = audio_widgets::theme::color_from_hex(hex)
+                .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80))
+                .to_rgba8()
+                .to_u8_array();
+            rgb[channel.min(2) as usize] = value;
+            *hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+        });
+    }
+
+    /// Toggle a text tier between derived (`None`) and custom. Enabling
+    /// custom seeds it with the current derived color so it starts
+    /// where it was. `header` true = `text_header`, false = `text_body`.
+    fn toggle_text_override(&mut self, header: bool) {
+        let seed_hex = audio_widgets::theme::color_to_hex(if header {
+            self.palette.text_header
+        } else {
+            self.palette.text
+        });
+        self.edit_active_user(|d| {
+            let slot = if header { &mut d.text_header } else { &mut d.text_body };
+            *slot = if slot.is_some() { None } else { Some(seed_hex) };
+        });
+    }
+
+    /// Set one RGB channel of a custom text tier (no-op if that tier is
+    /// derived, i.e. `None`).
+    fn set_text_channel(&mut self, header: bool, channel: u8, value: u8) {
+        self.edit_active_user(|d| {
+            let slot = if header { &mut d.text_header } else { &mut d.text_body };
+            if let Some(hex) = slot {
+                let mut rgb = audio_widgets::theme::color_from_hex(hex)
+                    .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80))
+                    .to_rgba8()
+                    .to_u8_array();
+                rgb[channel.min(2) as usize] = value;
+                *hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+            }
+        });
+    }
+
+    /// Remove a user theme. If it was active, fall back to the built-in.
+    fn remove_user_theme(&mut self, name: &str) {
+        self.user_themes.retain(|t| t.name != name);
+        if self.active_user.as_deref() == Some(name) {
+            self.active_user = None;
+        }
+        self.rebuild_palette();
     }
 
     fn current_scale(&self) -> &'static ScaleFormula {
@@ -1154,7 +1284,7 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     sized_box(
         flex_row((
             hamburger,
-            label("Woodshed").text_size(TS_LG),
+            header_label(state.palette, "Woodshed", TS_LG),
             combobox(
                 "header.instrument",
                 "",
@@ -1180,7 +1310,14 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .gap(SP_3),
     )
     .padding(SP_2)
-    .background_color(state.palette.surface)
+    // Header strip carries a faint `secondary` tint (mostly surface),
+    // giving the support hue a visible, app-wide home distinct from
+    // the neutral cards.
+    .background_color(audio_widgets::theme::mix(
+        state.palette.secondary,
+        state.palette.surface,
+        0.82,
+    ))
 }
 
 fn tab_bar(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
@@ -1290,7 +1427,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // bottom-aligned label-mode cycler. Each picker now pairs a
     // combobox (jump to any) with ◀/▶ arrows (walk to adjacent).
     let info_panel = flex_col((
-        label(scale_name).text_size(TS_LG),
+        header_label(state.palette, scale_name, TS_LG),
         dim_prose(state.palette, format!("Intervals: {intervals}"), TS_SM),
         flex_row((
             combobox(
@@ -1499,7 +1636,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let _ = display_root; // surfaced as the combobox trigger label
 
     let info_panel = flex_col((
-        label(chord_label).text_size(TS_LG),
+        header_label(state.palette, chord_label, TS_LG),
         dim_prose(state.palette, format!("Intervals: {intervals}"), TS_SM),
         flex_row((
             combobox(
@@ -2478,7 +2615,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let practice_open_combo = state.open_combobox;
 
     let info_panel = flex_col((
-        label(set_name).text_size(TS_LG),
+        header_label(state.palette, set_name, TS_LG),
         prose(set_desc).text_size(TS_XS),
         flex_row((
             combobox(
@@ -2594,7 +2731,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
         // Current item label + progress.
-        label(item_label).text_size(TS_XL),
+        header_label(state.palette, item_label, TS_XL),
         dim_label(state.palette, progress_text, TS_XS),
         dim_label(state.palette, next_preview, TS_XS),
         FlexSpacer::Flex(1.0),
@@ -3082,7 +3219,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                     // width and reports it through resize_observer.
                     // Drives the chord-card reflow.
                     panel_width_tracker,
-                    label(prog_name).text_size(TS_LG),
+                    header_label(state.palette, prog_name, TS_LG),
                     prose(prog_desc).text_size(TS_SM),
                     // Combobox picker for the progression key — replaces
                     // the old `◀ Key: C ▶` cycle row. The ▲/▼ arrows on
@@ -3573,7 +3710,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let exercise_open_combo = state.open_combobox;
 
     let info_panel = flex_col((
-        label(exercise_name).text_size(TS_LG),
+        header_label(state.palette, exercise_name, TS_LG),
         prose(exercise_desc).text_size(TS_SM),
         flex_row((
             combobox(
@@ -3817,7 +3954,7 @@ fn metronome_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     };
 
     let panel = flex_col((
-        label("Metronome").text_size(TS_LG),
+        header_label(state.palette, "Metronome", TS_LG),
         // Big BPM readout — double-click to edit in place at the
         // same size/font. Mono so digits don't reshuffle as the
         // tempo steps. `setter` owns the clamp + engine push so the
@@ -3975,9 +4112,11 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // sidebar so the "currently-selected" indicator reads
     // consistently across the app.
     let active_mode = state.theme_mode;
+    let on_builtin = state.active_user.is_none();
     let mut theme_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
-    for mode in [ThemeMode::Dark, ThemeMode::Light] {
-        let prefix = if mode == active_mode { "● " } else { "  " };
+    for mode in ThemeMode::ALL {
+        let is_active = on_builtin && mode == active_mode;
+        let prefix = if is_active { "● " } else { "  " };
         let label_text = format!("{}{}", prefix, mode.label());
         theme_btns.push(
             text_button(label_text, move |s: &mut AppState| {
@@ -3986,6 +4125,191 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .into_any_flex(),
         );
     }
+
+    // User themes — selectable, each with a remove button. Plus a
+    // "new custom" that clones the active theme's seeds into an
+    // editable copy.
+    let mut user_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
+    for t in &state.user_themes {
+        let name = t.name.clone();
+        let is_active = state.active_user.as_deref() == Some(name.as_str());
+        let prefix = if is_active { "● " } else { "  " };
+        let sel_name = name.clone();
+        user_btns.push(
+            text_button(format!("{prefix}{name}"), move |s: &mut AppState| {
+                s.set_user_theme(sel_name.clone());
+            })
+            .into_any_flex(),
+        );
+        let rm_name = name.clone();
+        user_btns.push(
+            button_sm("✕", move |s: &mut AppState| {
+                s.remove_user_theme(&rm_name);
+            })
+            .into_any_flex(),
+        );
+    }
+    user_btns.push(
+        text_button("+ New custom", |s: &mut AppState| {
+            s.new_user_theme();
+        })
+        .into_any_flex(),
+    );
+
+    // Seed editors — shown only when a user theme is active. Hex inputs
+    // (the MVP color picker) for the four seed hues + a mode toggle +
+    // a rename field; each commits on Enter and re-derives the palette
+    // live. A future swatch/HSV picker can replace the hex inputs.
+    let theme_editor: OneOf2<_, _> = match state
+        .active_user
+        .as_ref()
+        .and_then(|n| state.user_themes.iter().find(|t| &t.name == n))
+    {
+        Some(def) => {
+            // Controlled inputs: while a field is focused (`editing_field`
+            // matches its id) its contents come from `editing_buffer`, so
+            // a rebuild mid-type doesn't reset the widget to the stored
+            // value (masonry resets the textbox to `contents` on any
+            // rebuild). On Enter we validate + commit, then clear the
+            // edit so contents revert to the (re-derived) stored value.
+            // One row per seed: name, a live swatch, R/G/B sliders that
+            // re-derive the whole palette as you drag, and a hex
+            // readout. (Sliders are controlled — `on_change` writes
+            // state every tick, so they don't suffer the textbox
+            // reset-on-rebuild that hex inputs did.)
+            let seed_fields: [(&str, String, u8); 4] = [
+                ("Primary", def.primary.clone(), 0),
+                ("Secondary", def.secondary.clone(), 1),
+                ("Tertiary", def.tertiary.clone(), 2),
+                ("Neutral", def.neutral.clone(), 3),
+            ];
+            let px = masonry::layout::Length::const_px;
+            let border = state.palette.surface_2;
+            let mut rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+            for (lbl, stored, idx) in seed_fields {
+                let col = audio_widgets::theme::color_from_hex(&stored)
+                    .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
+                let [r, g, b, _] = col.to_rgba8().to_u8_array();
+                let swatch = sized_box(label(""))
+                    .fixed_width(px(28.0))
+                    .fixed_height(px(20.0))
+                    .background_color(col)
+                    .corner_radius(px(4.0))
+                    .border(border, px(1.0));
+                let chan = move |channel: u8, val: u8| {
+                    sized_box(slider(0.0, 255.0, val as f64, move |s: &mut AppState, v: f64| {
+                        s.set_seed_channel(idx, channel, v.round().clamp(0.0, 255.0) as u8);
+                    }))
+                    .fixed_width(px(96.0))
+                };
+                rows.push(
+                    flex_row((
+                        sized_box(dim_label(state.palette, lbl, TS_XS)).fixed_width(px(70.0)),
+                        swatch,
+                        chan(0, r),
+                        chan(1, g),
+                        chan(2, b),
+                        label(stored).text_size(TS_XS).font(mono_family()),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(SP_2)
+                    .into_any_flex(),
+                );
+            }
+            // Text tiers — header + body. Each toggles Derived ↔ Custom;
+            // when Custom, a swatch + R/G/B sliders edit the override
+            // (which also cascades to the derived dim/disabled tiers).
+            let mut text_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+            for (is_header, lbl, ovr) in [
+                (true, "Header", def.text_header.clone()),
+                (false, "Body", def.text_body.clone()),
+            ] {
+                let custom = ovr.is_some();
+                let toggle = text_button(
+                    format!("{lbl}: {}", if custom { "Custom" } else { "Derived" }),
+                    move |s: &mut AppState| s.toggle_text_override(is_header),
+                );
+                match ovr {
+                    Some(hex) => {
+                        let col = audio_widgets::theme::color_from_hex(&hex)
+                            .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
+                        let [r, g, b, _] = col.to_rgba8().to_u8_array();
+                        let swatch = sized_box(label(""))
+                            .fixed_width(px(28.0))
+                            .fixed_height(px(20.0))
+                            .background_color(col)
+                            .corner_radius(px(4.0))
+                            .border(border, px(1.0));
+                        let chan = move |channel: u8, val: u8| {
+                            sized_box(slider(0.0, 255.0, val as f64, move |s: &mut AppState, v: f64| {
+                                s.set_text_channel(is_header, channel, v.round().clamp(0.0, 255.0) as u8);
+                            }))
+                            .fixed_width(px(96.0))
+                        };
+                        text_rows.push(
+                            flex_row((
+                                sized_box(toggle).fixed_width(px(120.0)),
+                                swatch,
+                                chan(0, r),
+                                chan(1, g),
+                                chan(2, b),
+                                label(hex).text_size(TS_XS).font(mono_family()),
+                            ))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(SP_2)
+                            .into_any_flex(),
+                        );
+                    }
+                    None => text_rows.push(toggle.into_any_flex()),
+                }
+            }
+            let dark = def.dark;
+            let editing_name = state.editing_field == Some("theme.name");
+            let name_contents = if editing_name {
+                state.editing_buffer.clone()
+            } else {
+                def.name.clone()
+            };
+            OneOf2::A(
+                flex_col((
+                    flex_row((
+                        dim_label(state.palette, "Name", TS_XS),
+                        text_input(name_contents, |s: &mut AppState, t| {
+                            s.editing_field = Some("theme.name");
+                            s.editing_buffer = t;
+                        })
+                        .on_enter(|s: &mut AppState, text| {
+                            let t = text.trim().to_string();
+                            if !t.is_empty() {
+                                s.edit_active_user(|d| d.name = t);
+                            }
+                            s.editing_field = None;
+                        }),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(SP_2),
+                    text_button(
+                        if dark { "Mode: Dark" } else { "Mode: Light" },
+                        |s: &mut AppState| s.edit_active_user(|d| d.dark = !d.dark),
+                    ),
+                    flex_col(rows)
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .gap(SP_1),
+                    flex_col(text_rows)
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .gap(SP_1),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(SP_2),
+            )
+        }
+        None => OneOf2::B(dim_prose(
+            state.palette,
+            "Pick a built-in, or \"+ New custom\" to fork the current \
+             theme and edit its seed colors (hex) live.",
+            TS_XS,
+        )),
+    };
 
     // Persistence path display — shows where Settings::load/save
     // reads/writes. Useful for power users who want to back up or
@@ -4000,7 +4324,7 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     card(
         state.palette,
         flex_col((
-            label("Settings").text_size(TS_LG),
+            header_label(state.palette, "Settings", TS_LG),
             // Multi-sentence captions use `dim_prose` so they wrap
             // to the card's width rather than overflowing past the
             // right edge (the bug `dim_label` produced — labels
@@ -4017,10 +4341,17 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .main_axis_alignment(MainAxisAlignment::Start)
                 .gap(SP_2),
+            flex_row(user_btns)
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_2),
+            theme_editor,
             dim_prose(
                 state.palette,
                 "Re-skins every card, label, and chord diagram from the \
-                 active palette. Switches live — no restart.",
+                 active palette. Switches live — no restart. Built-ins \
+                 can't be removed or edited directly; \"+ New custom\" \
+                 forks the active theme into an editable copy.",
                 TS_XS,
             ),
             // Persistence section. Reset and explicit save sit here
@@ -4248,13 +4579,16 @@ fn tuner_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     let visible_content = card(state.palette,
         flex_col((
-            label("Tuner").text_size(TS_LG),
+            header_label(state.palette, "Tuner", TS_LG),
             transport,
             // Mono on the big display readouts so digits / note
             // characters don't reshuffle horizontally as the detector
             // updates frame-to-frame. Without this the "A♭4" / "E2"
             // jump visibly when the variable-width glyphs swap.
-            label(note_text).text_size(TS_2XL).font(mono_family()),
+            label(note_text)
+                .text_size(TS_2XL)
+                .font(mono_family())
+                .color(state.palette.text_header),
             label(cents_text).text_size(TS_SM).font(mono_family()),
             // Cents needle — custom canvas widget with center-line
             // reference, ±5¢ in-tune zone, and tick marks at
@@ -4796,6 +5130,17 @@ fn dim_label(    palette: Palette,
     size: f32,
 ) -> impl WidgetView<AppState> {
     label(text).text_size(size).color(palette.text_dim)
+}
+
+/// Heading / title text (the big type tiers: tab + section titles,
+/// large readouts). Colored from `palette.text_header` so the header
+/// text tier is themeable independently of body text.
+fn header_label(
+    palette: Palette,
+    text: impl Into<masonry::core::ArcStr>,
+    size: f32,
+) -> impl WidgetView<AppState> {
+    label(text).text_size(size).color(palette.text_header)
 }
 
 /// Disabled / empty-state text — "No playable steps", "Pick a

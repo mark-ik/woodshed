@@ -39,6 +39,7 @@ pub struct Palette {
     pub surface: Color,
     pub surface_2: Color,
     pub surface_hover: Color,
+    pub text_header: Color,
     pub text: Color,
     pub text_dim: Color,
     pub text_disabled: Color,
@@ -79,6 +80,7 @@ impl Palette {
             surface: b.surface,
             surface_2: b.surface_2,
             surface_hover: b.surface_hover,
+            text_header: b.text_header,
             text: b.text,
             text_dim: b.text_dim,
             text_disabled: b.text_disabled,
@@ -113,6 +115,7 @@ impl Palette {
             surface: b.surface,
             surface_2: b.surface_2,
             surface_hover: b.surface_hover,
+            text_header: b.text_header,
             text: b.text,
             text_dim: b.text_dim,
             text_disabled: b.text_disabled,
@@ -135,11 +138,48 @@ impl Palette {
     }
 }
 
-/// The palette a [`ThemeMode`] names. Free function rather than an
-/// inherent method because `ThemeMode` is the shared (foreign) type.
-pub const fn palette_for(mode: ThemeMode) -> Palette {
-    match mode {
-        ThemeMode::Dark => Palette::dark(),
-        ThemeMode::Light => Palette::light(),
+/// The palette a [`ThemeMode`] names: the shared derived base plus
+/// Woodshed's fretboard-diagram colors, themselves derived from the
+/// base (note dots ← primary, root dots ← tertiary, label ← contrast
+/// pick, lines ← neutral steps). Free function rather than an inherent
+/// method because `ThemeMode` is the shared (foreign) type.
+///
+/// Per the "derived + overrides" model, any diagram color that reads
+/// wrong for a given theme can be special-cased here later; for now
+/// all built-ins derive cleanly.
+pub fn palette_for(mode: ThemeMode) -> Palette {
+    palette_from_seeds(&mode.seeds())
+}
+
+/// Core derivation: shared base from `seeds` + Woodshed's derived
+/// fretboard-diagram colors. Used by both built-in themes
+/// ([`palette_for`]) and user themes (which carry raw [`Seeds`]).
+pub fn palette_from_seeds(seeds: &audio_widgets::theme::Seeds) -> Palette {
+    let b = audio_widgets::theme::derive_palette(seeds);
+    Palette {
+        bg: b.bg,
+        surface: b.surface,
+        surface_2: b.surface_2,
+        surface_hover: b.surface_hover,
+        text_header: b.text_header,
+        text: b.text,
+        text_dim: b.text_dim,
+        text_disabled: b.text_disabled,
+        primary: b.primary,
+        on_primary: b.on_primary,
+        secondary: b.secondary,
+        on_secondary: b.on_secondary,
+        tertiary: b.tertiary,
+        on_tertiary: b.on_tertiary,
+        success: b.success,
+        danger: b.danger,
+        // Fretboard diagram — derived from the base.
+        fret_line: b.text_disabled,
+        string_line: b.text_dim,
+        inlay: b.surface_2,
+        root_dot: b.tertiary,
+        note_dot: b.primary,
+        dot_label: audio_widgets::theme::best_on(b.primary),
+        dot_outline: b.bg,
     }
 }

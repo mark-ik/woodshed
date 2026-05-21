@@ -462,6 +462,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "audio-primitives"
+version = "0.1.0"
+
+[[package]]
 name = "audio-widgets"
 version = "0.1.0"
 dependencies = [
@@ -5243,6 +5247,7 @@ dependencies = [
 name = "woodshed-audio"
 version = "0.1.0"
 dependencies = [
+ "audio-primitives",
  "cpal",
  "hound",
  "midir",
@@ -5267,6 +5272,7 @@ dependencies = [
  "woodshed-audio",
  "woodshedding",
  "xilem",
+ "xilem-components",
 ]
 
 [[package]]
@@ -5338,6 +5344,14 @@ dependencies = [
  "winit",
  "xilem_core",
  "xilem_masonry",
+]
+
+[[package]]
+name = "xilem-components"
+version = "0.1.0"
+dependencies = [
+ "masonry",
+ "xilem",
 ]
 
 [[package]]

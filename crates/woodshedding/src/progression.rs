@@ -8,9 +8,9 @@
 //! # Example
 //!
 //! ```
-//! use music_theory::pitch::{NoteName, Pitch};
-//! use music_theory::scale::catalog as scale_catalog;
-//! use music_theory::progression::catalog;
+//! use woodshedding::pitch::{NoteName, Pitch};
+//! use woodshedding::scale::catalog as scale_catalog;
+//! use woodshedding::progression::catalog;
 //!
 //! let major_scale = scale_catalog().iter().find(|s| s.name == "Major").unwrap();
 //! let prog = catalog().iter().find(|p| p.name == "ii-V-I (Jazz)").unwrap();

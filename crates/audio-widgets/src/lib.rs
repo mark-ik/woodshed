@@ -11,11 +11,18 @@
 //! for kurbo/peniko drawing.
 //!
 //! Ships [`waveform_view`] + [`compute_peaks`] (extracted from
-//! Strophe's `strophe-widgets` at its FT5). Future widgets (fader,
-//! knob, meter, transport button, mini routing graph) follow the same
-//! canvas-closure pattern.
+//! Strophe's `strophe-widgets` at its FT5) and [`meter::meter_view`]
+//! (level bar). Future widgets (fader, knob, transport button, mini
+//! routing graph) follow the same canvas-closure pattern.
+//!
+//! This is the *audio-domain* widget layer (Woodshed + Strophe). The
+//! domain-neutral components (combobox, …) usable by Mere too live one
+//! layer down in `xilem-components`.
 
+pub mod meter;
 pub mod theme;
+
+pub use meter::{db_to_norm, meter_view};
 
 use masonry::imaging::record::Scene;
 use masonry::imaging::Painter;
