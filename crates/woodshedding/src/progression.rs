@@ -41,6 +41,19 @@ pub enum DegreeAlteration {
     Flat,
 }
 
+impl DegreeAlteration {
+    pub const ALL: [Self; 3] = [Self::Natural, Self::Sharp, Self::Flat];
+
+    /// Prefix symbol for a degree (empty for natural).
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Self::Natural => "",
+            Self::Sharp => "♯",
+            Self::Flat => "♭",
+        }
+    }
+}
+
 /// Chord quality for a role in a progression.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RoleQuality {
@@ -64,6 +77,27 @@ pub enum RoleQuality {
 }
 
 impl RoleQuality {
+    /// All qualities, in editor-cycle order.
+    pub const ALL: [Self; 17] = [
+        Self::Major,
+        Self::Minor,
+        Self::Diminished,
+        Self::Augmented,
+        Self::Sus2,
+        Self::Sus4,
+        Self::Major6,
+        Self::Minor6,
+        Self::Major7,
+        Self::Minor7,
+        Self::Dominant7,
+        Self::MinorMajor7,
+        Self::HalfDiminished7,
+        Self::Diminished7,
+        Self::Major9,
+        Self::Minor9,
+        Self::Dominant9,
+    ];
+
     /// Name of the matching [`ChordFormula`] in the chord catalog.
     pub fn chord_formula_name(self) -> &'static str {
         match self {
@@ -181,37 +215,45 @@ impl Progression {
         key_root: Pitch,
         key_scale: &ScaleFormula,
     ) -> Result<Vec<ProgressionChord>, ProgressionError> {
-        let scale_pitches = key_scale.apply_to(key_root)?;
-        let mut chords = Vec::with_capacity(self.roles.len());
-        for &role in self.roles {
-            if role.degree == 0 || role.degree as usize > scale_pitches.len() {
-                return Err(ProgressionError::DegreeOutOfRange {
-                    degree: role.degree,
-                    scale_size: scale_pitches.len(),
-                });
-            }
-            let mut chord_root = scale_pitches[role.degree as usize - 1];
-            chord_root = match role.alteration {
-                DegreeAlteration::Natural => chord_root,
-                DegreeAlteration::Sharp => chord_root.transposed_by(Interval::AUGMENTED_UNISON)?,
-                DegreeAlteration::Flat => {
-                    chord_root.transposed_down_by(Interval::AUGMENTED_UNISON)?
-                }
-            };
-            let formula = role
-                .quality
-                .chord_formula()
-                .ok_or_else(|| ProgressionError::UnknownChordFormula(role.quality.chord_formula_name()))?;
-            let pitches = formula.apply_to(chord_root)?;
-            chords.push(ProgressionChord {
-                role,
-                root: chord_root,
-                formula,
-                pitches,
+        apply_roles_in_key(self.roles, key_root, key_scale)
+    }
+}
+
+/// Materialize an arbitrary (e.g. user-authored) sequence of roles in a
+/// key — the same logic [`Progression::apply_in_key`] uses, but over a
+/// borrowed slice instead of a `&'static` catalog progression.
+pub fn apply_roles_in_key(
+    roles: &[ChordRole],
+    key_root: Pitch,
+    key_scale: &ScaleFormula,
+) -> Result<Vec<ProgressionChord>, ProgressionError> {
+    let scale_pitches = key_scale.apply_to(key_root)?;
+    let mut chords = Vec::with_capacity(roles.len());
+    for &role in roles {
+        if role.degree == 0 || role.degree as usize > scale_pitches.len() {
+            return Err(ProgressionError::DegreeOutOfRange {
+                degree: role.degree,
+                scale_size: scale_pitches.len(),
             });
         }
-        Ok(chords)
+        let mut chord_root = scale_pitches[role.degree as usize - 1];
+        chord_root = match role.alteration {
+            DegreeAlteration::Natural => chord_root,
+            DegreeAlteration::Sharp => chord_root.transposed_by(Interval::AUGMENTED_UNISON)?,
+            DegreeAlteration::Flat => chord_root.transposed_down_by(Interval::AUGMENTED_UNISON)?,
+        };
+        let formula = role.quality.chord_formula().ok_or_else(|| {
+            ProgressionError::UnknownChordFormula(role.quality.chord_formula_name())
+        })?;
+        let pitches = formula.apply_to(chord_root)?;
+        chords.push(ProgressionChord {
+            role,
+            root: chord_root,
+            formula,
+            pitches,
+        });
     }
+    Ok(chords)
 }
 
 pub fn catalog() -> &'static [Progression] {

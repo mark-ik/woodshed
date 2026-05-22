@@ -30,6 +30,21 @@ before any other doc in this directory.
 - [2026-05-20_theme_system_design.md](2026-05-20_theme_system_design.md)
   — Seed-derived palette formula (OKLCH + contrast) + theme management model
   (built-in vs user themes, edit/rename/remove). Proposal, pending sign-off.
+- [2026-05-21_fretboard_canvas_lenses_plan.md](2026-05-21_fretboard_canvas_lenses_plan.md)
+  — Reorient from toolbox to instrument: one persistent fretboard surface +
+  Scale/Chord/Progression/Exercise *lenses* over a shared musical context
+  (Navigator principle). Phases 1–2 shipped; Phase 3 spun out below.
+- [2026-05-21_arpeggio_lens_plan.md](2026-05-21_arpeggio_lens_plan.md)
+  — Arpeggios as a 5th fretboard lens: chord-catalog tones rendered as
+  CAGED-style position/shape cards + an up/down (ascending→descending)
+  visual step-through transport (Exercise-style). Lifts the `OneOf9`
+  tab cap by boxing the dispatch. Phased A1–A4.
+- [2026-05-21_composable_instrument_surface_plan.md](2026-05-21_composable_instrument_surface_plan.md)
+  — Phase 3 → 1.0: the left pane becomes a composable stack of *aware*
+  instrument modules (fretboard / tuner / metronome) coordinating via
+  shared state + a reconcile arbiter + a shared clock; folds the old
+  tabs into one configurable surface; plus custom-authoring for 1.0.
+  Form B chosen. Proposal, pending sign-off.
 - [2026-05-16_xilem_migration_plan.md](2026-05-16_xilem_migration_plan.md)
   — Migration from Iced to Xilem; feature-parity ladder and web/mobile
   follow-on.

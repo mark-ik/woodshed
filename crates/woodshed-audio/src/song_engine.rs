@@ -78,6 +78,14 @@ struct SongEngineInternals {
     count_in_remaining: u64,
     /// Samples elapsed within the current count-in, for beat detection.
     count_in_pos: u64,
+    /// One-shot voices played on demand via [`SongEngineHandle::play_note_now`]
+    /// — e.g. the arpeggio/exercise step-through sonification. Mixed even
+    /// when the song isn't playing (that's the whole point), on their own
+    /// always-advancing clock.
+    oneshot_voices: Vec<Voice>,
+    /// Sample clock for `oneshot_voices`; advances whenever the song is
+    /// stopped (when the song plays, one-shots are cleared instead).
+    oneshot_clock: u64,
 }
 
 impl SongEngineInternals {
@@ -97,6 +105,8 @@ impl SongEngineInternals {
             output_gain: 0.8,
             count_in_remaining: 0,
             count_in_pos: 0,
+            oneshot_voices: Vec::new(),
+            oneshot_clock: 0,
         }
     }
 
@@ -181,6 +191,9 @@ impl SongEngineHandle {
         s.song.playing = true;
         s.voice_clock = 0;
         s.voices.clear();
+        // Drop any pending step-through one-shots — song playback owns the
+        // output now (and the one-shot clock won't advance while playing).
+        s.oneshot_voices.clear();
         // Force chord/click triggers to fire on the next eligible
         // sample so the user hears the bar immediately.
         s.last_click_beat = -1;
@@ -228,6 +241,29 @@ impl SongEngineHandle {
 
     pub fn set_output_gain(&self, gain: f32) {
         self.inner.lock().unwrap().output_gain = gain.clamp(0.0, 1.0);
+    }
+
+    /// Play a single pitched note immediately, regardless of song
+    /// transport state — a chord-render voice at one frequency. Used to
+    /// sonify the arpeggio / exercise step-through. Cheap (sub-ms render
+    /// + a voice push); the voice self-removes when its envelope ends.
+    pub fn play_note_now(&self, freq_hz: f32, duration_secs: f32) {
+        if freq_hz <= 0.0 {
+            return;
+        }
+        let mut s = self.inner.lock().unwrap();
+        let sr = s.sample_rate_hz as u32;
+        let params = ChordRender::block(vec![freq_hz], duration_secs.max(0.05));
+        let buf = render_chord(&params, sr);
+        let start = s.oneshot_clock;
+        s.oneshot_voices
+            .push(Voice::new(Sound::sample_with_buffer("step-note", buf), false, start));
+        // Don't let stale voices accumulate if something pushes faster
+        // than they decay.
+        if s.oneshot_voices.len() > 16 {
+            let drop_n = s.oneshot_voices.len() - 16;
+            s.oneshot_voices.drain(0..drop_n);
+        }
     }
 }
 
@@ -298,8 +334,26 @@ fn process_song_buffer(s: &mut SongEngineInternals, output: &mut [f32]) {
     let sample_rate = s.sample_rate_hz;
 
     if !s.song.playing {
-        for sample in output.iter_mut() {
-            *sample = 0.0;
+        // Song stopped — but still mix any on-demand one-shot voices
+        // (arpeggio/exercise step notes) on their own clock so the
+        // step-through sonification works without song playback.
+        for frame_idx in 0..frames {
+            let mut sample_value = 0.0_f32;
+            s.oneshot_voices.retain(|v| {
+                let local = s.oneshot_clock.saturating_sub(v.start_sample) as u32;
+                match v.sound.render_sample(local, sample_rate, false) {
+                    Some(value) => {
+                        sample_value += value;
+                        true
+                    }
+                    None => false,
+                }
+            });
+            let mixed = (sample_value * s.output_gain).clamp(-1.0, 1.0);
+            for ch in 0..chs {
+                output[frame_idx * chs + ch] = mixed;
+            }
+            s.oneshot_clock += 1;
         }
         return;
     }

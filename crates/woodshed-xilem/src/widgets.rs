@@ -19,7 +19,7 @@ use masonry::peniko::Color;
 use xilem::WidgetView;
 use xilem::view::canvas;
 
-use woodshedding::fretboard::{ChordVoicing, Fretboard, Position, StringPlay};
+use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::interval::Interval;
 
 /// Color subset used by fretboard / chord-diagram canvases. Built
@@ -72,12 +72,29 @@ impl DiagramColors {
 /// position's `interval_from_root` (root vs. other-tone). When
 /// `Some`, each position's color is taken from the override —
 /// suitable for trail fades, animated highlights, etc.
+/// Per-string marker drawn above the nut: an **open** ring or a
+/// **muted** ✕. `None` draws nothing. Used by the chord-card form of
+/// the fretboard (a tight window) to show how each string is played.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum StringMark {
+    None,
+    Open,
+    Muted,
+}
+
+/// `fret_window` is `(start_fret, fret_count)` — the visible neck span.
+/// `(0, 12)` is the full neck; a tight window like `(5, 4)` is the
+/// chord-card form (four frets from the 5th, with a "5fr" position
+/// label and no nut). This is the fretboard's *scope dial*: shorten it
+/// toward a chord card or open it to the whole neck.
 pub fn fretboard_view<State>(
     fretboard: Fretboard,
     positions: Vec<Position>,
     labels: Vec<String>,
     colors: DiagramColors,
     dot_colors: Option<Vec<Color>>,
+    fret_window: (u8, u8),
+    marks: Vec<StringMark>,
 ) -> impl WidgetView<State>
 where
     State: 'static,
@@ -93,6 +110,9 @@ where
             &labels,
             colors,
             dot_colors.as_deref(),
+            fret_window.0 as usize,
+            (fret_window.1 as usize).max(1),
+            &marks,
         );
     })
     .alt_text("Vertical fretboard diagram showing highlighted note positions.")
@@ -110,10 +130,19 @@ fn draw_fretboard(
     labels: &[String],
     colors: DiagramColors,
     dot_colors: Option<&[Color]>,
+    start_fret: usize,
+    fret_count: usize,
+    marks: &[StringMark],
 ) {
     let n_strings = fretboard.tuning.strings.len();
-    let n_frets = fretboard.fret_count as usize;
-    if n_strings < 2 || n_frets < 1 {
+    // `n_frets` is the number of *visible* fret rows (the window),
+    // capped to what the model actually has. The window covers
+    // absolute frets `start_fret + 1 ..= start_fret + n_frets`, with
+    // the boundary line above the first row being the nut iff the
+    // window starts at 0.
+    let n_frets = fret_count.min(fretboard.fret_count as usize).max(1);
+    let starts_at_nut = start_fret == 0;
+    if n_strings < 2 {
         return;
     }
 
@@ -127,13 +156,33 @@ fn draw_fretboard(
     let avail_h = (size.height - 2.0 * margin_y).max(50.0);
 
     // In the vertical layout: strings span width, frets span height.
-    let string_w = avail_w / (n_strings - 1) as f64;
-    let fret_h = avail_h / n_frets as f64;
+    // The board scales as a *single proportional unit* (cells stay
+    // ~square-ish, fret rows a touch taller than string spacing, like a
+    // real neck) and fits within the pane on both axes — so it never
+    // looks squashed (flat wide cells) or stretched. A max cap keeps a
+    // big pane from yielding giant cells; the board is then centered in
+    // the leftover space. Text labels are drawn at a fixed size
+    // (`draw_position_label`), so they stay readable as the board
+    // scales down.
+    const CELL_ASPECT: f64 = 1.15; // fret_h / string_w
+    const MAX_STRING_W: f64 = 56.0;
+    let cols = (n_strings - 1) as f64;
+    let rows = n_frets as f64;
+    // Largest string spacing that fits both axes at the target aspect.
+    let string_w = (avail_w / cols)
+        .min(avail_h / (rows * CELL_ASPECT))
+        .min(MAX_STRING_W)
+        .max(8.0);
+    let fret_h = string_w * CELL_ASPECT;
 
-    let board_left = margin_x;
-    let board_top = margin_y;
-    let board_right = board_left + (n_strings - 1) as f64 * string_w;
-    let board_bottom = board_top + n_frets as f64 * fret_h;
+    let board_w = cols * string_w;
+    let board_h = rows * fret_h;
+    // Center on both axes in the leftover pane space (the top offset
+    // also leaves room for the open/muted markers above the nut).
+    let board_left = margin_x + (avail_w - board_w).max(0.0) / 2.0;
+    let board_top = margin_y + (avail_h - board_h).max(0.0) / 2.0;
+    let board_right = board_left + board_w;
+    let board_bottom = board_top + board_h;
 
     // Strings — vertical lines. Index 0 (low string) on the left.
     for i in 0..n_strings {
@@ -146,10 +195,11 @@ fn draw_fretboard(
             .draw();
     }
 
-    // Frets — horizontal lines. The nut (fret 0) is drawn thicker.
+    // Frets — horizontal lines. The top line is the nut (drawn
+    // thicker) only when the window starts at the open position.
     for f in 0..=n_frets {
         let y = board_top + f as f64 * fret_h;
-        let width = if f == 0 { 4.0 } else { 1.0 };
+        let width = if f == 0 && starts_at_nut { 4.0 } else { 1.0 };
         let mut path = BezPath::new();
         path.move_to(Point::new(board_left, y));
         path.line_to(Point::new(board_right, y));
@@ -158,24 +208,58 @@ fn draw_fretboard(
             .draw();
     }
 
-    // Single-dot inlays at the fretboard center between the middle
-    // pair of strings.
-    let mid_x = board_left + (n_strings - 1) as f64 / 2.0 * string_w;
-    for &fret in &[3usize, 5, 7, 9, 15, 17, 19, 21] {
-        if fret > n_frets {
-            break;
+    // Open / muted string markers above the nut (chord-card form).
+    // Open = small ring, muted = ✕. Only strings with a mark draw.
+    for i in 0..n_strings {
+        let mark = marks.get(i).copied().unwrap_or(StringMark::None);
+        if mark == StringMark::None {
+            continue;
         }
-        let y = board_top + (fret as f64 - 0.5) * fret_h;
+        let x = board_left + i as f64 * string_w;
+        let my = board_top - 10.0;
+        match mark {
+            StringMark::Open => {
+                painter
+                    .stroke(
+                        Circle::new(Point::new(x, my), 4.0),
+                        &Stroke::new(1.4),
+                        colors.fret,
+                    )
+                    .draw();
+            }
+            StringMark::Muted => {
+                let mut p = BezPath::new();
+                p.move_to(Point::new(x - 4.0, my - 4.0));
+                p.line_to(Point::new(x + 4.0, my + 4.0));
+                p.move_to(Point::new(x - 4.0, my + 4.0));
+                p.line_to(Point::new(x + 4.0, my - 4.0));
+                painter.stroke(&p, &Stroke::new(1.6), colors.fret).draw();
+            }
+            StringMark::None => {}
+        }
+    }
+
+    // Single-dot inlays at the fretboard center, mapped from absolute
+    // fret to the visible window (`local = fret - start_fret`).
+    let mid_x = board_left + (n_strings - 1) as f64 / 2.0 * string_w;
+    let in_window = |fret: usize| fret > start_fret && fret <= start_fret + n_frets;
+    for &fret in &[3usize, 5, 7, 9, 15, 17, 19, 21] {
+        if !in_window(fret) {
+            continue;
+        }
+        let local = fret - start_fret;
+        let y = board_top + (local as f64 - 0.5) * fret_h;
         painter
             .fill(Circle::new(Point::new(mid_x, y), 4.0), colors.inlay)
             .draw();
     }
     // Double inlays at 12 and 24, offset to either side of center.
     for &fret in &[12usize, 24] {
-        if fret > n_frets {
+        if !in_window(fret) {
             continue;
         }
-        let y = board_top + (fret as f64 - 0.5) * fret_h;
+        let local = fret - start_fret;
+        let y = board_top + (local as f64 - 0.5) * fret_h;
         for offset in [-1.0_f64, 1.0] {
             let x = mid_x + offset * string_w;
             painter
@@ -185,14 +269,24 @@ fn draw_fretboard(
     }
 
     // Position markers — drawn last so they sit on top of strings
-    // and inlays. Open-string notes (pos.fret == 0) sit on the nut.
+    // and inlays. Open-string notes (pos.fret == 0) sit on the nut,
+    // and only show when the window includes the open position.
+    // Fretted notes outside the window are skipped.
     for (i, pos) in positions.iter().enumerate() {
-        let x = board_left + pos.string_index as f64 * string_w;
-        let y = if pos.fret == 0 {
+        let fret = pos.fret as usize;
+        let y = if fret == 0 {
+            if !starts_at_nut {
+                continue;
+            }
             board_top
         } else {
-            board_top + (pos.fret as f64 - 0.5) * fret_h
+            let local = fret as i64 - start_fret as i64;
+            if local < 1 || local as usize > n_frets {
+                continue;
+            }
+            board_top + (local as f64 - 0.5) * fret_h
         };
+        let x = board_left + pos.string_index as f64 * string_w;
 
         let dot_color = match dot_colors.and_then(|c| c.get(i).copied()) {
             Some(c) => c,
@@ -221,198 +315,25 @@ fn draw_fretboard(
             draw_position_label(painter, ctx, label, x, y, colors.label_text);
         }
     }
-}
 
-/// A compact chord-diagram widget — single voicing rendered into a
-/// small 4-fret window with open / muted markers above the nut. Sized
-/// to fit a row of cards in the Progressions tab. Independent from
-/// [`fretboard_view`] because the conventions differ enough
-/// (4-fret window, fret-position label, open/muted indicators) that
-/// branching one widget on a flag would get messy.
-///
-/// `dot_color` overrides the default note-dot color (root highlighting
-/// is preserved) — used by Progressions to assign each chord a hue.
-pub fn chord_diagram_view<State>(
-    tuning_strings: usize,
-    voicing: ChordVoicing,
-    dot_color: Color,
-    colors: DiagramColors,
-) -> impl WidgetView<State>
-where
-    State: 'static,
-{
-    canvas(move |_state: &mut State, ctx, scene: &mut Scene, size: Size| {
-        let mut painter = Painter::new(scene);
-        draw_chord_diagram(
-            &mut painter,
-            ctx,
-            size,
-            tuning_strings,
-            &voicing,
-            dot_color,
-            colors,
-        );
-    })
-    .alt_text("Compact chord diagram showing one voicing.")
-}
-
-#[allow(clippy::too_many_arguments)]
-fn draw_chord_diagram(
-    painter: &mut Painter<'_, Scene>,
-    ctx: &mut masonry::core::MutateCtx<'_>,
-    size: Size,
-    n_strings: usize,
-    voicing: &ChordVoicing,
-    dot_color: Color,
-    colors: DiagramColors,
-) {
-    const VISIBLE_FRETS: usize = 4;
-    if n_strings < 2 {
-        return;
-    }
-
-    // Lay out the 4-fret window. `window_start` is the **first
-    // visible fret number** — so the 4 slots cover
-    // `[window_start, window_start + 4 - 1]`. Open chords and
-    // first-fret barres both anchor at fret 1 (frets 1-4 visible,
-    // nut shown above). Higher voicings anchor at their lowest
-    // fretted position with no nut.
-    let lowest_fretted = voicing.lowest_fretted_position();
-    let (window_start, draw_nut) = if lowest_fretted <= 1 {
-        (1u8, true)
-    } else {
-        (lowest_fretted, false)
-    };
-
-    let margin_x = 14.0_f64;
-    let margin_top = 22.0_f64; // room for open / muted markers
-    let margin_bottom = 22.0_f64; // room for fret-position label
-    let avail_w = (size.width - 2.0 * margin_x).max(40.0);
-    let avail_h = (size.height - margin_top - margin_bottom).max(40.0);
-    let string_w = avail_w / (n_strings - 1) as f64;
-    let fret_h = avail_h / VISIBLE_FRETS as f64;
-    let board_left = margin_x;
-    let board_top = margin_top;
-    let board_right = board_left + (n_strings - 1) as f64 * string_w;
-    let board_bottom = board_top + VISIBLE_FRETS as f64 * fret_h;
-
-    // Strings.
-    for i in 0..n_strings {
-        let x = board_left + i as f64 * string_w;
-        let mut path = BezPath::new();
-        path.move_to(Point::new(x, board_top));
-        path.line_to(Point::new(x, board_bottom));
-        painter
-            .stroke(&path, &Stroke::new(1.2), colors.string)
-            .draw();
-    }
-
-    // Frets — horizontal lines. Nut (top edge) is thicker when this
-    // window includes fret 0 or 1.
-    for f in 0..=VISIBLE_FRETS {
-        let y = board_top + f as f64 * fret_h;
-        let width = if f == 0 && draw_nut { 3.0 } else { 1.0 };
-        let mut path = BezPath::new();
-        path.move_to(Point::new(board_left, y));
-        path.line_to(Point::new(board_right, y));
-        painter
-            .stroke(&path, &Stroke::new(width), colors.fret)
-            .draw();
-    }
-
-    // Open / muted markers above the nut. Open = small ring, muted = X.
-    for (i, sp) in voicing.strings.iter().enumerate() {
-        if i >= n_strings {
-            break;
-        }
-        let x = board_left + i as f64 * string_w;
-        let marker_y = board_top - 10.0;
-        match sp {
-            StringPlay::Played { fret: 0, .. } => {
-                let mut ring = BezPath::new();
-                ring.move_to(Point::new(x + 4.0, marker_y));
-                // Approximate small circle via Circle stroke.
-                painter
-                    .stroke(
-                        Circle::new(Point::new(x, marker_y), 4.0),
-                        &Stroke::new(1.4),
-                        colors.fret,
-                    )
-                    .draw();
-                drop(ring);
-            }
-            StringPlay::Muted => {
-                let mut path = BezPath::new();
-                path.move_to(Point::new(x - 4.0, marker_y - 4.0));
-                path.line_to(Point::new(x + 4.0, marker_y + 4.0));
-                path.move_to(Point::new(x - 4.0, marker_y + 4.0));
-                path.line_to(Point::new(x + 4.0, marker_y - 4.0));
-                painter
-                    .stroke(&path, &Stroke::new(1.6), colors.fret)
-                    .draw();
-            }
-            _ => {}
-        }
-    }
-
-    // Position dots for fretted notes in the visible window.
-    let dot_radius = (string_w * 0.40).min(fret_h * 0.42).clamp(7.0, 11.0);
-    for (i, sp) in voicing.strings.iter().enumerate() {
-        if i >= n_strings {
-            break;
-        }
-        if let StringPlay::Played {
-            fret,
-            interval_from_root,
-            ..
-        } = sp
-        {
-            if *fret == 0 {
-                continue; // open marker already drawn above
-            }
-            // Map an absolute fret to its 1-indexed slot inside the
-            // visible window. With window_start = 1, fret 1 lands in
-            // slot 1 (the row just below the nut); with
-            // window_start = 5, fret 5 lands in slot 1 (just below
-            // the "5fr" header), and so on. Slot 0 doesn't exist —
-            // fret == window_start - 1 sits on the top boundary line
-            // and gets clipped.
-            let local_fret = (*fret as i32) - (window_start as i32) + 1;
-            if local_fret < 1 || local_fret as usize > VISIBLE_FRETS {
-                continue;
-            }
-            let x = board_left + i as f64 * string_w;
-            let y = board_top + (local_fret as f64 - 0.5) * fret_h;
-            let is_root = *interval_from_root == Some(Interval::PERFECT_UNISON);
-            let fill = if is_root { colors.root_dot } else { dot_color };
-            let circle = Circle::new(Point::new(x, y), dot_radius);
-            painter.fill(circle, fill).draw();
-            painter
-                .stroke(circle, &Stroke::new(1.0), colors.dot_outline)
-                .draw();
-        }
-    }
-
-    // Fret-position label below the diagram (e.g., "5fr") when the
-    // window doesn't start at the nut.
-    if window_start > 1 {
-        let label = format!("{}fr", window_start);
+    // Fret-position label (e.g. "5fr") below the board when the window
+    // is anchored above the nut, so a cropped span isn't ambiguous.
+    if !starts_at_nut {
+        let text = format!("{}fr", start_fret + 1);
         let (fcx, lcx) = ctx.text_contexts();
-        let mut builder = lcx.ranged_builder(fcx, &label, 1.0, true);
+        let mut builder = lcx.ranged_builder(fcx, &text, 1.0, true);
         builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
             FontFamilyName::Generic(GenericFamily::SansSerif),
         )));
         builder.push_default(StyleProperty::FontSize(11.0));
-        let mut layout = builder.build(&label);
+        let mut layout = builder.build(&text);
         layout.break_all_lines(None);
         layout.align(Alignment::Start, AlignmentOptions::default());
-        let transform = Affine::translate((
-            board_left,
-            board_bottom + 4.0,
-        ));
-        render_text(painter, transform, &layout, &[colors.fret.into()], true);
+        let transform = Affine::translate((board_left, board_bottom + 4.0));
+        render_text(painter, transform, &layout, &[colors.label_text.into()], true);
     }
 }
+
 
 /// Render a centered single-line label inside a fretboard dot.
 /// Builds a Parley text layout, measures it, then positions it so

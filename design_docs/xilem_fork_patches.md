@@ -33,3 +33,22 @@ Consumer: Woodshed's `run()` uses the windowed `Xilem::new` API and feeds
 Upstream note: Xilem's own code flags `// TODO: Find better ways to customize
 default property set` — this is a candidate to offer upstream later, but per
 the project's defer-upstreaming stance it stays a local patch for now.
+
+## Split-bar drag callback (2026-05-20)
+
+Goal: persist a draggable pane split (and share it across views). The split
+widget owned its drag position with no way to read it back.
+
+- **`masonry/src/widgets/split.rs`** — `Split` now has `type Action =
+  SplitDragged` (new `pub struct SplitDragged(pub f64)`, the effective
+  fraction). A `dragging` flag is set during pointer-move and, on pointer-up
+  after a real drag, `ctx.submit_action::<SplitDragged>(..)` reports the final
+  fraction. (Was `NoAction`.)
+- **`xilem_masonry/src/view/split.rs`** — the `split` view gains
+  `on_split_changed(Fn(&mut State, f64) -> Action)`; build wraps the pod in
+  `with_action_widget`, teardown calls `teardown_action_source`, and `message`
+  handles the `SplitDragged` action (the `None` / self branch).
+
+Consumer: Woodshed's fretboard tabs share `AppState.split_ratio` (persisted in
+`Settings`, default `0.0` = min fretboard); each `split(..)` does
+`.split_point(state.split_ratio).on_split_changed(|s, f| s.split_ratio = f)`.

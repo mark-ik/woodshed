@@ -29,7 +29,7 @@ use xilem::view::{
     progress_bar, prose, resize_observer, sized_box, slider, task_raw, text_button,
     text_input,
 };
-use xilem::{AppState as XilemAppState, WidgetView, WindowId, Xilem, window};
+use xilem::{AnyWidgetView, AppState as XilemAppState, WidgetView, WindowId, Xilem, window};
 
 use woodshed_audio::{
     Bar as SongBar, ChordRef, DetectedNote, DetectedNoteName, DetectorKind, EngineHandle,
@@ -40,14 +40,15 @@ use woodshed_audio::{
 
 use woodshedding::chord::{ChordFormula, catalog as chord_catalog};
 use woodshedding::exercise::{
-    Exercise, ExerciseDirection, ExerciseParams, catalog as exercise_catalog,
+    Exercise, ExerciseDirection, ExerciseParams, ExerciseStep, catalog as exercise_catalog,
 };
 use woodshedding::fretboard::{
     BassConstraint, ChordVoicing, Fretboard, Position, StringPlay,
 };
 use woodshedding::practice::{PracticeItem, PracticeSet, catalog as practice_catalog};
 use woodshedding::progression::{
-    Progression, ProgressionChord, catalog as progression_catalog,
+    ChordRole, DegreeAlteration, ProgressionChord, RoleQuality,
+    apply_roles_in_key, catalog as progression_catalog,
 };
 use woodshedding::pitch::{NoteName, Pitch};
 use woodshedding::scale::{ScaleFormula, catalog as scale_catalog};
@@ -66,7 +67,7 @@ use theme::{
 };
 use audio_widgets::waveform_view;
 use widgets::{
-    DiagramColors, SectionBand, SectionColors, chord_diagram_view, chord_lane_view,
+    DiagramColors, SectionBand, SectionColors, StringMark, chord_lane_view,
     fretboard_view, section_lane_view,
 };
 
@@ -80,6 +81,7 @@ enum Tab {
     Tuner,
     Progressions,
     Exercises,
+    Arpeggios,
     Metronome,
     Practice,
     Song,
@@ -87,12 +89,13 @@ enum Tab {
 }
 
 impl Tab {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::Scales,
         Self::Chords,
         Self::Tuner,
         Self::Progressions,
         Self::Exercises,
+        Self::Arpeggios,
         Self::Metronome,
         Self::Practice,
         Self::Song,
@@ -106,6 +109,7 @@ impl Tab {
             Self::Tuner => "Tuner",
             Self::Progressions => "Progressions",
             Self::Exercises => "Exercises",
+            Self::Arpeggios => "Arpeggios",
             Self::Metronome => "Metronome",
             Self::Practice => "Practice",
             Self::Song => "Song",
@@ -126,6 +130,17 @@ fn tab_has_list(tab: Tab) -> bool {
             | Tab::Tuner
             | Tab::Progressions
             | Tab::Exercises
+            | Tab::Arpeggios
+    )
+}
+
+/// Whether the tab renders a fretboard (so the header offers the
+/// fret-span scope control). Tuner has a list but shows a meter, not a
+/// fretboard, so it's excluded.
+fn tab_has_fretboard(tab: Tab) -> bool {
+    matches!(
+        tab,
+        Tab::Scales | Tab::Chords | Tab::Progressions | Tab::Exercises | Tab::Arpeggios
     )
 }
 
@@ -142,6 +157,8 @@ struct SidebarVisibility {
     tuner: bool,
     progressions: bool,
     exercises: bool,
+    #[serde(default)]
+    arpeggios: bool,
 }
 
 impl SidebarVisibility {
@@ -153,6 +170,7 @@ impl SidebarVisibility {
             Tab::Tuner => self.tuner,
             Tab::Progressions => self.progressions,
             Tab::Exercises => self.exercises,
+            Tab::Arpeggios => self.arpeggios,
             _ => false,
         }
     }
@@ -167,7 +185,66 @@ impl SidebarVisibility {
             Tab::Tuner => self.tuner = !self.tuner,
             Tab::Progressions => self.progressions = !self.progressions,
             Tab::Exercises => self.exercises = !self.exercises,
+            Tab::Arpeggios => self.arpeggios = !self.arpeggios,
             _ => {}
+        }
+    }
+}
+
+/// Direction the arpeggio transport walks the shape's notes (by pitch).
+/// `UpDown` ascends then descends without repeating the turnaround notes.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+enum ArpeggioDirection {
+    #[default]
+    UpDown,
+    Up,
+    Down,
+}
+
+impl ArpeggioDirection {
+    fn next(self) -> Self {
+        match self {
+            Self::UpDown => Self::Up,
+            Self::Up => Self::Down,
+            Self::Down => Self::UpDown,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::UpDown => "Up/Down",
+            Self::Up => "Up",
+            Self::Down => "Down",
+        }
+    }
+}
+
+/// What to print inside the arpeggio's fretboard dots. Adds `Steps`
+/// (the note's order in the ascending arpeggio) and `Blank` to the
+/// usual note/interval choices.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+enum ArpeggioLabel {
+    #[default]
+    Notes,
+    Intervals,
+    Steps,
+    Blank,
+}
+
+impl ArpeggioLabel {
+    fn next(self) -> Self {
+        match self {
+            Self::Notes => Self::Intervals,
+            Self::Intervals => Self::Steps,
+            Self::Steps => Self::Blank,
+            Self::Blank => Self::Notes,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::Notes => "Labels: notes",
+            Self::Intervals => "Labels: intervals",
+            Self::Steps => "Labels: steps",
+            Self::Blank => "Labels: blank",
         }
     }
 }
@@ -394,6 +471,144 @@ impl ChromaticPc {
     }
 }
 
+/// One kind of widget that can be mounted on the instrument surface
+/// (the composable left pane — see
+/// `design_docs/2026-05-21_composable_instrument_surface_plan.md`).
+/// `Fretboard` is the always-present primary (carries the active lens
+/// via [`AppState::tab`]); the rest are optional companions the user
+/// mounts/unmounts. Persisted by name so reordering the variants
+/// doesn't scramble saved compositions.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum ModuleKind {
+    Fretboard,
+    Tuner,
+    Metronome,
+}
+
+impl ModuleKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Fretboard => "Fretboard",
+            Self::Tuner => "Tuner",
+            Self::Metronome => "Metronome",
+        }
+    }
+}
+
+/// A widget mounted in the instrument-surface stack: which kind, whether
+/// it's currently shown, and its relative vertical size among the
+/// visible modules. `weight` is a share (not pixels) so the stack
+/// reflows as the window resizes; persisted so a user's composition
+/// restores on launch. Phase 3a introduces the model; rendering still
+/// only mounts `Fretboard` until 3b.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+struct SurfaceModule {
+    kind: ModuleKind,
+    #[serde(default = "default_module_visible")]
+    visible: bool,
+    #[serde(default = "default_module_weight")]
+    weight: f64,
+}
+
+fn default_module_visible() -> bool {
+    true
+}
+
+fn default_module_weight() -> f64 {
+    1.0
+}
+
+impl SurfaceModule {
+    fn new(kind: ModuleKind) -> Self {
+        Self {
+            kind,
+            visible: true,
+            weight: 1.0,
+        }
+    }
+}
+
+/// Total frets in the fretboard *model* (positions are computed up to
+/// here). The visible display is a window of `fret_span` frets starting
+/// at `fret_start`; this is the ceiling that window can slide to.
+const FRETBOARD_MODEL_FRETS: u8 = 24;
+
+/// Build a runtime [`Tuning`] from a persisted [`settings::UserTuningDef`]
+/// (open-string MIDI → spelled pitches, sharps spelling).
+fn user_tuning_to_tuning(def: &settings::UserTuningDef) -> Tuning {
+    let strings: Vec<woodshedding::pitch::Pitch> = def
+        .midi
+        .iter()
+        .map(|&m| woodshedding::pitch::Pitch::from_midi(m, woodshedding::pitch::Spelling::Sharps))
+        .collect();
+    Tuning::custom(
+        def.name.clone(),
+        strings,
+        settings::instrument_from_str(&def.instrument),
+    )
+}
+
+/// Convert a persisted [`settings::UserProgressionDef`] into owned
+/// theory [`ChordRole`]s (clamping the small-int indices to valid enum
+/// values).
+fn user_progression_roles(def: &settings::UserProgressionDef) -> Vec<ChordRole> {
+    def.roles
+        .iter()
+        .map(|r| ChordRole {
+            degree: r.degree.clamp(1, 7),
+            alteration: DegreeAlteration::ALL
+                [(r.alteration as usize).min(DegreeAlteration::ALL.len() - 1)],
+            quality: RoleQuality::ALL[(r.quality as usize).min(RoleQuality::ALL.len() - 1)],
+        })
+        .collect()
+}
+
+/// Convert a persisted [`settings::UserExerciseDef`] into runtime
+/// [`ExerciseStep`]s.
+fn user_exercise_steps(def: &settings::UserExerciseDef) -> Vec<ExerciseStep> {
+    def.steps
+        .iter()
+        .map(|s| ExerciseStep {
+            string_index: s.string as usize,
+            fret: s.fret,
+            finger: s.finger,
+        })
+        .collect()
+}
+
+/// The default instrument-surface composition: just the fretboard.
+/// Tuner/Metronome are mounted by the user (3b+).
+fn default_surface() -> Vec<SurfaceModule> {
+    vec![SurfaceModule::new(ModuleKind::Fretboard)]
+}
+
+/// Normalize a loaded surface so the invariant "exactly one Fretboard,
+/// always present" holds regardless of what's on disk: drop duplicate
+/// Fretboard entries, and prepend one if a hand-edited or older config
+/// omitted it. A bad weight (non-finite or non-positive) is reset to
+/// `1.0`. Order is otherwise preserved.
+fn sanitize_surface(mut modules: Vec<SurfaceModule>) -> Vec<SurfaceModule> {
+    let mut seen_fretboard = false;
+    modules.retain(|m| {
+        if m.kind == ModuleKind::Fretboard {
+            if seen_fretboard {
+                return false;
+            }
+            seen_fretboard = true;
+        }
+        true
+    });
+    for m in &mut modules {
+        if !m.weight.is_finite() || m.weight <= 0.0 {
+            m.weight = 1.0;
+        }
+    }
+    if !seen_fretboard {
+        modules.insert(0, SurfaceModule::new(ModuleKind::Fretboard));
+    }
+    modules
+}
+
 /// Top-level app state. Owned by Xilem, mutated by event handlers,
 /// read by the view function on each diff pass.
 ///
@@ -402,19 +617,26 @@ impl ChromaticPc {
 /// in `AppState` once the audio integration step lands.
 struct AppState {
     tab: Tab,
+    /// Last active fretboard lens (one of the Scales/Chords/
+    /// Progressions/Exercises tabs). The collapsed "Fretboard" tab
+    /// button returns here; the lens switcher updates it. Transient
+    /// (not persisted — `tab` already is).
+    last_lens: Tab,
     // === Scales tab ===
+    /// Shared musical root/key — one current pitch class the theory
+    /// lenses (Scales / Chords / Progressions) all read + write, so
+    /// they're coherent views of one musical moment rather than three
+    /// independent pickers. (Unified from per-tab roots 2026-05-21.)
+    root: ChromaticPc,
     /// Index into the scale catalog. The iced version picks by name;
     /// using an index here is slightly more idiomatic with Xilem's
     /// reactive diffing model (cheap equality check).
     scale_idx: usize,
-    /// Pitch-class for the Scales view's root note.
-    scale_root_pc: ChromaticPc,
     /// What to label fretboard dots with on the Scales tab.
     scale_label_mode: LabelMode,
 
     // === Chords tab ===
     chord_idx: usize,
-    chord_root_pc: ChromaticPc,
     chord_label_mode: LabelMode,
     /// When true, the chord fretboard shows only the selected voicing
     /// (5-6 specific string/fret positions). When false, every place
@@ -429,9 +651,6 @@ struct AppState {
     /// Index into the progression catalog; `None` = nothing selected
     /// (cold-start state, prompts the user to pick from the list).
     progression_idx: Option<usize>,
-    /// Tonic pitch class for the progression. The progression's
-    /// Roman numerals get materialized against this key.
-    progression_key_pc: ChromaticPc,
     /// Index of the chord card currently expanded on the fretboard
     /// below the card row. `None` = no chord chosen yet.
     progression_expanded_chord: Option<usize>,
@@ -464,12 +683,49 @@ struct AppState {
     /// slower-than-target tempo while leaving the metronome alone.
     exercise_bpm: f32,
 
+    // === Arpeggios lens ===
+    /// Index into the *chord* catalog — the arpeggio's quality (an
+    /// arpeggio's notes are a chord's tones). Root is the shared
+    /// `root`. Persisted.
+    arpeggio_idx: usize,
+    /// Which generated position/shape is active (A2+). Persisted.
+    arpeggio_position_idx: usize,
+    /// Transport cursor through the active shape's up/down note
+    /// sequence (A3). Transient.
+    arpeggio_step_idx: usize,
+    /// True while the arpeggio transport is auto-advancing. Transient.
+    arpeggio_playing: bool,
+    /// Arpeggio transport tempo (BPM). Persisted.
+    arpeggio_bpm: f32,
+    /// Up / Down / UpDown walk direction. Persisted.
+    arpeggio_direction: ArpeggioDirection,
+    /// What the arpeggio fretboard dots are labelled with. Persisted.
+    arpeggio_label: ArpeggioLabel,
+    /// Inversion: which chord tone the run starts on. `0` = root, `1` =
+    /// the next tone (3rd), etc. Indexes the chord's intervals; clamped
+    /// to the tone count. Rotates the transport sequence. Persisted.
+    arpeggio_inversion: u8,
+    /// Observed width of the arpeggio position-cards pane (drives the
+    /// shape-card reflow grid). Set via `resize_observer`; transient.
+    arpeggio_cards_panel_width: f64,
+    /// Last sounded step index for the arpeggio / exercise transports —
+    /// so audio fires once per step change, not every poll tick. Transient.
+    arpeggio_last_sounded: Option<usize>,
+    exercise_last_sounded: Option<usize>,
+    /// Whether the arpeggio/exercise step-through plays a note per step
+    /// (the chord-render voice). Persisted; toggled per transport.
+    transport_sound: bool,
+
     // === Metronome tab ===
     /// Tempo. Edited directly on the big readout (double-click) plus
     /// the slider / ± buttons — no separate text-input buffer needed
     /// since the readout itself is now the editable surface.
     bpm: f32,
     metronome_playing: bool,
+    /// When the metronome started — anchors the shared beat grid used by
+    /// the arpeggio/exercise transports (3d). `None` when stopped.
+    /// Transient (not persisted).
+    metronome_started_at: Option<std::time::Instant>,
     metronome_time_sig_num: u8,
     metronome_subdivision: Subdivision,
     metronome_click: ClickPattern,
@@ -543,6 +799,11 @@ struct AppState {
     /// True when the user has the tuner "on" (analyzer is enabled
     /// and the polling task is alive).
     tuner_active: bool,
+    /// True when arming the tuner paused a running metronome, so disarming
+    /// can restore it (the session resource arbiter, 3c). Transient.
+    tuner_paused_metronome: bool,
+    /// Same, for a running Song playback. Transient.
+    tuner_paused_song: bool,
     /// Cached most-recent snapshot. Refreshed by the polling task
     /// while `tuner_active` is true.
     tuner_snapshot: Option<TunerSnapshot>,
@@ -586,8 +847,32 @@ struct AppState {
     /// `Settings` and toggled by the Settings tab. Kept in sync with
     /// `palette` via `AppState::set_theme`.
     theme_mode: theme::ThemeMode,
+    /// Fretboard↔info pane split fraction, shared across the fretboard
+    /// tabs and persisted. `0.0` = minimum fretboard width.
+    split_ratio: f64,
+    /// Visible fretboard span (frets from the nut), 4..=12 — the
+    /// fretboard scope dial, shared across the fretboard tabs.
+    fret_span: u8,
+    /// First visible fret of the windowed display (0 = from the nut).
+    /// The up/down arrows on the fretboard widget slide this so a
+    /// ≤12-fret window can move up the neck past the 12th fret. Clamped
+    /// so `fret_start + fret_span` stays within the 24-fret model.
+    fret_start: u8,
+    /// The instrument-surface composition: which widget modules are
+    /// mounted in the left stack, in order, with per-module visibility
+    /// + size weight. Always contains exactly one `Fretboard`. Persisted
+    /// so the user's chosen layout restores. (Phase 3a: model only —
+    /// rendering still mounts just the fretboard until 3b.)
+    surface: Vec<SurfaceModule>,
     /// User-authored themes (runtime mirror of `Settings.user_themes`).
     user_themes: Vec<settings::UserThemeDef>,
+    /// User-authored tunings (runtime mirror of `Settings.user_tunings`).
+    user_tunings: Vec<settings::UserTuningDef>,
+    /// User-authored progressions (runtime mirror of
+    /// `Settings.user_progressions`).
+    user_progressions: Vec<settings::UserProgressionDef>,
+    /// User-authored exercises (runtime mirror of `Settings.user_exercises`).
+    user_exercises: Vec<settings::UserExerciseDef>,
     /// Name of the active user theme, or `None` = use the built-in
     /// `theme_mode`.
     active_user: Option<String>,
@@ -676,16 +961,15 @@ impl AppState {
 
         Self {
             tab: Tab::default(),
+            last_lens: Tab::Scales,
+            root: ChromaticPc::C,
             scale_idx,
-            scale_root_pc: ChromaticPc::C,
             scale_label_mode: LabelMode::default(),
             chord_idx,
-            chord_root_pc: ChromaticPc::C,
             chord_label_mode: LabelMode::default(),
             chord_show_voicing: false,
             chord_voicing_idx: 0,
             progression_idx: None,
-            progression_key_pc: ChromaticPc::C,
             progression_expanded_chord: None,
             progression_overlay_mode: false,
             progression_voicing_idx: Vec::new(),
@@ -695,8 +979,23 @@ impl AppState {
             exercise_step_idx: 0,
             exercise_playing: false,
             exercise_bpm: 80.0,
+            // Arpeggios share the chord catalog; default to the same
+            // entry the Chords lens starts on (Major).
+            arpeggio_idx: chord_idx,
+            arpeggio_position_idx: 0,
+            arpeggio_step_idx: 0,
+            arpeggio_playing: false,
+            arpeggio_bpm: 80.0,
+            arpeggio_direction: ArpeggioDirection::default(),
+            arpeggio_label: ArpeggioLabel::default(),
+            arpeggio_inversion: 0,
+            arpeggio_cards_panel_width: 0.0,
+            arpeggio_last_sounded: None,
+            exercise_last_sounded: None,
+            transport_sound: true,
             bpm,
             metronome_playing: false,
+            metronome_started_at: None,
             metronome_time_sig_num: 4,
             metronome_subdivision: Subdivision::QUARTER,
             metronome_click: ClickPattern::default(),
@@ -717,12 +1016,15 @@ impl AppState {
             engine,
             active_instrument,
             sidebars: SidebarVisibility::default(),
-            // 12 frets only — past the 12th the pattern just repeats
-            // an octave higher, so the visual real estate is better
-            // spent giving 0-12 generous spacing.
-            fretboard: Fretboard::new(tuning, 12),
+            // Full 24-fret model so the windowed display can slide up
+            // the neck past the 12th (the visible span stays ≤12 — see
+            // `fret_start` / `fret_span`). Positions repeat an octave
+            // above the 12th, which is exactly what the upper window shows.
+            fretboard: Fretboard::new(tuning, 24),
             input,
             tuner_active: false,
+            tuner_paused_metronome: false,
+            tuner_paused_song: false,
             tuner_snapshot: None,
             tuner_threshold: woodshed_audio::input::DEFAULT_SILENCE_RMS_THRESHOLD,
             tuner_detector: DetectorKind::Fft,
@@ -734,7 +1036,14 @@ impl AppState {
             editing_buffer: String::new(),
             palette: Palette::default(),
             theme_mode: theme::ThemeMode::default(),
+            split_ratio: 0.0,
+            fret_span: 12,
+            fret_start: 0,
+            surface: default_surface(),
             user_themes: Vec::new(),
+            user_tunings: Vec::new(),
+            user_progressions: Vec::new(),
+            user_exercises: Vec::new(),
             active_user: None,
             default_properties: Arc::new(build_default_properties(&Palette::default())),
             window_id: WindowId::next(),
@@ -749,11 +1058,24 @@ impl AppState {
     /// catalog bounds so a config saved against an older catalog
     /// version doesn't strand the user on a deleted entry.
     fn apply_settings(&mut self, s: Settings) {
-        self.tab = s.tab;
+        // Tuner / Metronome are no longer reachable destinations (they're
+        // surface modules now); a config saved on one of those tabs lands
+        // on the Fretboard surface instead of an unreachable view.
+        self.tab = match s.tab {
+            Tab::Tuner | Tab::Metronome => Tab::default(),
+            other => other,
+        };
         // Themes: restore user themes, then resolve the active one. An
         // `active_user_theme` naming a theme that still exists wins;
         // otherwise fall back to the built-in `theme_mode`.
+        self.split_ratio = s.split_ratio;
+        self.fret_span = s.fret_span.clamp(4, 12);
+        self.fret_start = s.fret_start.min(FRETBOARD_MODEL_FRETS.saturating_sub(self.fret_span));
+        self.surface = sanitize_surface(s.surface);
         self.user_themes = s.user_themes;
+        self.user_tunings = s.user_tunings;
+        self.user_progressions = s.user_progressions;
+        self.user_exercises = s.user_exercises;
         self.theme_mode = s.theme_mode;
         match s
             .active_user_theme
@@ -783,36 +1105,47 @@ impl AppState {
                     .find(|spec| spec.instrument == self.active_instrument)
             });
         if let Some(spec) = resolved_tuning {
-            self.fretboard = Fretboard::new(Tuning::from_spec(spec), 12);
+            self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
         }
         self.sidebars = s.sidebars;
 
         // Scales / Chords / Progressions — clamp every index to the
         // catalog length so a stale save against an older catalog
         // version doesn't panic at first render.
+        // Shared musical root for all theory lenses.
+        self.root = s.root;
+
         let sc_len = scale_catalog().len().max(1);
         self.scale_idx = s.scale_idx.min(sc_len - 1);
-        self.scale_root_pc = s.scale_root_pc;
         self.scale_label_mode = s.scale_label_mode;
 
         let ch_len = chord_catalog().len().max(1);
         self.chord_idx = s.chord_idx.min(ch_len - 1);
-        self.chord_root_pc = s.chord_root_pc;
         self.chord_label_mode = s.chord_label_mode;
         self.chord_show_voicing = s.chord_show_voicing;
         self.chord_voicing_idx = s.chord_voicing_idx;
 
-        let pg_len = progression_catalog().len();
+        // Selection spans the catalog then the user progressions.
+        let pg_len = progression_catalog().len() + self.user_progressions.len();
         self.progression_idx = s
             .progression_idx
             .filter(|i| *i < pg_len);
-        self.progression_key_pc = s.progression_key_pc;
         self.progression_overlay_mode = s.progression_overlay_mode;
 
-        let ex_len = exercise_catalog().len().max(1);
+        let ex_len = (exercise_catalog().len() + self.user_exercises.len()).max(1);
         self.exercise_idx = s.exercise_idx.min(ex_len - 1);
         self.exercise_starting_fret = s.exercise_starting_fret;
         self.exercise_bpm = s.exercise_bpm;
+
+        // Arpeggio quality indexes the chord catalog; clamp like the others.
+        let ch_arp_len = chord_catalog().len().max(1);
+        self.arpeggio_idx = s.arpeggio_idx.min(ch_arp_len - 1);
+        self.arpeggio_position_idx = s.arpeggio_position_idx;
+        self.arpeggio_bpm = s.arpeggio_bpm;
+        self.arpeggio_direction = s.arpeggio_direction;
+        self.arpeggio_label = s.arpeggio_label;
+        self.arpeggio_inversion = s.arpeggio_inversion;
+        self.transport_sound = s.transport_sound;
 
         self.bpm = s.bpm;
         self.metronome_time_sig_num = s.metronome_time_sig_num;
@@ -836,25 +1169,37 @@ impl AppState {
         Settings {
             tab: self.tab,
             theme_mode: self.theme_mode,
+            split_ratio: self.split_ratio,
+            fret_span: self.fret_span,
+            fret_start: self.fret_start,
+            surface: self.surface.clone(),
             user_themes: self.user_themes.clone(),
+            user_tunings: self.user_tunings.clone(),
+            user_progressions: self.user_progressions.clone(),
+            user_exercises: self.user_exercises.clone(),
             active_user_theme: self.active_user.clone(),
             active_instrument: settings::instrument_to_str(self.active_instrument).to_string(),
             tuning_name: Some(self.fretboard.tuning.name.clone()),
             sidebars: self.sidebars,
+            root: self.root,
             scale_idx: self.scale_idx,
-            scale_root_pc: self.scale_root_pc,
             scale_label_mode: self.scale_label_mode,
             chord_idx: self.chord_idx,
-            chord_root_pc: self.chord_root_pc,
             chord_label_mode: self.chord_label_mode,
             chord_show_voicing: self.chord_show_voicing,
             chord_voicing_idx: self.chord_voicing_idx,
             progression_idx: self.progression_idx,
-            progression_key_pc: self.progression_key_pc,
             progression_overlay_mode: self.progression_overlay_mode,
             exercise_idx: self.exercise_idx,
             exercise_starting_fret: self.exercise_starting_fret,
             exercise_bpm: self.exercise_bpm,
+            arpeggio_idx: self.arpeggio_idx,
+            arpeggio_position_idx: self.arpeggio_position_idx,
+            arpeggio_bpm: self.arpeggio_bpm,
+            arpeggio_direction: self.arpeggio_direction,
+            arpeggio_label: self.arpeggio_label,
+            arpeggio_inversion: self.arpeggio_inversion,
+            transport_sound: self.transport_sound,
             bpm: self.bpm,
             metronome_time_sig_num: self.metronome_time_sig_num,
             metronome_click: self.metronome_click,
@@ -864,6 +1209,62 @@ impl AppState {
             practice_bars_per_item: self.practice_bars_per_item,
             tuner_threshold: self.tuner_threshold,
             tuner_detector: settings::detector_to_str(self.tuner_detector).to_string(),
+        }
+    }
+
+    /// Is a module of this kind currently mounted *and* visible in the
+    /// instrument surface? Drives the mount-toggle chip state.
+    fn module_shown(&self, kind: ModuleKind) -> bool {
+        self.surface.iter().any(|m| m.kind == kind && m.visible)
+    }
+
+    /// Toggle a companion module on/off in the surface. First mount adds
+    /// it (appended after the fretboard); subsequent toggles flip its
+    /// visibility, preserving its position + size weight so unmount /
+    /// remount doesn't lose where it sat. Fretboard can't be toggled —
+    /// it's the always-on primary.
+    fn toggle_module(&mut self, kind: ModuleKind) {
+        if kind == ModuleKind::Fretboard {
+            return;
+        }
+        if let Some(m) = self.surface.iter_mut().find(|m| m.kind == kind) {
+            m.visible = !m.visible;
+        } else {
+            self.surface.push(SurfaceModule::new(kind));
+        }
+    }
+
+    /// Highest `fret_start` that keeps the visible window within the
+    /// 24-fret model.
+    fn max_fret_start(&self) -> u8 {
+        FRETBOARD_MODEL_FRETS.saturating_sub(self.fret_span)
+    }
+
+    /// Slide the visible fret window up/down the neck, clamped so it
+    /// stays within the model. Driven by the fretboard widget's
+    /// up/down arrows.
+    fn nudge_fret_start(&mut self, delta: i32) {
+        let max = self.max_fret_start() as i32;
+        self.fret_start = (self.fret_start as i32 + delta).clamp(0, max) as u8;
+    }
+
+    /// Adjust the size weight of the module at `surface[idx]` so its
+    /// divider sits at fraction `p` of the space it shares with the
+    /// modules below it (whose relative sizes are held fixed). Called
+    /// from the surface stack's `on_split_changed`.
+    fn set_module_split(&mut self, idx: usize, p: f64) {
+        let p = p.clamp(0.05, 0.95);
+        let tail: f64 = self
+            .surface
+            .iter()
+            .enumerate()
+            .filter(|(j, m)| *j > idx && m.visible)
+            .map(|(_, m)| m.weight)
+            .sum();
+        if tail > 0.0 {
+            if let Some(m) = self.surface.get_mut(idx) {
+                m.weight = p * tail / (1.0 - p);
+            }
         }
     }
 
@@ -939,10 +1340,10 @@ impl AppState {
         }
     }
 
-    /// Set one RGB channel (0=R, 1=G, 2=B) of one seed (0=primary,
-    /// 1=secondary, 2=tertiary, 3=neutral) on the active user theme,
-    /// then re-derive. Drives the live color sliders.
-    fn set_seed_channel(&mut self, field: u8, channel: u8, value: u8) {
+    /// Set one HSL component (0=H in degrees, 1=S in %, 2=L in %) of one
+    /// seed (0=primary, 1=secondary, 2=tertiary, 3=neutral) on the
+    /// active user theme, then re-derive. Drives the live color sliders.
+    fn set_seed_hsl(&mut self, field: u8, comp: u8, value: f64) {
         self.edit_active_user(|d| {
             let hex = match field {
                 0 => &mut d.primary,
@@ -950,12 +1351,15 @@ impl AppState {
                 2 => &mut d.tertiary,
                 _ => &mut d.neutral,
             };
-            let mut rgb = audio_widgets::theme::color_from_hex(hex)
-                .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80))
-                .to_rgba8()
-                .to_u8_array();
-            rgb[channel.min(2) as usize] = value;
-            *hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+            let col = audio_widgets::theme::color_from_hex(hex)
+                .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
+            let (mut h, mut s, mut l) = audio_widgets::theme::color_to_hsl(col);
+            match comp {
+                0 => h = value,
+                1 => s = value / 100.0,
+                _ => l = value / 100.0,
+            }
+            *hex = audio_widgets::theme::color_to_hex(audio_widgets::theme::color_from_hsl(h, s, l));
         });
     }
 
@@ -974,18 +1378,22 @@ impl AppState {
         });
     }
 
-    /// Set one RGB channel of a custom text tier (no-op if that tier is
-    /// derived, i.e. `None`).
-    fn set_text_channel(&mut self, header: bool, channel: u8, value: u8) {
+    /// Set one HSL component of a custom text tier (no-op if derived).
+    fn set_text_hsl(&mut self, header: bool, comp: u8, value: f64) {
         self.edit_active_user(|d| {
             let slot = if header { &mut d.text_header } else { &mut d.text_body };
             if let Some(hex) = slot {
-                let mut rgb = audio_widgets::theme::color_from_hex(hex)
-                    .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80))
-                    .to_rgba8()
-                    .to_u8_array();
-                rgb[channel.min(2) as usize] = value;
-                *hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+                let col = audio_widgets::theme::color_from_hex(hex)
+                    .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
+                let (mut h, mut s, mut l) = audio_widgets::theme::color_to_hsl(col);
+                match comp {
+                    0 => h = value,
+                    1 => s = value / 100.0,
+                    _ => l = value / 100.0,
+                }
+                *hex = audio_widgets::theme::color_to_hex(audio_widgets::theme::color_from_hsl(
+                    h, s, l,
+                ));
             }
         });
     }
@@ -997,6 +1405,317 @@ impl AppState {
             self.active_user = None;
         }
         self.rebuild_palette();
+    }
+
+    // === Custom tunings (Phase 4) ===
+
+    /// Create a new custom tuning cloned from the current fretboard, name
+    /// it "Custom N", and apply it.
+    fn new_user_tuning(&mut self) {
+        let mut n = 1;
+        let name = loop {
+            let candidate = format!("Custom {n}");
+            if !self.user_tunings.iter().any(|t| t.name == candidate) {
+                break candidate;
+            }
+            n += 1;
+        };
+        let midi: Vec<i32> = self.fretboard.tuning.strings.iter().map(|p| p.midi()).collect();
+        self.user_tunings.push(settings::UserTuningDef {
+            name: name.clone(),
+            instrument: settings::instrument_to_str(self.active_instrument).to_string(),
+            midi,
+        });
+        self.apply_user_tuning(&name);
+    }
+
+    /// Cycle the active tuning through the catalog tunings for the
+    /// current instrument followed by the user's custom ones (wrapping).
+    /// Driven by the header ◀/▶.
+    fn cycle_tuning(&mut self, delta: i32) {
+        let inst = self.active_instrument;
+        let inst_str = settings::instrument_to_str(inst);
+        let mut names: Vec<String> = tuning_catalog()
+            .iter()
+            .filter(|t| t.instrument == inst)
+            .map(|t| t.name.to_string())
+            .collect();
+        let cat_count = names.len();
+        for t in self.user_tunings.iter().filter(|t| t.instrument == inst_str) {
+            names.push(t.name.clone());
+        }
+        if names.is_empty() {
+            return;
+        }
+        let cur = names
+            .iter()
+            .position(|n| *n == self.fretboard.tuning.name)
+            .unwrap_or(0) as i32;
+        let next = (cur + delta).rem_euclid(names.len() as i32) as usize;
+        if next < cat_count {
+            if let Some(spec) = tuning_catalog()
+                .iter()
+                .filter(|t| t.instrument == inst)
+                .nth(next)
+            {
+                self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
+            }
+        } else {
+            let name = names[next].clone();
+            self.apply_user_tuning(&name);
+        }
+    }
+
+    /// Apply a user tuning by name — rebuilds the fretboard against it
+    /// (and switches the active instrument to match).
+    fn apply_user_tuning(&mut self, name: &str) {
+        if let Some(def) = self.user_tunings.iter().find(|t| t.name == name) {
+            let tuning = user_tuning_to_tuning(def);
+            self.active_instrument = tuning.instrument;
+            self.fretboard = Fretboard::new(tuning, 24);
+        }
+    }
+
+    /// Mutate a user tuning in place; if it's the active fretboard tuning,
+    /// re-apply so the neck updates live.
+    fn edit_user_tuning(&mut self, name: &str, f: impl FnOnce(&mut settings::UserTuningDef)) {
+        if let Some(def) = self.user_tunings.iter_mut().find(|t| t.name == name) {
+            f(def);
+        }
+        if self.fretboard.tuning.name == name {
+            self.apply_user_tuning(name);
+        }
+    }
+
+    /// Nudge one open string of a user tuning by `delta` semitones.
+    fn nudge_user_string(&mut self, name: &str, idx: usize, delta: i32) {
+        self.edit_user_tuning(name, |d| {
+            if let Some(m) = d.midi.get_mut(idx) {
+                *m = (*m + delta).clamp(12, 108);
+            }
+        });
+    }
+
+    /// Append a string (a fourth above the current top) to a user tuning.
+    fn add_user_string(&mut self, name: &str) {
+        self.edit_user_tuning(name, |d| {
+            let top = d.midi.last().copied().unwrap_or(40);
+            d.midi.push((top + 5).min(108));
+        });
+    }
+
+    /// Drop the top string of a user tuning (keeps at least one).
+    fn remove_user_string(&mut self, name: &str) {
+        self.edit_user_tuning(name, |d| {
+            if d.midi.len() > 1 {
+                d.midi.pop();
+            }
+        });
+    }
+
+    /// Remove a user tuning. If it's the active fretboard tuning, fall
+    /// back to the instrument's default catalog tuning.
+    fn remove_user_tuning(&mut self, name: &str) {
+        let was_active = self.fretboard.tuning.name == name;
+        self.user_tunings.retain(|t| t.name != name);
+        if was_active {
+            if let Some(spec) = tuning_catalog()
+                .iter()
+                .find(|t| t.instrument == self.active_instrument)
+            {
+                self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
+            }
+        }
+    }
+
+    // === Custom progressions (Phase 4) ===
+
+    /// Create a new custom progression (a single I-major chord) and select
+    /// it on the Progression lens.
+    fn new_user_progression(&mut self) {
+        let mut n = 1;
+        let name = loop {
+            let candidate = format!("Progression {n}");
+            if !self.user_progressions.iter().any(|p| p.name == candidate) {
+                break candidate;
+            }
+            n += 1;
+        };
+        self.user_progressions.push(settings::UserProgressionDef {
+            name,
+            roles: vec![settings::ProgRoleSpec {
+                degree: 1,
+                alteration: 0,
+                quality: 0,
+            }],
+        });
+        // Select it (so the editor marks it active) but stay on Settings
+        // — `Apply` is what jumps to the Progression lens.
+        let pos = self.user_progressions.len() - 1;
+        self.progression_idx = Some(progression_catalog().len() + pos);
+        self.progression_expanded_chord = Some(0);
+        self.progression_voicing_idx = vec![0; 1];
+    }
+
+    /// Select a user progression on the Progression lens (jumps there).
+    fn apply_user_progression(&mut self, name: &str) {
+        if let Some(pos) = self.user_progressions.iter().position(|p| p.name == name) {
+            self.progression_idx = Some(progression_catalog().len() + pos);
+            self.progression_expanded_chord = Some(0);
+            let count = self.user_progressions[pos].roles.len();
+            self.progression_voicing_idx = vec![0; count];
+            self.tab = Tab::Progressions;
+            self.last_lens = Tab::Progressions;
+        }
+    }
+
+    fn edit_user_progression(
+        &mut self,
+        name: &str,
+        f: impl FnOnce(&mut settings::UserProgressionDef),
+    ) {
+        if let Some(p) = self.user_progressions.iter_mut().find(|p| p.name == name) {
+            f(p);
+        }
+    }
+
+    /// Remove a user progression; clears the selection if it pointed past
+    /// the (now shorter) combined list.
+    fn remove_user_progression(&mut self, name: &str) {
+        self.user_progressions.retain(|p| p.name != name);
+        let len = progression_catalog().len() + self.user_progressions.len();
+        if matches!(self.progression_idx, Some(i) if i >= len) {
+            self.progression_idx = None;
+        }
+    }
+
+    fn add_prog_chord(&mut self, name: &str) {
+        self.edit_user_progression(name, |p| {
+            p.roles.push(settings::ProgRoleSpec {
+                degree: 1,
+                alteration: 0,
+                quality: 0,
+            });
+        });
+    }
+
+    fn remove_prog_chord(&mut self, name: &str, idx: usize) {
+        self.edit_user_progression(name, |p| {
+            if p.roles.len() > 1 && idx < p.roles.len() {
+                p.roles.remove(idx);
+            }
+        });
+    }
+
+    fn nudge_prog_degree(&mut self, name: &str, idx: usize, delta: i32) {
+        self.edit_user_progression(name, |p| {
+            if let Some(r) = p.roles.get_mut(idx) {
+                r.degree = ((r.degree as i32 + delta).clamp(1, 7)) as u8;
+            }
+        });
+    }
+
+    fn cycle_prog_alteration(&mut self, name: &str, idx: usize) {
+        self.edit_user_progression(name, |p| {
+            if let Some(r) = p.roles.get_mut(idx) {
+                r.alteration = (r.alteration + 1) % 3;
+            }
+        });
+    }
+
+    fn cycle_prog_quality(&mut self, name: &str, idx: usize, delta: i32) {
+        let n = RoleQuality::ALL.len() as i32;
+        self.edit_user_progression(name, |p| {
+            if let Some(r) = p.roles.get_mut(idx) {
+                r.quality = ((r.quality as i32 + delta).rem_euclid(n)) as u8;
+            }
+        });
+    }
+
+    // === Custom exercises (Phase 4) ===
+
+    /// Create a new custom exercise (one step) and select it, staying on
+    /// the current tab (Apply is what jumps to the lens).
+    fn new_user_exercise(&mut self) {
+        let mut n = 1;
+        let name = loop {
+            let candidate = format!("Exercise {n}");
+            if !self.user_exercises.iter().any(|e| e.name == candidate) {
+                break candidate;
+            }
+            n += 1;
+        };
+        self.user_exercises.push(settings::UserExerciseDef {
+            name,
+            steps: vec![settings::ExStepSpec {
+                string: 0,
+                fret: 1,
+                finger: 1,
+            }],
+        });
+        let pos = self.user_exercises.len() - 1;
+        self.exercise_idx = exercise_catalog().len() + pos;
+        self.exercise_step_idx = 0;
+        self.exercise_playing = false;
+    }
+
+    /// Select a user exercise on the Exercise lens (jumps there).
+    fn apply_user_exercise(&mut self, name: &str) {
+        if let Some(pos) = self.user_exercises.iter().position(|e| e.name == name) {
+            self.exercise_idx = exercise_catalog().len() + pos;
+            self.exercise_step_idx = 0;
+            self.exercise_playing = false;
+            self.tab = Tab::Exercises;
+            self.last_lens = Tab::Exercises;
+        }
+    }
+
+    fn edit_user_exercise(&mut self, name: &str, f: impl FnOnce(&mut settings::UserExerciseDef)) {
+        if let Some(e) = self.user_exercises.iter_mut().find(|e| e.name == name) {
+            f(e);
+        }
+    }
+
+    fn remove_user_exercise(&mut self, name: &str) {
+        self.user_exercises.retain(|e| e.name != name);
+        let len = exercise_catalog().len() + self.user_exercises.len();
+        if self.exercise_idx >= len {
+            self.exercise_idx = 0;
+        }
+    }
+
+    fn add_ex_step(&mut self, name: &str) {
+        self.edit_user_exercise(name, |e| {
+            // New step copies the last (a sensible starting point).
+            let last = e.steps.last().cloned().unwrap_or(settings::ExStepSpec {
+                string: 0,
+                fret: 1,
+                finger: 1,
+            });
+            e.steps.push(last);
+        });
+    }
+
+    fn remove_ex_step(&mut self, name: &str, idx: usize) {
+        self.edit_user_exercise(name, |e| {
+            if e.steps.len() > 1 && idx < e.steps.len() {
+                e.steps.remove(idx);
+            }
+        });
+    }
+
+    /// Nudge one field of one step. `field`: 0=string, 1=fret, 2=finger.
+    fn nudge_ex_step(&mut self, name: &str, idx: usize, field: u8, delta: i32) {
+        let strings = self.fretboard.tuning.strings.len().max(1) as i32;
+        self.edit_user_exercise(name, |e| {
+            if let Some(st) = e.steps.get_mut(idx) {
+                match field {
+                    0 => st.string = ((st.string as i32 + delta).rem_euclid(strings)) as u8,
+                    1 => st.fret = (st.fret as i32 + delta).clamp(0, 24) as u8,
+                    _ => st.finger = (st.finger as i32 + delta).clamp(0, 4) as u8,
+                }
+            }
+        });
     }
 
     fn current_scale(&self) -> &'static ScaleFormula {
@@ -1029,13 +1748,9 @@ impl AppState {
         self.chord_idx = next as usize;
     }
 
-    fn current_exercise(&self) -> &'static Exercise {
-        let cat = exercise_catalog();
-        &cat[self.exercise_idx.min(cat.len() - 1)]
-    }
-
     fn cycle_exercise(&mut self, direction: i32) {
-        let len = exercise_catalog().len();
+        // Span the catalog then the user exercises.
+        let len = exercise_catalog().len() + self.user_exercises.len();
         if len == 0 {
             return;
         }
@@ -1151,7 +1866,7 @@ impl AppState {
         let next = order[next_idx];
         if let Some(spec) = tuning_catalog().iter().find(|s| s.instrument == next) {
             self.active_instrument = next;
-            self.fretboard = Fretboard::new(Tuning::from_spec(spec), 12);
+            self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
         }
     }
 
@@ -1159,6 +1874,9 @@ impl AppState {
         if let Ok((_, handle)) = &self.engine {
             handle.play();
             self.metronome_playing = true;
+            // Anchor the shared beat grid so transports (arpeggio /
+            // exercise) can phase-lock to the click (3d).
+            self.metronome_started_at = Some(std::time::Instant::now());
         }
     }
 
@@ -1166,7 +1884,21 @@ impl AppState {
         if let Ok((_, handle)) = &self.engine {
             handle.stop();
             self.metronome_playing = false;
+            self.metronome_started_at = None;
         }
+    }
+
+    /// Beats elapsed since the metronome started (quarter-note grid),
+    /// or `None` when it isn't running. The shared transport clock —
+    /// arpeggio / exercise runs advance one note per beat off this so
+    /// they line up with the audible click.
+    fn metronome_beat(&self) -> Option<u64> {
+        let start = self.metronome_started_at?;
+        if !self.metronome_playing {
+            return None;
+        }
+        let beat_dur = (60.0 / self.bpm.max(1.0)) as f64;
+        Some((start.elapsed().as_secs_f64() / beat_dur.max(0.01)) as u64)
     }
 
     /// Enable the pitch analyzer and start the tuner UI's polling
@@ -1181,6 +1913,19 @@ impl AppState {
             b.tuner.set_enabled(true);
             self.tuner_active = true;
         }
+        // Resource arbiter (3c): tuning claims focus — running output
+        // (metronome click, Song playback) would fight the pitch read, so
+        // pause it and remember, to restore on disarm.
+        if self.tuner_active && self.metronome_playing {
+            self.stop_metronome();
+            self.tuner_paused_metronome = true;
+        }
+        if self.tuner_active && self.song_view.playing {
+            if let Some(Ok((_, h))) = self.song_engine.as_ref() {
+                h.stop();
+            }
+            self.tuner_paused_song = true;
+        }
     }
 
     /// Disable the pitch analyzer and clear the cached snapshot.
@@ -1190,6 +1935,17 @@ impl AppState {
         }
         self.tuner_active = false;
         self.tuner_snapshot = None;
+        // Restore the metronome / Song if the tuner had paused them.
+        if self.tuner_paused_metronome {
+            self.tuner_paused_metronome = false;
+            self.play_metronome();
+        }
+        if self.tuner_paused_song {
+            self.tuner_paused_song = false;
+            if let Some(Ok((_, h))) = self.song_engine.as_ref() {
+                h.play();
+            }
+        }
     }
 }
 
@@ -1198,47 +1954,52 @@ impl AppState {
 // =================================================================
 
 fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    flex_col((
+    // Header + the tab/lens bars are fixed-height "chrome" rows; the
+    // tab content fills the remaining window height (`flex(1.0)`). This
+    // bounded height is what lets the instrument surface behave as
+    // resizable panes sharing one viewport rather than an ever-growing
+    // page that scrolls. Each tab now owns its own internal scrolling
+    // (tall tabs wrap their body in a portal inside `tab_content`); the
+    // fretboard surface fills the height and scrolls per-module.
+    let body = flex_col((
         header(state).flex(0.0),
-        // Tab bar + tab content live inside the SAME portal so they
-        // scroll together. When the user horizontal-scrolls to reach
-        // off-screen content, the tab bar slides along with it —
-        // reads as "tab bar is the header of the scrolling page"
-        // rather than a separate sticky strip with its own scrollbar.
-        //
-        // Constraints intentionally OFF on this portal: horizontal
-        // scroll is allowed so wide content (and wide tab bar with
-        // 9 tabs) stays reachable. Trade-off: prose without explicit
-        // width constraints can extend past the viewport — fix at
-        // the *tab content's* level with per-section `sized_box` or
-        // an inner constrained portal where text wrap matters.
-        //
-        // `AutoHideScrollBar(true)` keeps both scrollbars hidden
-        // until hover/scroll so they don't sit over labels and
-        // chord-card edges all the time.
-        portal(
-            flex_col((
-                tab_bar(state),
-                tab_content(state),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_2),
-        )
-        .prop(masonry::properties::AutoHideScrollBar(true))
-        .flex(1.0),
+        tab_bar(state).flex(0.0),
+        lens_bar(state).flex(0.0),
+        tab_content(state).flex(1.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .main_axis_alignment(MainAxisAlignment::Start)
-    .gap(SP_2)
+    .gap(SP_2);
+
+    // Shared-clock heartbeat (3d): while the metronome runs, tick ~30ms
+    // so views that derive a cursor from elapsed time (the arpeggio /
+    // exercise transports phase-locked to `metronome_beat`) keep
+    // re-rendering. The message handler is a no-op — its only job is to
+    // drive Xilem's rebuild so the time-based cursor advances.
+    let beat_poll = state.metronome_playing.then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(30));
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            |_s: &mut AppState, _: ()| {},
+        )
+    });
+    fork(body, beat_poll)
 }
 
 fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    let tuning_summary = format!(
-        "{} · {}",
-        state.active_instrument,
-        state.fretboard.tuning.name
-    );
+    let instrument_name = format!("{}", state.active_instrument);
+    // Tuning picker as a ◀▶ cycle (a dropdown in a fixed header strip
+    // blows the layout open). Cycles catalog tunings for the current
+    // instrument then the user's custom ones; the full browsable list
+    // lives in Settings → Custom tunings.
+    let tuning_name = state.fretboard.tuning.name.clone();
     // Hamburger reads as "expanded" when sidebar is open, "collapsed"
     // when closed — text label keeps it accessible without an icon
     // font. Only rendered on tabs that actually have a list to hide;
@@ -1262,19 +2023,31 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 .fixed_width(SP_0),
         )
     };
-    // Instrument picker — applies globally; every fretboard re-renders
-    // against the new tuning's strings. Combobox lets the user jump to
-    // (e.g.) Banjo without three cycle clicks; arrows still flank it for
-    // the common "adjacent instrument" case.
-    let instrument_options: Vec<ArcStr> = Instrument::ALL
-        .iter()
-        .map(|i| ArcStr::from(format!("{}", i)))
-        .collect();
-    let instrument_selected = Instrument::ALL
-        .iter()
-        .position(|&i| i == state.active_instrument)
-        .unwrap_or(0);
-    let open_combo = state.open_combobox;
+    // Instrument is changed via the ◀/▶ cycle arrows below (every
+    // fretboard re-renders against the new tuning's strings).
+
+    // Fret-span scope dial — shorten the neck toward the chord-card
+    // form or open it to the full 12. Only on fretboard tabs.
+    let span = state.fret_span;
+    let fret_ctl: OneOf2<_, _> = if tab_has_fretboard(current_tab) {
+        OneOf2::A(
+            flex_row((
+                dim_label(state.palette, format!("Frets {span}"), TS_XS),
+                button_sm("−", |s: &mut AppState| {
+                    s.fret_span = s.fret_span.saturating_sub(1).max(4);
+                    s.fret_start = s.fret_start.min(s.max_fret_start());
+                }),
+                button_sm("+", |s: &mut AppState| {
+                    s.fret_span = (s.fret_span + 1).min(12);
+                    s.fret_start = s.fret_start.min(s.max_fret_start());
+                }),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(SP_1),
+        )
+    } else {
+        OneOf2::B(sized_box(label("")).fixed_width(SP_0))
+    };
     // Wrap the header in a sized_box with a palette-tracked surface
     // so the toolbar strip respects the active theme. Without this
     // the header sits directly on the unthemed window background
@@ -1285,23 +2058,14 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         flex_row((
             hamburger,
             header_label(state.palette, "Woodshed", TS_LG),
-            combobox(
-                "header.instrument",
-                "",
-                &instrument_options,
-                instrument_selected,
-                open_combo,
-                |s: &mut AppState, i: usize| {
-                    let next = Instrument::ALL[i];
-                    if let Some(spec) = tuning_catalog().iter().find(|sp| sp.instrument == next) {
-                        s.active_instrument = next;
-                        s.fretboard = Fretboard::new(Tuning::from_spec(spec), 12);
-                    }
-                },
-            ),
             button_sm("◀", |s: &mut AppState| s.cycle_instrument(-1)),
-            label(tuning_summary).text_size(TS_SM),
+            label(instrument_name).text_size(TS_SM),
             button_sm("▶", |s: &mut AppState| s.cycle_instrument(1)),
+            dim_label(state.palette, "·", TS_SM),
+            button_sm("◀", |s: &mut AppState| s.cycle_tuning(-1)),
+            label(tuning_name).text_size(TS_SM),
+            button_sm("▶", |s: &mut AppState| s.cycle_tuning(1)),
+            fret_ctl,
             FlexSpacer::Flex(1.0),
             dim_label(state.palette, "Xilem migration scaffold", TS_XS),
         ))
@@ -1325,23 +2089,41 @@ fn tab_bar(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // tuple views are heterogeneous but a Vec of one type works fine
     // for a list of same-shape buttons.
     let active = state.tab;
-    let buttons: Vec<_> = Tab::ALL
-        .iter()
-        .map(|&tab| {
-            let is_active = tab == active;
-            // Each button captures its target tab and updates state.tab
-            // on click. Active tab gets a slightly different label
-            // until we wire proper button-style theming.
-            let label_text = if is_active {
-                format!("[{}]", tab.label())
-            } else {
-                tab.label().to_string()
-            };
-            text_button(label_text, move |s: &mut AppState| {
-                s.tab = tab;
-            })
-        })
-        .collect();
+    let palette = state.palette;
+    // Active tab: tertiary "you-are-here" color + a bracket cue (so it
+    // reads without relying on color alone); inactive tabs take the
+    // header text color. Built with `button` so the label color is ours.
+    let tab_button = move |text: String, is_active: bool, on_click: fn(&mut AppState)| {
+        let (txt, color) = if is_active {
+            (format!("[{text}]"), palette.tertiary)
+        } else {
+            (text, palette.text_header)
+        };
+        button(label(txt).text_size(TS_SM).color(color), on_click).into_any_flex()
+    };
+
+    let mut buttons: Vec<AnyFlexChild<AppState>> = Vec::new();
+    // The four theory tabs collapse into one "Fretboard" destination
+    // (they're lenses of one surface — see the lens switcher below).
+    buttons.push(tab_button(
+        "Fretboard".to_string(),
+        tab_has_fretboard(active),
+        |s: &mut AppState| {
+            if !tab_has_fretboard(s.tab) {
+                s.tab = s.last_lens;
+            }
+        },
+    ));
+    // Tuner + Metronome are no longer top-level destinations — they're
+    // surface modules (mount via the "Show:" toggles), and the header
+    // tuning combobox covers tuning selection. Remaining destinations:
+    buttons.push(tab_button("Practice".to_string(), active == Tab::Practice, |s| {
+        s.tab = Tab::Practice
+    }));
+    buttons.push(tab_button("Song".to_string(), active == Tab::Song, |s| s.tab = Tab::Song));
+    buttons.push(tab_button("Settings".to_string(), active == Tab::Settings, |s| {
+        s.tab = Tab::Settings
+    }));
     // No inner portal — tab bar lives inside the page-level scrolling
     // portal (see `app_logic`), so horizontal scroll for off-screen
     // tabs falls out of the page's own horizontal scroll. The tab bar
@@ -1353,28 +2135,819 @@ fn tab_bar(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .gap(SP_2)
 }
 
-fn tab_content(state: &mut AppState) -> OneOf9<
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-    impl WidgetView<AppState> + use<>,
-> {
-    match state.tab {
-        Tab::Scales => OneOf9::A(scales_view(state)),
-        Tab::Chords => OneOf9::B(chords_view(state)),
-        Tab::Tuner => OneOf9::C(tuner_view(state)),
-        Tab::Progressions => OneOf9::D(progressions_view(state)),
-        Tab::Exercises => OneOf9::E(exercises_view(state)),
-        Tab::Metronome => OneOf9::F(metronome_view(state)),
-        Tab::Practice => OneOf9::G(practice_view(state)),
-        Tab::Song => OneOf9::H(song_view_render(state)),
-        Tab::Settings => OneOf9::I(settings_view(state)),
+/// Lens switcher — sub-navigation shown only on the Fretboard surface.
+/// Picks which lens (Scale / Chord / Progression / Exercise) the one
+/// fretboard surface shows; each is a theory tab under the hood, so
+/// the shared root + tuning carry across. Zero-height elsewhere.
+fn lens_bar(
+    state: &mut AppState,
+) -> OneOf2<impl WidgetView<AppState> + use<>, impl WidgetView<AppState> + use<>> {
+    if !tab_has_fretboard(state.tab) {
+        return OneOf2::B(sized_box(label("")).fixed_height(SP_0));
     }
+    let active = state.tab;
+    let palette = state.palette;
+    let lens = move |text: &str, tab: Tab| {
+        // Active lens pops in tertiary with a ● cue; inactive lenses
+        // take body `text` (legible — not the disabled-looking dim).
+        let (txt, color) = if tab == active {
+            (format!("● {text}"), palette.tertiary)
+        } else {
+            (format!("  {text}"), palette.text)
+        };
+        button(label(txt).text_size(TS_XS).color(color), move |s: &mut AppState| {
+            s.tab = tab;
+            s.last_lens = tab;
+        })
+        .into_any_flex()
+    };
+    // Companion-module mount toggles. Filled (●) when shown, hollow (○)
+    // when not; clicking mounts/unmounts the module in the surface stack.
+    let module_toggle = move |text: &str, kind: ModuleKind, shown: bool| {
+        let (txt, color) = if shown {
+            (format!("● {text}"), palette.tertiary)
+        } else {
+            (format!("○ {text}"), palette.text)
+        };
+        button(label(txt).text_size(TS_XS).color(color), move |s: &mut AppState| {
+            s.toggle_module(kind);
+        })
+        .into_any_flex()
+    };
+    let tuner_shown = state.module_shown(ModuleKind::Tuner);
+    let metro_shown = state.module_shown(ModuleKind::Metronome);
+    OneOf2::A(
+        sized_box(
+            flex_row((
+                dim_label(palette, "Lens:", TS_XS),
+                lens("Scale", Tab::Scales),
+                lens("Chord", Tab::Chords),
+                lens("Arpeggio", Tab::Arpeggios),
+                lens("Progression", Tab::Progressions),
+                lens("Exercise", Tab::Exercises),
+                // Visual break, then the surface-module mount toggles.
+                dim_label(palette, "   Show:", TS_XS),
+                module_toggle("Tuner", ModuleKind::Tuner, tuner_shown),
+                module_toggle("Metronome", ModuleKind::Metronome, metro_shown),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+        )
+        // Left inset so "Lens:" aligns with the content below instead
+        // of hugging the window edge.
+        .padding(masonry::properties::Padding::from_vh(SP_0, SP_2)),
+    )
+}
+
+fn tab_content(state: &mut AppState) -> Box<AnyWidgetView<AppState>> {
+    // Boxed dispatch (not `OneOf9`) so the tab count isn't capped at
+    // xilem's 9-arm `OneOf` — the fretboard lenses alone now number
+    // five. Fretboard lens views fill the bounded height and scroll
+    // per-module (via `surface_left`); the other destinations are
+    // ordinary tall forms wrapped in a vertical scroll portal
+    // (`scroll_tab`) to fit the bounded tab-content area.
+    match state.tab {
+        Tab::Scales => scales_view(state).boxed(),
+        Tab::Chords => chords_view(state).boxed(),
+        Tab::Tuner => scroll_tab(tuner_view(state)).boxed(),
+        Tab::Progressions => progressions_view(state).boxed(),
+        Tab::Exercises => exercises_view(state).boxed(),
+        Tab::Arpeggios => arpeggios_view(state).boxed(),
+        Tab::Metronome => scroll_tab(metronome_view(state)).boxed(),
+        Tab::Practice => scroll_tab(practice_view(state)).boxed(),
+        Tab::Song => scroll_tab(song_view_render(state)).boxed(),
+        Tab::Settings => scroll_tab(settings_view(state)).boxed(),
+    }
+}
+
+/// Wrap a tab body in a vertical scroll viewport sized to the bounded
+/// tab-content area. `constrain_horizontal` keeps content at the
+/// viewport width (only vertical scroll); the auto-hide scrollbar
+/// stays out of the way until needed.
+fn scroll_tab<V>(view: V) -> impl WidgetView<AppState> + use<V>
+where
+    V: WidgetView<AppState>,
+{
+    // Wrap in a concrete single-child `flex_col` so the portal's child
+    // widget type is the (Sized) `Flex` widget — `.prop()` requires a
+    // Sized child, which an opaque `impl WidgetView` can't prove. The
+    // wrapper also lets us stretch the child to the viewport width.
+    // `AutoHideScrollBar(true)` keeps the scrollbar hidden until the
+    // pointer moves over the pane (no ever-present bars).
+    portal(
+        flex_col((view,))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .main_axis_alignment(MainAxisAlignment::Start),
+    )
+    .constrain_horizontal(true)
+    .prop(masonry::properties::AutoHideScrollBar(true))
+}
+
+/// Frets a single arpeggio position/shape spans on screen
+/// (`start_fret ..= start_fret + ARP_SHAPE_SPAN`).
+const ARP_SHAPE_SPAN: u8 = 4;
+
+/// One CAGED-style arpeggio shape: the chord tones inside a ~5-fret
+/// neck window under one hand position.
+struct ArpeggioShape {
+    start_fret: u8,
+    positions: Vec<Position>,
+}
+
+/// Generate the arpeggio's neck-position shapes (A2 + bass-anchored
+/// inversions). Anchor a window a fret below each place the **bass tone**
+/// (the inversion's chord-tone interval from root) lands on the two
+/// lowest strings, collect the chord tones inside it, and keep windows
+/// that form a usable box. For root position `bass` is the unison; for
+/// inversions it's the 3rd / 5th / 7th — so each inversion yields its
+/// own set of shapes whose lowest note is its bass, giving full-length
+/// runs rather than a truncated rotation. Falls back to a whole-neck
+/// shape if nothing qualifies.
+fn generate_arpeggio_shapes(
+    fretboard: &Fretboard,
+    formula: &ChordFormula,
+    root: Pitch,
+    bass: woodshedding::interval::Interval,
+) -> Vec<ArpeggioShape> {
+    let all = fretboard.positions_for_chord(formula, root).unwrap_or_default();
+    // Anchor frets: a fret below each occurrence of the bass tone on the
+    // lowest two strings, within a playable stretch of neck.
+    let mut anchors: Vec<u8> = all
+        .iter()
+        .filter(|p| {
+            p.interval_from_root == Some(bass) && p.string_index <= 1 && p.fret <= 15
+        })
+        .map(|p| p.fret.saturating_sub(1))
+        .collect();
+    anchors.sort_unstable();
+    anchors.dedup();
+    if anchors.is_empty() {
+        // Bass tone isn't on the low strings in range — fall back to any
+        // low occurrence so the lens still shows something.
+        anchors = all
+            .iter()
+            .filter(|p| p.interval_from_root == Some(bass) && p.fret <= 15)
+            .map(|p| p.fret.saturating_sub(1))
+            .collect();
+        anchors.sort_unstable();
+        anchors.dedup();
+    }
+    if anchors.is_empty() {
+        anchors.push(0);
+    }
+
+    // A complete box wants at least min(chord-tones, 3) distinct pitch
+    // classes so a near-empty window doesn't masquerade as a shape.
+    let want_pcs = formula.intervals.len().min(3).max(1);
+    let mut shapes: Vec<ArpeggioShape> = Vec::new();
+    for lo in anchors {
+        let hi = lo + ARP_SHAPE_SPAN;
+        let positions: Vec<Position> = all
+            .iter()
+            .filter(|p| p.fret >= lo && p.fret <= hi)
+            .cloned()
+            .collect();
+        let distinct_pcs = {
+            let mut pcs: Vec<u8> = positions.iter().map(|p| p.pitch.pitch_class()).collect();
+            pcs.sort_unstable();
+            pcs.dedup();
+            pcs.len()
+        };
+        if positions.len() >= 4 && distinct_pcs >= want_pcs {
+            shapes.push(ArpeggioShape {
+                start_fret: lo,
+                positions,
+            });
+        }
+    }
+    if shapes.is_empty() {
+        shapes.push(ArpeggioShape {
+            start_fret: 0,
+            positions: all,
+        });
+    }
+    shapes
+}
+
+/// Arpeggio lens — an arpeggio's notes are a chord's tones, so the
+/// quality comes from the chord catalog and the shared `root`. Renders
+/// the active CAGED-style **position shape** on the surface neck with an
+/// up/down/loop step-through transport, plus a grid of shape cards (one
+/// per neck position) on the right; clicking a card loads that shape.
+/// Tempo follows the metronome.
+fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    let cat = chord_catalog();
+    let idx = state.arpeggio_idx.min(cat.len().saturating_sub(1));
+    let formula = cat[idx];
+    let root = state.root.to_pitch(4);
+    let intervals: String = formula
+        .intervals
+        .iter()
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let symbol = if formula.symbol.is_empty() {
+        String::new()
+    } else {
+        formula.symbol.to_string()
+    };
+    let display_root = state.root.display();
+    let arp_label = format!("{display_root}{symbol} arpeggio ({})", formula.name);
+
+    let board = state.fretboard.clone();
+    let unison = woodshedding::interval::Interval::PERFECT_UNISON;
+
+    // The inversion picks the bass chord tone; shapes are anchored to it
+    // (bass-anchored inversions) so each inversion has its own positions
+    // and a full-length ascending run.
+    let inv = (state.arpeggio_inversion as usize).min(formula.intervals.len().saturating_sub(1));
+    let bass = formula.intervals.get(inv).copied().unwrap_or(unison);
+
+    // Generate the position shapes for this bass; the active one drives
+    // the surface neck (its window is the display window) and the transport.
+    let shapes = generate_arpeggio_shapes(&state.fretboard, &formula, root, bass);
+    let shape_count = shapes.len();
+    let pos_idx = state.arpeggio_position_idx.min(shape_count.saturating_sub(1));
+    let active_start = shapes.get(pos_idx).map(|s| s.start_fret).unwrap_or(0);
+    let positions: Vec<Position> = shapes
+        .get(pos_idx)
+        .map(|s| s.positions.clone())
+        .unwrap_or_default();
+
+    // === Transport sequence ===
+    // The arpeggio run = the active (bass-anchored) shape's notes ordered
+    // by pitch, ascending from the bass tone. `seq` holds indices into
+    // `positions`. Since the shape is anchored to the bass, dropping the
+    // few notes below the bass's lowest occurrence still leaves a
+    // full-length run (unlike the old root-anchored rotation).
+    let mut seq: Vec<usize> = (0..positions.len()).collect();
+    seq.sort_by_key(|&i| (positions[i].pitch.midi(), positions[i].string_index));
+    let inv_start = seq
+        .iter()
+        .position(|&i| positions[i].interval_from_root == Some(bass))
+        .unwrap_or(0);
+    if inv_start > 0 && inv_start < seq.len() {
+        seq.drain(0..inv_start);
+    }
+    let n = seq.len();
+    let inv_text = match inv {
+        0 => "Inv: Root".to_string(),
+        1 => "Inv: 1st".to_string(),
+        2 => "Inv: 2nd".to_string(),
+        3 => "Inv: 3rd".to_string(),
+        k => format!("Inv: {k}th"),
+    };
+
+    // Walk order over `ordered` per direction. UpDown ping-pongs without
+    // repeating the turnaround notes.
+    let walk: Vec<usize> = match state.arpeggio_direction {
+        _ if n == 0 => Vec::new(),
+        ArpeggioDirection::Up => (0..n).collect(),
+        ArpeggioDirection::Down => (0..n).rev().collect(),
+        ArpeggioDirection::UpDown => {
+            let mut v: Vec<usize> = (0..n).collect();
+            if n > 1 {
+                v.extend((1..n - 1).rev());
+            }
+            v
+        }
+    };
+    let walk_len = walk.len().max(1);
+    // Cursor: when the metronome is running it's the clock (phase-locked
+    // to the click via the shared beat grid, 3d); otherwise the arpeggio's
+    // own Play/Step drives `arpeggio_step_idx`.
+    let metro_driving = state.metronome_beat().is_some();
+    let cursor = match state.metronome_beat() {
+        Some(beat) => beat as usize,
+        None => state.arpeggio_step_idx,
+    };
+    let cur_rank = if walk.is_empty() {
+        None
+    } else {
+        Some(walk[cursor % walk_len])
+    };
+    let cur_pos = cur_rank.map(|r| seq[r]);
+    // Frequencies in walk order — for the step-through audio task.
+    let walk_freqs: Vec<f32> = walk
+        .iter()
+        .map(|&r| positions[seq[r]].pitch.frequency() as f32)
+        .collect();
+
+    // Dot colors: the current step pops in `secondary` — a third triad
+    // hue distinct from BOTH resting colors (root dots follow `tertiary`,
+    // note dots follow `primary`), so the cursor is visible even when it
+    // lands on a root (which would otherwise already be tertiary-colored).
+    let dc = state.diagram_colors();
+    let dot_colors: Vec<Color> = positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if Some(i) == cur_pos {
+                state.palette.secondary
+            } else if p.interval_from_root
+                == Some(woodshedding::interval::Interval::PERFECT_UNISON)
+            {
+                dc.root_dot
+            } else {
+                dc.note_dot
+            }
+        })
+        .collect();
+
+    // Labels per the chosen mode. `Steps` numbers the dots in ascending
+    // arpeggio order; `Blank` draws none.
+    let labels: Vec<String> = match state.arpeggio_label {
+        ArpeggioLabel::Notes => compute_labels(LabelMode::Notes, &positions),
+        ArpeggioLabel::Intervals => compute_labels(LabelMode::Intervals, &positions),
+        ArpeggioLabel::Blank => Vec::new(),
+        ArpeggioLabel::Steps => {
+            let mut v = vec![String::new(); positions.len()];
+            for (rank, &pi) in seq.iter().enumerate() {
+                v[pi] = format!("{}", rank + 1);
+            }
+            v
+        }
+    };
+
+    let playing = state.arpeggio_playing;
+    let step_indicator = match cur_rank {
+        Some(r) => format!("Note {}/{}", r + 1, n),
+        None => "—".to_string(),
+    };
+    let bpm_for_arp = state.bpm;
+
+    // Spelled arpeggio notes (root emphasized) — same shape as the
+    // Scale lens's Degrees panel.
+    let arp_pitches = formula.apply_to(root).unwrap_or_default();
+    let note_rows: Vec<_> = arp_pitches
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let is_root = i == 0;
+            let note = format!("{}{}", p.name, p.accidental);
+            let note_color = if is_root {
+                state.palette.tertiary
+            } else {
+                state.palette.text
+            };
+            flex_row((
+                sized_box(
+                    label(format!("{}", i + 1))
+                        .text_size(TS_XS)
+                        .color(state.palette.text_dim),
+                )
+                .fixed_width(masonry::layout::Length::px(22.0)),
+                label(note).text_size(TS_SM).color(note_color),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2)
+        })
+        .collect();
+    let notes_section = flex_col((
+        dim_label(state.palette, "Notes", TS_XS),
+        flex_col(note_rows)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    // Position/shape cards — one mini neck per generated shape; click to
+    // load it (also resets the transport cursor). Active card's caption
+    // pops in `tertiary`.
+    let shape_cards: Vec<_> = shapes
+        .iter()
+        .enumerate()
+        .map(|(i, sh)| {
+            let active = i == pos_idx;
+            let sp = sh.positions.clone();
+            let cdots: Vec<Color> = sp
+                .iter()
+                .map(|p| {
+                    if p.interval_from_root == Some(unison) {
+                        dc.root_dot
+                    } else {
+                        dc.note_dot
+                    }
+                })
+                .collect();
+            let start = sh.start_fret;
+            let caption = if start == 0 {
+                format!("Pos {} · open", i + 1)
+            } else {
+                format!("Pos {} · fret {}", i + 1, start + 1)
+            };
+            let cap_color = if active {
+                state.palette.tertiary
+            } else {
+                state.palette.text
+            };
+            flex_col((
+                label(caption).text_size(TS_XS).color(cap_color),
+                button(
+                    sized_box(fretboard_view(
+                        board.clone(),
+                        sp,
+                        Vec::new(),
+                        dc,
+                        Some(cdots),
+                        (start, ARP_SHAPE_SPAN + 1),
+                        Vec::new(),
+                    ))
+                    .fixed_width(masonry::layout::Length::px(150.0))
+                    .fixed_height(masonry::layout::Length::px(180.0)),
+                    move |s: &mut AppState| {
+                        s.arpeggio_position_idx = i;
+                        s.arpeggio_step_idx = 0;
+                    },
+                )
+                .padding(masonry::properties::Padding::from_vh(SP_1, SP_1)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1)
+        })
+        .collect();
+    // Reflow the shape cards into a grid: rows of `cards_per_row` from
+    // the observed pane width (capped at 4), mirroring the Progression
+    // chord-card grid. `arpeggio_cards_panel_width` is reported by the
+    // tracker added to `info_panel` (which is cross-Stretch so it gets
+    // the full pane width).
+    const ARP_CARD_W: f64 = 162.0;
+    let arp_panel_w = state.arpeggio_cards_panel_width;
+    let cards_per_row = if arp_panel_w < 1.0 {
+        2
+    } else {
+        (((arp_panel_w + 8.0) / (ARP_CARD_W + 8.0)).floor() as usize).clamp(1, 4)
+    };
+    let mut card_rows: Vec<_> = Vec::new();
+    let mut card_buf: Vec<_> = Vec::new();
+    for c in shape_cards {
+        card_buf.push(c);
+        if card_buf.len() == cards_per_row {
+            card_rows.push(
+                flex_row(std::mem::take(&mut card_buf))
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .main_axis_alignment(MainAxisAlignment::Start)
+                    .gap(SP_2),
+            );
+        }
+    }
+    if !card_buf.is_empty() {
+        card_rows.push(
+            flex_row(card_buf)
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_2),
+        );
+    }
+    let cards_width_tracker = resize_observer(
+        |s: &mut AppState, size: masonry::kurbo::Size| {
+            s.arpeggio_cards_panel_width = size.width;
+        },
+        sized_box(label("")).fixed_height(masonry::layout::Length::const_px(0.0)),
+    );
+    let positions_section = flex_col((
+        dim_label(state.palette, format!("Positions ({shape_count})"), TS_XS),
+        flex_col(card_rows)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    let quality_options: Vec<ArcStr> = cat.iter().map(|f| ArcStr::from(f.name)).collect();
+    let root_options: Vec<ArcStr> = ChromaticPc::ALL
+        .iter()
+        .map(|pc| ArcStr::from(pc.display()))
+        .collect();
+    let root_selected = ChromaticPc::ALL
+        .iter()
+        .position(|&pc| pc == state.root)
+        .unwrap_or(0);
+    let open_combo = state.open_combobox;
+
+    let info_panel = flex_col((
+        // Invisible full-width strut: cross-Stretch gives it the pane
+        // width, which `resize_observer` reports to drive the shape-card
+        // reflow grid below.
+        cards_width_tracker,
+        header_label(state.palette, arp_label, TS_LG),
+        dim_prose(state.palette, format!("Intervals: {intervals}"), TS_SM),
+        // Transport — walks the notes up/down/loop in time. Tempo follows
+        // the metronome (state.bpm), so there's no separate tempo control
+        // here; mount the Metronome widget to set the pace.
+        flex_row((
+            if playing {
+                OneOf2::A(button_sm("■ Stop", |s: &mut AppState| {
+                    s.arpeggio_playing = false;
+                }))
+            } else {
+                OneOf2::B(button_sm("▶ Play", |s: &mut AppState| {
+                    s.arpeggio_playing = true;
+                }))
+            },
+            button_sm("◀ Step", |s: &mut AppState| {
+                s.arpeggio_playing = false;
+                s.arpeggio_step_idx = s.arpeggio_step_idx.saturating_sub(1);
+            }),
+            button_sm("Step ▶", |s: &mut AppState| {
+                s.arpeggio_playing = false;
+                s.arpeggio_step_idx = s.arpeggio_step_idx.wrapping_add(1);
+            }),
+            button_sm("⏮", |s: &mut AppState| s.arpeggio_step_idx = 0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+        flex_row((
+            button_sm(state.arpeggio_direction.label(), |s: &mut AppState| {
+                s.arpeggio_direction = s.arpeggio_direction.next();
+            }),
+            button_sm(inv_text, |s: &mut AppState| {
+                let n = chord_catalog()
+                    .get(s.arpeggio_idx)
+                    .map(|f| f.intervals.len())
+                    .unwrap_or(1)
+                    .max(1);
+                s.arpeggio_inversion = ((s.arpeggio_inversion as usize + 1) % n) as u8;
+                // New inversion → new (bass-anchored) shapes; reset both
+                // the active shape and the transport cursor.
+                s.arpeggio_position_idx = 0;
+                s.arpeggio_step_idx = 0;
+            }),
+            button_sm(state.arpeggio_label.label(), |s: &mut AppState| {
+                s.arpeggio_label = s.arpeggio_label.next();
+            }),
+            button_sm(
+                if state.transport_sound { "🔊" } else { "🔇" },
+                |s: &mut AppState| s.transport_sound = !s.transport_sound,
+            ),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+        dim_label(
+            state.palette,
+            if metro_driving {
+                format!("{step_indicator} · synced to metronome ({bpm_for_arp:.0})")
+            } else {
+                format!("{step_indicator} · tempo {bpm_for_arp:.0} · run Metronome to sync")
+            },
+            TS_XS,
+        ),
+        flex_row((
+            combobox(
+                "arpeggios.quality",
+                "Arpeggio: ",
+                &quality_options,
+                idx,
+                open_combo,
+                |s: &mut AppState, i: usize| s.arpeggio_idx = i,
+            ),
+            button_sm("◀", |s: &mut AppState| {
+                let n = chord_catalog().len().max(1);
+                s.arpeggio_idx = (s.arpeggio_idx + n - 1) % n;
+            }),
+            button_sm("▶", |s: &mut AppState| {
+                let n = chord_catalog().len().max(1);
+                s.arpeggio_idx = (s.arpeggio_idx + 1) % n;
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        flex_row((
+            combobox(
+                "arpeggios.root",
+                "Root: ",
+                &root_options,
+                root_selected,
+                open_combo,
+                |s: &mut AppState, i: usize| {
+                    s.root = ChromaticPc::ALL[i];
+                },
+            ),
+            button_sm("◀", |s: &mut AppState| s.root = s.root.cycle(-1)),
+            button_sm("▶", |s: &mut AppState| s.root = s.root.cycle(1)),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        notes_section,
+        positions_section,
+    ))
+    // Stretch so the width tracker spans the pane (drives the card grid);
+    // each row's own `main_axis: Start` keeps its content left-anchored.
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_2);
+
+    // Quality catalog sidebar — reuses the chord catalog (each chord
+    // quality is an arpeggio). Mirrors the Chords/Scales browse list.
+    let list_items: Vec<_> = cat
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let active = idx == i;
+            list_item_button(state.palette, active, f.name, move |s: &mut AppState| {
+                s.arpeggio_idx = i
+            })
+        })
+        .collect();
+    let list_card = nav_card(
+        state.palette,
+        flex_col((
+            header_label(state.palette, "Arpeggios", TS_MD),
+            portal(
+                flex_col(list_items)
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .main_axis_alignment(MainAxisAlignment::Start)
+                    .gap(SP_1),
+            )
+            .constrain_horizontal(true)
+            .flex(1.0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+    );
+    let sidebar: OneOf2<_, _> = if state.sidebars.is_collapsed(Tab::Arpeggios) {
+        OneOf2::A(sized_box(label("")).fixed_width(SP_0))
+    } else {
+        OneOf2::B(sized_box(list_card).fixed_width(masonry::layout::Length::px(220.0)))
+    };
+
+    use masonry::layout::Length as MLen;
+    // The active shape sets the display window — the position cards drive
+    // it, so no start-fret arrows here; wrap in a plain thin card.
+    let fretboard_card = thin_card(
+        state.palette,
+        fretboard_view(
+            board,
+            positions,
+            labels,
+            state.diagram_colors(),
+            Some(dot_colors),
+            (active_start, ARP_SHAPE_SPAN + 1),
+            Vec::new(),
+        ),
+    )
+    .boxed();
+    let surface = surface_left(state, fretboard_card);
+    let body = flex_row((
+        sidebar,
+        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+            .split_point(state.split_ratio)
+            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
+            .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
+            .flex(1.0),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_4);
+
+    // Auto-advance timer at the metronome tempo (exercise-style). True
+    // beat-phase lock to the metronome's audible click is Phase 3d; for
+    // now the step runs on its own interval at the shared `bpm`.
+    let interval_ms = (60_000.0 / bpm_for_arp.max(1.0)) as u64;
+    // Own timer only when the metronome isn't driving (otherwise the
+    // shared beat grid + app-level heartbeat advance the cursor).
+    let auto_task = (playing && !metro_driving && walk_len > 0).then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(interval_ms.max(50)));
+                tick.tick().await;
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            move |s: &mut AppState, _: ()| {
+                s.arpeggio_step_idx = s.arpeggio_step_idx.wrapping_add(1);
+            },
+        )
+    });
+
+    // Step-through audio: poll ~20ms while the run is active and sound a
+    // note (chord-render voice) whenever the cursor lands on a new step —
+    // works for both the own-timer and metronome-driven cases (reads the
+    // same effective cursor).
+    let audio_active =
+        state.transport_sound && (playing || metro_driving) && !walk_freqs.is_empty();
+    let audio_task = audio_active.then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(20));
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            move |s: &mut AppState, _: ()| {
+                let cursor = s
+                    .metronome_beat()
+                    .map(|b| b as usize)
+                    .unwrap_or(s.arpeggio_step_idx);
+                let idx = cursor % walk_freqs.len().max(1);
+                if s.arpeggio_last_sounded != Some(idx) {
+                    s.arpeggio_last_sounded = Some(idx);
+                    let f = walk_freqs[idx];
+                    if f > 0.0 {
+                        if let Some(h) = s.ensure_song_engine() {
+                            h.play_note_now(f, 0.18);
+                        }
+                    }
+                }
+            },
+        )
+    });
+
+    fork(fork(body, auto_task), audio_task)
+}
+
+// =================================================================
+// Instrument surface — the composable left pane (Phase 3b).
+// =================================================================
+
+/// Wrap the fretboard card with whatever companion modules (tuner /
+/// metronome) the user has mounted, producing the **left pane** of the
+/// main split: a vertical stack of resizable instrument modules sharing
+/// the one right edge (the main split bar).
+///
+/// The fretboard is always present; tuner/metronome stack above/below
+/// it per the `surface` order. With only the fretboard mounted this
+/// returns the fretboard card unchanged (identical to the pre-3b
+/// layout). Multiple modules fold into right-leaning nested vertical
+/// `split`s; each divider persists its position into the module size
+/// weights via [`AppState::set_module_split`].
+///
+/// `fretboard_card` is built by the caller (it's lens-specific) and
+/// handed in already boxed so this stays lens-agnostic.
+fn surface_left(
+    state: &mut AppState,
+    fretboard_card: Box<AnyWidgetView<AppState>>,
+) -> Box<AnyWidgetView<AppState>> {
+    use masonry::kurbo::Axis;
+    use masonry::layout::Length as MLen;
+
+    // Visible modules in surface order, with their state index + weight.
+    let visible: Vec<(usize, ModuleKind, f64)> = state
+        .surface
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.visible)
+        .map(|(i, m)| (i, m.kind, m.weight))
+        .collect();
+
+    // Render each to a boxed view. The single fretboard entry consumes
+    // the passed-in card; companions render their self-contained views.
+    let mut fretboard_card = Some(fretboard_card);
+    let mut rendered: Vec<(usize, f64, Box<AnyWidgetView<AppState>>)> = Vec::new();
+    for (idx, kind, weight) in visible {
+        // Modules are *widgets*, not scrolling sub-pages: each is built
+        // to fit its pane. The fretboard scales its drawing to the pane;
+        // the tuner/metronome use compact module forms (`*_module`) dense
+        // enough to fit without a scrollbar. (The full Tuner/Metronome
+        // tabs keep the verbose page layouts.)
+        let view: Box<AnyWidgetView<AppState>> = match kind {
+            ModuleKind::Fretboard => fretboard_card
+                .take()
+                .expect("surface holds exactly one Fretboard (sanitize_surface)"),
+            ModuleKind::Tuner => tuner_module(state).boxed(),
+            ModuleKind::Metronome => metronome_module(state).boxed(),
+        };
+        rendered.push((idx, weight, view));
+    }
+
+    // Fold from the bottom up into nested vertical splits. `running_tail`
+    // is the summed weight of everything already folded below the current
+    // module, which sets each divider's initial fraction.
+    let (_, last_w, mut acc) = rendered.pop().expect("at least the fretboard is visible");
+    let mut running_tail = last_w;
+    while let Some((idx, w, view)) = rendered.pop() {
+        let point = (w / (w + running_tail)).clamp(0.05, 0.95);
+        acc = xilem::view::split(view, acc)
+            .split_axis(Axis::Vertical)
+            // Floors so a module can't be dragged so small it clips:
+            // ~a chord-card-diagram tall for the top pane, enough for a
+            // compact widget's rows below.
+            .min_lengths(MLen::const_px(190.0), MLen::const_px(170.0))
+            .on_split_changed(move |s: &mut AppState, p: f64| s.set_module_split(idx, p))
+            .boxed();
+        running_tail += w;
+    }
+    acc
 }
 
 // =================================================================
@@ -1388,7 +2961,7 @@ fn tab_content(state: &mut AppState) -> OneOf9<
 /// as a Masonry custom widget.
 fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let formula = state.current_scale();
-    let root = state.scale_root_pc.to_pitch(4);
+    let root = state.root.to_pitch(4);
     let intervals: String = formula
         .intervals
         .iter()
@@ -1406,6 +2979,46 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     let label_mode_text = state.scale_label_mode.label();
 
+    // Spelled scale notes from the shared root — one row per degree,
+    // root emphasized. Fills the info pane with something useful
+    // (you read "A B C# D E F# G#" for A Major) instead of dead space.
+    let scale_pitches = formula.apply_to(root).unwrap_or_default();
+    let degree_rows: Vec<_> = scale_pitches
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let is_root = i == 0;
+            let note = format!("{}{}", p.name, p.accidental);
+            let note_color = if is_root {
+                state.palette.tertiary
+            } else {
+                state.palette.text
+            };
+            flex_row((
+                sized_box(
+                    label(format!("{}", i + 1))
+                        .text_size(TS_XS)
+                        .color(state.palette.text_dim),
+                )
+                .fixed_width(masonry::layout::Length::px(22.0)),
+                label(note).text_size(TS_SM).color(note_color),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2)
+        })
+        .collect();
+    let degrees_section = flex_col((
+        dim_label(state.palette, "Degrees", TS_XS),
+        flex_col(degree_rows)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
     // Combobox option lists. Built every frame — cheap (12 PCs + ~30
     // scales), but could be cached if it ever surfaces in a profile.
     let scale_options: Vec<ArcStr> = scale_catalog()
@@ -1419,7 +3032,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let scale_selected = state.scale_idx.min(scale_options.len().saturating_sub(1));
     let root_selected = ChromaticPc::ALL
         .iter()
-        .position(|&pc| pc == state.scale_root_pc)
+        .position(|&pc| pc == state.root)
         .unwrap_or(0);
     let open_combo = state.open_combobox;
 
@@ -1452,19 +3065,20 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 root_selected,
                 open_combo,
                 |s: &mut AppState, i: usize| {
-                    s.scale_root_pc = ChromaticPc::ALL[i];
+                    s.root = ChromaticPc::ALL[i];
                 },
             ),
             button_sm("◀", |s: &mut AppState| {
-                s.scale_root_pc = s.scale_root_pc.cycle(-1);
+                s.root = s.root.cycle(-1);
             }),
             button_sm("▶", |s: &mut AppState| {
-                s.scale_root_pc = s.scale_root_pc.cycle(1);
+                s.root = s.root.cycle(1);
             }),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
+        degrees_section,
         // Push the label cycler to the bottom of the card.
         FlexSpacer::Flex(1.0),
         text_button(label_mode_text.to_string(), |s: &mut AppState| {
@@ -1484,11 +3098,9 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .enumerate()
         .map(|(i, f)| {
             let active = state.scale_idx == i;
-            let prefix = if active { "● " } else { "  " };
-            text_button(
-                format!("{}{}", prefix, f.name),
-                move |s: &mut AppState| s.scale_idx = i,
-            )
+            list_item_button(state.palette, active, f.name, move |s: &mut AppState| {
+                s.scale_idx = i
+            })
         })
         .collect();
     // Wrap the item flex_col in a portal so the catalog scrolls
@@ -1499,9 +3111,9 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // exceed it). The portal takes `flex(1.0)` of remaining vertical
     // space so the heading sticks at the top and the scroll viewport
     // gets everything below it.
-    let scale_list_card = card(state.palette, 
+    let scale_list_card = nav_card(state.palette,
         flex_col((
-            label("Scales").text_size(TS_MD),
+            header_label(state.palette, "Scales", TS_MD),
             portal(
                 flex_col(scale_list_items)
                     .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -1531,33 +3143,39 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // Fretboard + info panel use `split` for hard-fractional sharing,
     // same pattern as Progressions. Default 0.5/0.5; user can drag
     // the bar to adjust. Min lengths keep each side from collapsing.
+    // The fretboard side goes through `surface_left` so any mounted
+    // tuner/metronome modules stack with it.
     use masonry::layout::Length as MLen;
+    // Fill the surface pane (no fixed height, no scroll) — the canvas
+    // scales its drawing to whatever vertical share the pane gives it.
+    // The widget wrapper adds the start-fret arrows; the window slides
+    // with `fret_start`.
+    let fretboard_card = fretboard_widget(
+        state,
+        fretboard_view(
+            board,
+            positions,
+            labels,
+            state.diagram_colors(),
+            None,
+            (state.fret_start, state.fret_span),
+            Vec::new(),
+        ),
+    )
+    .boxed();
+    let surface = surface_left(state, fretboard_card);
     flex_row((
         sidebar,
-        xilem::view::split(
-            card(
-                state.palette,
-                sized_box(fretboard_view(
-                    board,
-                    positions,
-                    labels,
-                    state.diagram_colors(),
-                    None,
-                ))
-                .fixed_height(masonry::layout::Length::px(660.0)),
-            ),
-            card(state.palette, info_panel),
-        )
-        .split_point(0.5)
-        .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
-        .flex(1.0),
+        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+            .split_point(state.split_ratio)
+            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
+            .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
+            .flex(1.0),
     ))
-    // Cross-axis Start (not Stretch) — so the fretboard side stays
-    // at its natural height instead of growing whenever the other
-    // side gets taller (e.g. when a combobox dropdown opens, the
-    // chord_cards card grows vertically and would otherwise drag the
-    // fretboard along with it).
-    .cross_axis_alignment(CrossAxisAlignment::Start)
+    // Cross-axis Stretch so the split fills the bounded tab-content
+    // height; the surface modules + info pane each scroll internally
+    // (`scroll_tab`) rather than the page growing.
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_4)
 }
@@ -1568,7 +3186,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 /// shows every chord tone across the fretboard (the chord-tone scale).
 fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let formula = state.current_chord();
-    let root = state.chord_root_pc.to_pitch(4);
+    let root = state.root.to_pitch(4);
     let intervals: String = formula
         .intervals
         .iter()
@@ -1580,7 +3198,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     } else {
         formula.symbol.to_string()
     };
-    let display_root = state.chord_root_pc.display();
+    let display_root = state.root.display();
     let chord_label = format!("{display_root}{chord_symbol} ({})", formula.name);
 
     // Enumerate voicings up front — used both to pick the current
@@ -1630,7 +3248,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let chord_selected = state.chord_idx.min(chord_options.len().saturating_sub(1));
     let chord_root_selected = ChromaticPc::ALL
         .iter()
-        .position(|&pc| pc == state.chord_root_pc)
+        .position(|&pc| pc == state.root)
         .unwrap_or(0);
     let chord_open_combo = state.open_combobox;
     let _ = display_root; // surfaced as the combobox trigger label
@@ -1661,14 +3279,14 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 chord_root_selected,
                 chord_open_combo,
                 |s: &mut AppState, i: usize| {
-                    s.chord_root_pc = ChromaticPc::ALL[i];
+                    s.root = ChromaticPc::ALL[i];
                 },
             ),
             button_sm("◀", |s: &mut AppState| {
-                s.chord_root_pc = s.chord_root_pc.cycle(-1);
+                s.root = s.root.cycle(-1);
             }),
             button_sm("▶", |s: &mut AppState| {
-                s.chord_root_pc = s.chord_root_pc.cycle(1);
+                s.root = s.root.cycle(1);
             }),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -1719,17 +3337,15 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .enumerate()
         .map(|(i, f)| {
             let active = state.chord_idx == i;
-            let prefix = if active { "● " } else { "  " };
-            text_button(
-                format!("{}{}", prefix, f.name),
-                move |s: &mut AppState| s.chord_idx = i,
-            )
+            list_item_button(state.palette, active, f.name, move |s: &mut AppState| {
+                s.chord_idx = i
+            })
         })
         .collect();
-    let chord_list_card = card(
+    let chord_list_card = nav_card(
         state.palette,
         flex_col((
-            label("Chords").text_size(TS_MD),
+            header_label(state.palette, "Chords", TS_MD),
             portal(
                 flex_col(chord_list_items)
                     .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -1754,32 +3370,35 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     // Same split-view pattern as Scales / Progressions.
     use masonry::layout::Length as MLen;
+    // Fill the surface pane (no fixed height, no scroll) — the canvas
+    // scales its drawing to whatever vertical share the pane gives it.
+    // The widget wrapper adds the start-fret arrows; the window slides
+    // with `fret_start`.
+    let fretboard_card = fretboard_widget(
+        state,
+        fretboard_view(
+            board,
+            positions,
+            labels,
+            state.diagram_colors(),
+            None,
+            (state.fret_start, state.fret_span),
+            Vec::new(),
+        ),
+    )
+    .boxed();
+    let surface = surface_left(state, fretboard_card);
     flex_row((
         chord_sidebar,
-        xilem::view::split(
-            card(
-                state.palette,
-                sized_box(fretboard_view(
-                    board,
-                    positions,
-                    labels,
-                    state.diagram_colors(),
-                    None,
-                ))
-                .fixed_height(masonry::layout::Length::px(660.0)),
-            ),
-            card(state.palette, info_panel),
-        )
-        .split_point(0.5)
-        .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
-        .flex(1.0),
+        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+            .split_point(state.split_ratio)
+            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
+            .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
+            .flex(1.0),
     ))
-    // Cross-axis Start (not Stretch) — so the fretboard side stays
-    // at its natural height instead of growing whenever the other
-    // side gets taller (e.g. when a combobox dropdown opens, the
-    // chord_cards card grows vertically and would otherwise drag the
-    // fretboard along with it).
-    .cross_axis_alignment(CrossAxisAlignment::Start)
+    // Cross-axis Stretch so the split fills the bounded tab-content
+    // height; surface modules + info pane scroll internally.
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_4)
 }
@@ -2085,7 +3704,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .chord_ref
             .as_ref()
             .map(|c| chord_root_from_freq(c.root_freq_hz))
-            .unwrap_or((state.progression_key_pc, 4));
+            .unwrap_or((state.root, 4));
         let root_options: Vec<ArcStr> = ChromaticPc::ALL
             .iter()
             .map(|pc| ArcStr::from(pc.display()))
@@ -2789,12 +4408,15 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 labels,
                 state.diagram_colors(),
                 None,
+                    (0, state.fret_span),
+                    Vec::new(),
             ))
             .fixed_height(masonry::layout::Length::px(660.0)),
         ),
         card(state.palette, info_panel),
     )
-    .split_point(0.5)
+    .split_point(state.split_ratio)
+        .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
     .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0));
 
     fork(visible, auto_task)
@@ -2869,7 +4491,7 @@ fn positions_for_practice_item(
 /// layout. Scale (Major / Minor / mode) is hardcoded to Major for
 /// now — a key-mode picker is a follow-up if needed.
 fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    let key_root = state.progression_key_pc.to_pitch(4);
+    let key_root = state.root.to_pitch(4);
     // Use the catalog's first scale as the key — that's "Major".
     // Hardcoding for now; mode picker can come later.
     let major_scale: &'static ScaleFormula = woodshedding::scale::catalog()
@@ -2880,23 +4502,43 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     // Left: progression list — buttons stacked vertically.
     // Selecting a progression resets the per-chord voicing index
     // vec to the new length so voicing arrows stay in-bounds.
-    let list_items: Vec<_> = progression_catalog()
+    let cat_count = progression_catalog().len();
+    let mut list_items: Vec<AnyFlexChild<AppState>> = progression_catalog()
         .iter()
         .enumerate()
         .map(|(i, p)| {
             let chord_count = p.roles.len();
             let active = state.progression_idx == Some(i);
-            let prefix = if active { "● " } else { "  " };
-            text_button(format!("{}{}", prefix, p.name), move |s: &mut AppState| {
+            list_item_button(state.palette, active, p.name, move |s: &mut AppState| {
                 s.progression_idx = Some(i);
                 s.progression_expanded_chord = Some(0);
                 s.progression_voicing_idx = vec![0; chord_count];
             })
+            .into_any_flex()
         })
         .collect();
-    let list_card = card(state.palette, 
+    // User progressions follow the catalog in the combined selection.
+    for (j, def) in state.user_progressions.iter().enumerate() {
+        let combined = cat_count + j;
+        let chord_count = def.roles.len();
+        let active = state.progression_idx == Some(combined);
+        list_items.push(
+            list_item_button(
+                state.palette,
+                active,
+                format!("★ {}", def.name),
+                move |s: &mut AppState| {
+                    s.progression_idx = Some(combined);
+                    s.progression_expanded_chord = Some(0);
+                    s.progression_voicing_idx = vec![0; chord_count];
+                },
+            )
+            .into_any_flex(),
+        );
+    }
+    let list_card = nav_card(state.palette,
         flex_col((
-            label("Progressions").text_size(TS_MD),
+            header_label(state.palette, "Progressions", TS_MD),
             // Vertically-scrollable catalog — same pattern as the
             // Scales sidebar; see that comment for the rationale.
             portal(
@@ -2914,23 +4556,30 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     );
 
     // Build the materialized chord list + the currently-expanded chord.
-    let materialized: Option<(&'static Progression, Vec<ProgressionChord>)> = state
-        .progression_idx
-        .and_then(|idx| progression_catalog().get(idx).copied().map(|p| (p, idx)))
-        .and_then(|(prog, _)| {
-            let prog_ref: &'static Progression = progression_catalog()
-                .get(state.progression_idx.unwrap())
-                .unwrap();
-            match prog.apply_in_key(key_root, major_scale) {
-                Ok(chords) => Some((prog_ref, chords)),
-                Err(_) => None,
+    // Owned `(name, description, chords)` so it works for both catalog
+    // progressions and user-authored ones.
+    let materialized: Option<(String, String, Vec<ProgressionChord>)> =
+        state.progression_idx.and_then(|idx| {
+            if idx < cat_count {
+                let p = progression_catalog().get(idx)?;
+                p.apply_in_key(key_root, major_scale)
+                    .ok()
+                    .map(|chords| (p.name.to_string(), p.description.to_string(), chords))
+            } else {
+                let def = state.user_progressions.get(idx - cat_count)?;
+                let roles = user_progression_roles(def);
+                apply_roles_in_key(&roles, key_root, major_scale)
+                    .ok()
+                    .map(|chords| {
+                        (def.name.clone(), "Custom progression.".to_string(), chords)
+                    })
             }
         });
 
     let expanded_chord: Option<&ProgressionChord> =
         materialized
             .as_ref()
-            .and_then(|(_, chords)| {
+            .and_then(|(_, _, chords)| {
                 let idx = state.progression_expanded_chord.unwrap_or(0);
                 chords.get(idx)
             });
@@ -2938,7 +4587,6 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     // Middle: fretboard for the expanded chord's currently-selected
     // voicing. Empty when no progression is picked.
     let board = state.fretboard.clone();
-    let n_strings = state.fretboard.tuning.strings.len();
     let expanded_idx = state.progression_expanded_chord.unwrap_or(0);
     let (positions, labels, dot_colors): (
         Vec<Position>,
@@ -2951,7 +4599,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
         // single chord shape. Selected voicing per chord follows the
         // per-card `progression_voicing_idx`, so what you've dialed
         // in on each card is what shows up in the overlay.
-        (_, Some((_, chords))) if state.progression_overlay_mode => {
+        (_, Some((_, _, chords))) if state.progression_overlay_mode => {
             let mut all_pos: Vec<Position> = Vec::new();
             let mut all_lbl: Vec<String> = Vec::new();
             let mut all_col: Vec<masonry::peniko::Color> = Vec::new();
@@ -2999,24 +4647,26 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
         }
         _ => (Vec::new(), Vec::new(), None),
     };
-    let fretboard_card = card(state.palette, 
-        sized_box(fretboard_view(
+    // Fill the surface pane (no fixed size, no scroll) — canvas scales.
+    let fretboard_card = fretboard_widget(
+        state,
+        fretboard_view(
             board,
             positions,
             labels,
             state.diagram_colors(),
             dot_colors,
-        ))
-        .fixed_width(masonry::layout::Length::px(340.0))
-        .fixed_height(masonry::layout::Length::px(660.0)),
+            (state.fret_start, state.fret_span),
+            Vec::new(),
+        ),
     );
 
     // Right: progression info + key picker + chord cards column.
-    let display_key = state.progression_key_pc.display();
+    let display_key = state.root.display();
     let chord_cards = match &materialized {
-        Some((prog, chords)) => {
-            let prog_name = prog.name.to_string();
-            let prog_desc = prog.description.to_string();
+        Some((prog_name_s, prog_desc_s, chords)) => {
+            let prog_name = prog_name_s.clone();
+            let prog_desc = prog_desc_s.clone();
             // Build one mini-card per chord. Each card carries:
             //   - chord symbol + role label + voicing N/M
             //   - the visual chord diagram (clickable: selects this
@@ -3052,25 +4702,56 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                             sized_box(
                                 label("no voicing").text_size(TS_XS),
                             )
-                            .fixed_width(masonry::layout::Length::px(120.0))
-                            .fixed_height(masonry::layout::Length::px(150.0)),
+                            .fixed_width(masonry::layout::Length::px(150.0))
+                            .fixed_height(masonry::layout::Length::px(180.0)),
                         )
                     } else {
+                        // Chord card = the fretboard at a tight,
+                        // anchored 4-fret window: fretted dots in the
+                        // chord's hue (root pops), open/muted markers,
+                        // and a "Nfr" label when above the nut.
                         let v = voicings[v_idx].clone();
+                        let lowest = v.lowest_fretted_position();
+                        let start_fret = if lowest <= 1 { 0u8 } else { lowest - 1 };
+                        let positions: Vec<Position> = voicing_to_positions(&v)
+                            .into_iter()
+                            .filter(|p| p.fret > 0)
+                            .collect();
+                        let dot_colors: Vec<Color> = positions
+                            .iter()
+                            .map(|p| {
+                                if p.interval_from_root
+                                    == Some(woodshedding::interval::Interval::PERFECT_UNISON)
+                                {
+                                    state.palette.root_dot
+                                } else {
+                                    chord_hue
+                                }
+                            })
+                            .collect();
+                        let marks = voicing_to_marks(&v);
                         OneOf2::B(
                             button(
-                                sized_box(chord_diagram_view(
-                                    n_strings,
-                                    v,
-                                    chord_hue,
+                                sized_box(fretboard_view(
+                                    state.fretboard.clone(),
+                                    positions,
+                                    Vec::new(),
                                     state.diagram_colors(),
+                                    Some(dot_colors),
+                                    (start_fret, 4),
+                                    marks,
                                 ))
-                                .fixed_width(masonry::layout::Length::px(120.0))
-                                .fixed_height(masonry::layout::Length::px(150.0)),
+                                .fixed_width(masonry::layout::Length::px(150.0))
+                                .fixed_height(masonry::layout::Length::px(180.0)),
                                 move |s: &mut AppState| {
                                     s.progression_expanded_chord = Some(i);
                                 },
-                            ),
+                            )
+                            // Keep the card-style button background (the
+                            // per-card surface Mark likes) but tighten the
+                            // padding so the bigger diagram fills more of the
+                            // card instead of floating in pillowy margin.
+                            .padding(masonry::properties::Padding::from_vh(SP_1, SP_1)),
                         )
                     };
 
@@ -3147,7 +4828,10 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                 2 // Conservative default before resize_observer fires
             } else {
                 let n = ((panel_w + 8.0) / (CHORD_CARD_W + 8.0)).floor() as usize;
-                n.max(1)
+                // Cap at 4 per row — past that the diagrams get too
+                // small a share of attention and the eye loses the
+                // progression's left-to-right reading order.
+                n.clamp(1, 4)
             };
             // Chunk the card vec into rows of `cards_per_row`. Each
             // row is its own flex_row; the outer is a flex_col.
@@ -3207,7 +4891,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                 .collect();
             let key_selected = ChromaticPc::ALL
                 .iter()
-                .position(|&pc| pc == state.progression_key_pc)
+                .position(|&pc| pc == state.root)
                 .unwrap_or(0);
             let open_combo = state.open_combobox;
 
@@ -3233,17 +4917,17 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                             key_selected,
                             open_combo,
                             |s: &mut AppState, i: usize| {
-                                s.progression_key_pc = ChromaticPc::ALL[i];
+                                s.root = ChromaticPc::ALL[i];
                             },
                         ),
                         // Keep the ◀/▶ cycle as a fine-tune affordance
                         // — chromatic neighbour walking is faster than
                         // re-opening the picker.
                         button_sm("◀", |s: &mut AppState| {
-                            s.progression_key_pc = s.progression_key_pc.cycle(-1);
+                            s.root = s.root.cycle(-1);
                         }),
                         button_sm("▶", |s: &mut AppState| {
-                            s.progression_key_pc = s.progression_key_pc.cycle(1);
+                            s.root = s.root.cycle(1);
                         }),
                         FlexSpacer::Fixed(SP_2),
                         // Overlay-mode toggle. Label encodes current
@@ -3290,10 +4974,10 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                 flex_row((
                     label(format!("Key: {display_key}")).text_size(TS_SM),
                     button_sm("◀", |s: &mut AppState| {
-                        s.progression_key_pc = s.progression_key_pc.cycle(-1);
+                        s.root = s.root.cycle(-1);
                     }),
                     button_sm("▶", |s: &mut AppState| {
-                        s.progression_key_pc = s.progression_key_pc.cycle(1);
+                        s.root = s.root.cycle(1);
                     }),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -3336,19 +5020,18 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     // (which would hide content entirely with no way to recover
     // without resizing the window).
     use masonry::layout::Length as MLen;
+    let surface = surface_left(state, fretboard_card.boxed());
     flex_row((
         sidebar,
-        xilem::view::split(fretboard_card, card(state.palette, chord_cards))
-            .split_point(0.5)
+        xilem::view::split(surface, scroll_tab(card(state.palette, chord_cards)))
+            .split_point(state.split_ratio)
+        .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
             .flex(1.0),
     ))
-    // Cross-axis Start (not Stretch) — so the fretboard side stays
-    // at its natural height instead of growing whenever the other
-    // side gets taller (e.g. when a combobox dropdown opens, the
-    // chord_cards card grows vertically and would otherwise drag the
-    // fretboard along with it).
-    .cross_axis_alignment(CrossAxisAlignment::Start)
+    // Cross-axis Stretch so the split fills the bounded tab-content
+    // height; surface modules + chord-cards pane scroll internally.
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_4)
 }
@@ -3462,7 +5145,7 @@ fn bar_chord_root(s: &AppState, idx: usize) -> (ChromaticPc, i8) {
         .get(idx)
         .and_then(|b| b.chord_ref.as_ref())
         .map(|c| chord_root_from_freq(c.root_freq_hz))
-        .unwrap_or((s.progression_key_pc, 4))
+        .unwrap_or((s.root, 4))
 }
 
 /// Apply an in-place loop-shaping op to the selected bar's recorded
@@ -3586,19 +5269,58 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     /// the current step. 4 = current + 3 history.
     const TRAIL_LEN: usize = 4;
 
-    let ex = state.current_exercise();
-    let params = ExerciseParams {
-        starting_fret: state.exercise_starting_fret,
-        direction: ExerciseDirection::Both,
-        trill_repeats: 8,
-    };
-    let steps = ex.generate(&state.fretboard.tuning, &params);
+    // Steps + name come from the catalog (a generator) or a user
+    // exercise (stored steps), per the combined selection index.
+    let ex_cat_count = exercise_catalog().len();
+    let (steps, exercise_name, exercise_desc): (Vec<ExerciseStep>, String, String) =
+        if state.exercise_idx < ex_cat_count {
+            let ex = &exercise_catalog()[state.exercise_idx];
+            let params = ExerciseParams {
+                starting_fret: state.exercise_starting_fret,
+                direction: ExerciseDirection::Both,
+                trill_repeats: 8,
+            };
+            (
+                ex.generate(&state.fretboard.tuning, &params),
+                ex.name.to_string(),
+                ex.description.to_string(),
+            )
+        } else {
+            match state.user_exercises.get(state.exercise_idx - ex_cat_count) {
+                Some(def) => (
+                    user_exercise_steps(def),
+                    def.name.clone(),
+                    "Custom exercise.".to_string(),
+                ),
+                None => (Vec::new(), "—".to_string(), String::new()),
+            }
+        };
     let step_count = steps.len();
+    // Cursor follows the metronome beat when it's running (shared clock,
+    // 3d) — phase-locked to the click — otherwise the exercise's own
+    // Play/Step drives `exercise_step_idx`.
+    let metro_beat = state.metronome_beat();
     let current_idx = if step_count == 0 {
         0
+    } else if let Some(beat) = metro_beat {
+        (beat as usize) % step_count
     } else {
         state.exercise_step_idx.min(step_count - 1)
     };
+    // Per-step frequencies (open string pitch + fret semitones) for the
+    // step-through audio task.
+    let step_freqs: Vec<f32> = steps
+        .iter()
+        .map(|st| {
+            match state.fretboard.tuning.strings.get(st.string_index) {
+                Some(p) => {
+                    let midi = p.midi() + st.fret as i32;
+                    440.0 * 2f32.powf((midi as f32 - 69.0) / 12.0)
+                }
+                None => 0.0,
+            }
+        })
+        .collect();
 
     // Build the visible window: TRAIL_LEN most-recent steps up to and
     // including current_idx. If the same (string, fret) appears more
@@ -3662,8 +5384,6 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         })
         .collect();
 
-    let exercise_name = ex.name.to_string();
-    let exercise_desc = ex.description.to_string();
     let starting_fret = state.exercise_starting_fret;
     let current_finger = steps
         .get(current_idx)
@@ -3700,10 +5420,13 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // Exercise picker — combobox for jump + ◀/▶ for adjacent. Both
     // arms reset the step index and pause playback so switching
     // exercises doesn't strand the trail highlight on a stale step.
-    let exercise_options: Vec<ArcStr> = exercise_catalog()
+    let mut exercise_options: Vec<ArcStr> = exercise_catalog()
         .iter()
         .map(|e| ArcStr::from(e.name))
         .collect();
+    for e in &state.user_exercises {
+        exercise_options.push(ArcStr::from(format!("★ {}", e.name)));
+    }
     let exercise_selected = state
         .exercise_idx
         .min(exercise_options.len().saturating_sub(1));
@@ -3779,6 +5502,10 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             text_button("⏮ Reset", |s: &mut AppState| {
                 s.exercise_step_idx = 0;
             }),
+            button_sm(
+                if state.transport_sound { "🔊" } else { "🔇" },
+                |s: &mut AppState| s.transport_sound = !s.transport_sound,
+            ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -3821,7 +5548,8 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // tick via tokio::time::interval; on each tick, message the
     // state handler which increments the step index modulo
     // step_count.
-    let auto_task = (playing && step_count > 0).then(|| {
+    // Own timer only when the metronome isn't driving the cursor.
+    let auto_task = (playing && metro_beat.is_none() && step_count > 0).then(|| {
         let interval_ms = (60_000.0 / bpm.max(1.0)) as u64;
         task_raw(
             move |proxy, _| async move {
@@ -3849,26 +5577,40 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // Clicking an entry switches the exercise, resets the step
     // index, and pauses playback so the trail highlight doesn't
     // strand on a stale step from the previous exercise.
-    let exercise_list_items: Vec<_> = exercise_catalog()
+    let mut exercise_list_items: Vec<AnyFlexChild<AppState>> = exercise_catalog()
         .iter()
         .enumerate()
         .map(|(i, e)| {
             let active = state.exercise_idx == i;
-            let prefix = if active { "● " } else { "  " };
-            text_button(
-                format!("{}{}", prefix, e.name),
+            list_item_button(state.palette, active, e.name, move |s: &mut AppState| {
+                s.exercise_idx = i;
+                s.exercise_step_idx = 0;
+                s.exercise_playing = false;
+            })
+            .into_any_flex()
+        })
+        .collect();
+    for (j, def) in state.user_exercises.iter().enumerate() {
+        let combined = ex_cat_count + j;
+        let active = state.exercise_idx == combined;
+        exercise_list_items.push(
+            list_item_button(
+                state.palette,
+                active,
+                format!("★ {}", def.name),
                 move |s: &mut AppState| {
-                    s.exercise_idx = i;
+                    s.exercise_idx = combined;
                     s.exercise_step_idx = 0;
                     s.exercise_playing = false;
                 },
             )
-        })
-        .collect();
-    let exercise_list_card = card(
+            .into_any_flex(),
+        );
+    }
+    let exercise_list_card = nav_card(
         state.palette,
         flex_col((
-            label("Exercises").text_size(TS_MD),
+            header_label(state.palette, "Exercises", TS_MD),
             portal(
                 flex_col(exercise_list_items)
                     .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -3893,36 +5635,378 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     // Same split-view pattern as the other fretboard tabs.
     use masonry::layout::Length as MLen;
+    // Fill the surface pane (no fixed height, no scroll) — canvas scales.
+    let fretboard_card = fretboard_widget(
+        state,
+        fretboard_view(
+            board_for_widget,
+            positions,
+            labels,
+            state.diagram_colors(),
+            Some(dot_colors),
+            (state.fret_start, state.fret_span),
+            Vec::new(),
+        ),
+    )
+    .boxed();
+    let surface = surface_left(state, fretboard_card);
     let visible = flex_row((
         exercise_sidebar,
-        xilem::view::split(
-            card(
-                state.palette,
-                sized_box(fretboard_view(
-                    board_for_widget,
-                    positions,
-                    labels,
-                    state.diagram_colors(),
-                    Some(dot_colors),
-                ))
-                .fixed_height(masonry::layout::Length::px(660.0)),
-            ),
-            card(state.palette, info_panel),
-        )
-        .split_point(0.5)
-        .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
-        .flex(1.0),
+        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+            .split_point(state.split_ratio)
+            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
+            .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
+            .flex(1.0),
     ))
-    // Cross-axis Start (not Stretch) — so the fretboard side stays
-    // at its natural height instead of growing whenever the other
-    // side gets taller (e.g. when a combobox dropdown opens, the
-    // chord_cards card grows vertically and would otherwise drag the
-    // fretboard along with it).
-    .cross_axis_alignment(CrossAxisAlignment::Start)
+    // Cross-axis Stretch so the split fills the bounded tab-content
+    // height; surface modules + info pane scroll internally.
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_4);
 
-    fork(visible, auto_task)
+    // Step-through audio: sound each step's note (open-string pitch +
+    // fret) on change, when running + sound enabled. Mirrors the arpeggio.
+    let metro_driving = metro_beat.is_some();
+    let audio_active =
+        state.transport_sound && (playing || metro_driving) && step_count > 0;
+    let audio_task = audio_active.then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(20));
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            move |s: &mut AppState, _: ()| {
+                let cursor = s
+                    .metronome_beat()
+                    .map(|b| b as usize)
+                    .unwrap_or(s.exercise_step_idx);
+                let idx = cursor % step_freqs.len().max(1);
+                if s.exercise_last_sounded != Some(idx) {
+                    s.exercise_last_sounded = Some(idx);
+                    let f = step_freqs[idx];
+                    if f > 0.0 {
+                        if let Some(h) = s.ensure_song_engine() {
+                            h.play_note_now(f, 0.18);
+                        }
+                    }
+                }
+            },
+        )
+    });
+
+    fork(fork(visible, auto_task), audio_task)
+}
+
+/// Compact metronome **widget** for the instrument-surface stack.
+/// Same controls as the Metronome tab, but dense enough to sit in a
+/// stacked pane without scrolling: title · BPM · transport on one
+/// line, a tempo slider, one row of ± steppers, and one row folding
+/// time-sig / subdivision / click / accent into compact cycle buttons.
+fn metronome_module(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    let bpm_text = format!("{:.0} BPM", state.bpm);
+    let playing = state.metronome_playing;
+    let engine_error = match &state.engine {
+        Err(e) => Some(e.clone()),
+        _ => None,
+    };
+    let time_sig_text = format!("{}/4", state.metronome_time_sig_num);
+    let click_text = state.metronome_click.label();
+    let accent_text = state.metronome_accent.label();
+    let sub_text = subdivision_label(state.metronome_subdivision);
+
+    let transport = if let Some(err) = engine_error {
+        OneOf3::A(danger_prose(state.palette, format!("Audio: {err}"), TS_XS))
+    } else if playing {
+        OneOf3::B(button_sm("■ Stop", |s: &mut AppState| s.stop_metronome()))
+    } else {
+        OneOf3::C(button_sm("▶ Play", |s: &mut AppState| s.play_metronome()))
+    };
+
+    let panel = flex_col((
+        // Title + transport on the top line; the BPM readout sits on its
+        // own line below so a narrow pane doesn't clip the trio.
+        flex_row((
+            header_label(state.palette, "Metronome", TS_MD),
+            FlexSpacer::Flex(1.0),
+            transport,
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        label(bpm_text)
+            .text_size(TS_LG)
+            .font(mono_family())
+            .color(state.palette.text_header),
+        sized_box(slider(40.0, 240.0, state.bpm as f64, |s: &mut AppState, v: f64| {
+            let b = (v as f32).clamp(40.0, 240.0);
+            s.bpm = b;
+            if let Ok((_, h)) = &s.engine {
+                h.set_bpm(b);
+            }
+        }))
+        .fixed_width(masonry::layout::Length::px(200.0)),
+        flex_row((
+            button_sm("−10", |s: &mut AppState| {
+                s.bpm = (s.bpm - 10.0).clamp(40.0, 240.0);
+                if let Ok((_, h)) = &s.engine {
+                    h.set_bpm(s.bpm);
+                }
+            }),
+            button_sm("−", |s: &mut AppState| {
+                s.bpm = (s.bpm - 1.0).clamp(40.0, 240.0);
+                if let Ok((_, h)) = &s.engine {
+                    h.set_bpm(s.bpm);
+                }
+            }),
+            button_sm("+", |s: &mut AppState| {
+                s.bpm = (s.bpm + 1.0).clamp(40.0, 240.0);
+                if let Ok((_, h)) = &s.engine {
+                    h.set_bpm(s.bpm);
+                }
+            }),
+            button_sm("+10", |s: &mut AppState| {
+                s.bpm = (s.bpm + 10.0).clamp(40.0, 240.0);
+                if let Ok((_, h)) = &s.engine {
+                    h.set_bpm(s.bpm);
+                }
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+        // Settings wrap onto two rows so four buttons don't overrun a
+        // narrow pane.
+        flex_row((
+            button_sm(format!("Time {time_sig_text}"), |s: &mut AppState| {
+                s.metronome_time_sig_num = if s.metronome_time_sig_num >= 12 {
+                    1
+                } else {
+                    s.metronome_time_sig_num + 1
+                };
+                s.apply_metronome_pattern();
+            }),
+            button_sm(format!("♪ {sub_text}"), |s: &mut AppState| {
+                s.metronome_subdivision = cycle_subdivision(s.metronome_subdivision);
+                s.apply_metronome_pattern();
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+        flex_row((
+            button_sm(click_text, |s: &mut AppState| {
+                s.metronome_click = s.metronome_click.next();
+                s.apply_metronome_pattern();
+            }),
+            button_sm(accent_text, |s: &mut AppState| {
+                s.metronome_accent = s.metronome_accent.next();
+                s.apply_metronome_pattern();
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    card(state.palette, panel)
+}
+
+/// Compact tuner **widget** for the instrument-surface stack. The full
+/// Tuner tab keeps the tunings catalog + threshold editor + help prose;
+/// this dense form is title · note · transport on one line, the cents
+/// needle + offset, a thin level bar, the string-target row, and a
+/// detector cycle — enough to tune by while watching the fretboard,
+/// without scrolling. Carries its own polling `fork` like the tab.
+fn tuner_module(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    let listening = state.tuner_active;
+    let tuner_handle = state.input.as_ref().ok().map(|b| b.tuner.clone());
+    let error_text = match &state.input {
+        Err(e) => Some(e.clone()),
+        _ => None,
+    };
+    let snapshot = state.tuner_snapshot.clone();
+    let note_text = match &snapshot {
+        Some(s) => match &s.note {
+            Some(n) => format_detected_note(n),
+            None => "—".to_string(),
+        },
+        None => "—".to_string(),
+    };
+    let cents_text = snapshot
+        .as_ref()
+        .and_then(|s| s.note.as_ref().map(|n| format!("{:+.1}¢", n.cents_offset)))
+        .unwrap_or_else(|| "—".to_string());
+    let cents_raw: Option<f64> = state
+        .tuner_snapshot
+        .as_ref()
+        .and_then(|s| s.note.as_ref())
+        .map(|n| n.cents_offset);
+    let level_raw: Option<f64> = state
+        .tuner_snapshot
+        .as_ref()
+        .map(|s| s.input_level as f64);
+    let in_tune = state
+        .tuner_snapshot
+        .as_ref()
+        .and_then(|s| s.note.as_ref())
+        .map(|n| n.in_tune)
+        .unwrap_or(false);
+
+    let transport = if let Some(err) = error_text {
+        OneOf3::A(danger_prose(state.palette, format!("Mic: {err}"), TS_XS))
+    } else if listening {
+        OneOf3::B(button_sm("■ Stop", |s: &mut AppState| s.stop_tuner()))
+    } else {
+        OneOf3::C(button_sm("▶ Tune", |s: &mut AppState| s.start_tuner()))
+    };
+
+    let mut string_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
+    string_btns.push(
+        button_sm("Free", |s: &mut AppState| {
+            s.tuner_target = None;
+            if let Ok(b) = &s.input {
+                b.tuner.set_target_hint(None);
+            }
+        })
+        .into_any_flex(),
+    );
+    for p in state.fretboard.tuning.strings.iter() {
+        let pitch = *p;
+        let lbl = format!(
+            "{}{}{}",
+            pitch.name,
+            accidental_short(pitch.accidental),
+            pitch.octave
+        );
+        let active = state.tuner_target
+            == Some(ChromaticPc::from_pc(pitch.pitch_class() as u8).to_detected());
+        let prefix = if active { "● " } else { "" };
+        let label_text: ArcStr = format!("{prefix}{lbl}").into();
+        string_btns.push(
+            button_sm(label_text, move |s: &mut AppState| {
+                let hint = ChromaticPc::from_pc(pitch.pitch_class() as u8).to_detected();
+                s.tuner_target = Some(hint.clone());
+                if let Ok(b) = &s.input {
+                    b.tuner.set_target_hint(Some(hint));
+                }
+            })
+            .into_any_flex(),
+        );
+    }
+
+    let detector_label = match state.tuner_detector {
+        DetectorKind::Fft => "FFT",
+        DetectorKind::Cepstrum => "Cepstrum",
+        DetectorKind::McLeod => "McLeod",
+    };
+
+    let panel = flex_col((
+        flex_row((
+            header_label(state.palette, "Tuner", TS_MD),
+            FlexSpacer::Flex(1.0),
+            label(note_text)
+                .text_size(TS_LG)
+                .font(mono_family())
+                .color(state.palette.text_header),
+            transport,
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        flex_row((
+            sized_box(widgets::cents_meter_view(
+                cents_raw,
+                in_tune,
+                widgets::MeterColors::from_palette(&state.palette),
+            ))
+            .fixed_width(masonry::layout::Length::px(200.0))
+            .fixed_height(masonry::layout::Length::px(30.0)),
+            label(cents_text).text_size(TS_XS).font(mono_family()),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        sized_box(widgets::level_meter_view(
+            level_raw,
+            widgets::MeterColors::from_palette(&state.palette),
+        ))
+        .fixed_width(masonry::layout::Length::px(200.0))
+        .fixed_height(masonry::layout::Length::px(12.0)),
+        {
+            // String-target buttons chunked into rows of 4 so the row
+            // (Free + 6 strings on guitar) doesn't clip the card border.
+            let mut rows: Vec<_> = Vec::new();
+            let mut buf: Vec<AnyFlexChild<AppState>> = Vec::new();
+            for b in string_btns {
+                buf.push(b);
+                if buf.len() == 4 {
+                    rows.push(
+                        flex_row(std::mem::take(&mut buf))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .main_axis_alignment(MainAxisAlignment::Start)
+                            .gap(SP_1),
+                    );
+                }
+            }
+            if !buf.is_empty() {
+                rows.push(
+                    flex_row(buf)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .main_axis_alignment(MainAxisAlignment::Start)
+                        .gap(SP_1),
+                );
+            }
+            flex_col(rows)
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1)
+        },
+        button_sm(format!("Detector: {detector_label}"), |s: &mut AppState| {
+            s.tuner_detector = match s.tuner_detector {
+                DetectorKind::Fft => DetectorKind::Cepstrum,
+                DetectorKind::Cepstrum => DetectorKind::McLeod,
+                DetectorKind::McLeod => DetectorKind::Fft,
+            };
+            if let Ok(b) = &s.input {
+                b.tuner.set_detector_kind(s.tuner_detector);
+            }
+        }),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    let polling_task = (listening && tuner_handle.is_some()).then(|| {
+        let handle = tuner_handle.expect("handle present by guard");
+        task_raw(
+            move |proxy, _| {
+                let handle = handle.clone();
+                async move {
+                    let mut interval = time::interval(Duration::from_millis(50));
+                    loop {
+                        interval.tick().await;
+                        let snap = handle.snapshot();
+                        if proxy.message(snap).is_err() {
+                            break;
+                        }
+                    }
+                }
+            },
+            |state: &mut AppState, snap: TunerSnapshot| {
+                state.tuner_snapshot = Some(snap);
+            },
+        )
+    });
+
+    fork(card(state.palette, panel), polling_task)
 }
 
 /// Metronome tab — BPM display + transport + time-sig / subdivision /
@@ -4189,26 +6273,27 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             for (lbl, stored, idx) in seed_fields {
                 let col = audio_widgets::theme::color_from_hex(&stored)
                     .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
-                let [r, g, b, _] = col.to_rgba8().to_u8_array();
+                let (h, s, l) = audio_widgets::theme::color_to_hsl(col);
                 let swatch = sized_box(label(""))
                     .fixed_width(px(28.0))
                     .fixed_height(px(20.0))
                     .background_color(col)
                     .corner_radius(px(4.0))
                     .border(border, px(1.0));
-                let chan = move |channel: u8, val: u8| {
-                    sized_box(slider(0.0, 255.0, val as f64, move |s: &mut AppState, v: f64| {
-                        s.set_seed_channel(idx, channel, v.round().clamp(0.0, 255.0) as u8);
+                // H 0..360, S/L 0..100 — more intuitive than raw RGB.
+                let chan = move |comp: u8, value: f64, max: f64| {
+                    sized_box(slider(0.0, max, value, move |s: &mut AppState, v: f64| {
+                        s.set_seed_hsl(idx, comp, v);
                     }))
-                    .fixed_width(px(96.0))
+                    .fixed_width(px(80.0))
                 };
                 rows.push(
                     flex_row((
                         sized_box(dim_label(state.palette, lbl, TS_XS)).fixed_width(px(70.0)),
                         swatch,
-                        chan(0, r),
-                        chan(1, g),
-                        chan(2, b),
+                        chan(0, h, 360.0),
+                        chan(1, s * 100.0, 100.0),
+                        chan(2, l * 100.0, 100.0),
                         label(stored).text_size(TS_XS).font(mono_family()),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -4233,26 +6318,26 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     Some(hex) => {
                         let col = audio_widgets::theme::color_from_hex(&hex)
                             .unwrap_or(Color::from_rgb8(0x80, 0x80, 0x80));
-                        let [r, g, b, _] = col.to_rgba8().to_u8_array();
+                        let (h, sat, lt) = audio_widgets::theme::color_to_hsl(col);
                         let swatch = sized_box(label(""))
                             .fixed_width(px(28.0))
                             .fixed_height(px(20.0))
                             .background_color(col)
                             .corner_radius(px(4.0))
                             .border(border, px(1.0));
-                        let chan = move |channel: u8, val: u8| {
-                            sized_box(slider(0.0, 255.0, val as f64, move |s: &mut AppState, v: f64| {
-                                s.set_text_channel(is_header, channel, v.round().clamp(0.0, 255.0) as u8);
+                        let chan = move |comp: u8, value: f64, max: f64| {
+                            sized_box(slider(0.0, max, value, move |s: &mut AppState, v: f64| {
+                                s.set_text_hsl(is_header, comp, v);
                             }))
-                            .fixed_width(px(96.0))
+                            .fixed_width(px(80.0))
                         };
                         text_rows.push(
                             flex_row((
                                 sized_box(toggle).fixed_width(px(120.0)),
                                 swatch,
-                                chan(0, r),
-                                chan(1, g),
-                                chan(2, b),
+                                chan(0, h, 360.0),
+                                chan(1, sat * 100.0, 100.0),
+                                chan(2, lt * 100.0, 100.0),
                                 label(hex).text_size(TS_XS).font(mono_family()),
                             ))
                             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -4321,6 +6406,277 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "(unavailable on this platform)".to_string());
 
+    // Custom-tunings editor — one card per user tuning: name, per-string
+    // ◀ note ▶ semitone nudges, and Apply / ± string / Delete.
+    let mut tuning_cards: Vec<_> = Vec::new();
+    for t in &state.user_tunings {
+        let name = t.name.clone();
+        let active = state.fretboard.tuning.name == name;
+        let prefix = if active { "● " } else { "  " };
+        let header = label(format!("{prefix}{name} ({})", t.instrument))
+            .text_size(TS_SM)
+            .color(if active {
+                state.palette.tertiary
+            } else {
+                state.palette.text
+            });
+        // One tight `◀ note ▶` group per string (content-sized label so
+        // there's no dead gap before the ▶), with the spacing *between*
+        // groups via the outer row's gap.
+        let mut string_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
+        for (i, &m) in t.midi.iter().enumerate() {
+            let p = woodshedding::pitch::Pitch::from_midi(m, woodshedding::pitch::Spelling::Sharps);
+            let note = format!("{}{}{}", p.name, p.accidental, p.octave);
+            let nd = name.clone();
+            let nu = name.clone();
+            string_btns.push(
+                flex_row((
+                    button_sm("◀", move |s: &mut AppState| s.nudge_user_string(&nd, i, -1)),
+                    label(note).text_size(TS_XS).font(mono_family()),
+                    button_sm("▶", move |s: &mut AppState| s.nudge_user_string(&nu, i, 1)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1)
+                .into_any_flex(),
+            );
+        }
+        let na = name.clone();
+        let nadd = name.clone();
+        let nrem = name.clone();
+        let ndel = name.clone();
+        let card_view = card(
+            state.palette,
+            flex_col((
+                header,
+                flex_row(string_btns)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .main_axis_alignment(MainAxisAlignment::Start)
+                    .gap(SP_3),
+                flex_row((
+                    button_sm("Apply", move |s: &mut AppState| s.apply_user_tuning(&na)),
+                    button_sm("+ string", move |s: &mut AppState| s.add_user_string(&nadd)),
+                    button_sm("− string", move |s: &mut AppState| s.remove_user_string(&nrem)),
+                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_tuning(&ndel)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_2),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+        );
+        tuning_cards.push(card_view);
+    }
+    let tuning_section = flex_col((
+        label("Custom tunings").text_size(TS_MD),
+        text_button("+ New from current tuning", |s: &mut AppState| s.new_user_tuning()),
+        flex_col(tuning_cards)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+        dim_prose(
+            state.palette,
+            "New tunings clone the current one; nudge each string with \
+             ◀ ▶, then Apply. They show up in the header tuning picker \
+             for the matching instrument.",
+            TS_XS,
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    // Custom-progressions editor — one card per progression: an ordered
+    // list of degree-based chords (degree ± / alteration / quality cycle
+    // / remove), plus Apply / + chord / Delete.
+    let mut prog_cards: Vec<_> = Vec::new();
+    for p in &state.user_progressions {
+        let name = p.name.clone();
+        let mut chord_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+        for (ci, r) in p.roles.iter().enumerate() {
+            let alt =
+                DegreeAlteration::ALL[(r.alteration as usize).min(DegreeAlteration::ALL.len() - 1)];
+            let qual = RoleQuality::ALL[(r.quality as usize).min(RoleQuality::ALL.len() - 1)];
+            let lbl = format!("{}{} · {}", alt.symbol(), r.degree, qual.chord_formula_name());
+            let (n1, n2, n3, n4, n5, n6) = (
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+            );
+            chord_rows.push(
+                flex_row((
+                    sized_box(label(lbl).text_size(TS_XS))
+                        .fixed_width(masonry::layout::Length::px(150.0)),
+                    button_sm("deg −", move |s: &mut AppState| s.nudge_prog_degree(&n1, ci, -1)),
+                    button_sm("deg +", move |s: &mut AppState| s.nudge_prog_degree(&n2, ci, 1)),
+                    button_sm("♯/♭", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
+                    button_sm("◀", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
+                    button_sm("▶", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
+                    button_sm("✕", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1)
+                .into_any_flex(),
+            );
+        }
+        let active = state.progression_idx
+            == state
+                .user_progressions
+                .iter()
+                .position(|q| q.name == name)
+                .map(|pos| progression_catalog().len() + pos);
+        let prefix = if active { "● " } else { "  " };
+        let (na, nadd, ndel) = (name.clone(), name.clone(), name.clone());
+        prog_cards.push(card(
+            state.palette,
+            flex_col((
+                flex_row((
+                    label(format!("{prefix}★ {name}")).text_size(TS_SM).color(
+                        if active {
+                            state.palette.tertiary
+                        } else {
+                            state.palette.text
+                        },
+                    ),
+                    button_sm("Apply", move |s: &mut AppState| s.apply_user_progression(&na)),
+                    button_sm("+ chord", move |s: &mut AppState| s.add_prog_chord(&nadd)),
+                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_progression(&ndel)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_2),
+                flex_col(chord_rows)
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .main_axis_alignment(MainAxisAlignment::Start)
+                    .gap(SP_1),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+        ));
+    }
+    let progression_section = flex_col((
+        label("Custom progressions").text_size(TS_MD),
+        text_button("+ New progression", |s: &mut AppState| s.new_user_progression()),
+        flex_col(prog_cards)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+        dim_prose(
+            state.palette,
+            "Progressions are degree-based (key-agnostic): each chord is a \
+             scale degree (1–7) + optional ♯/♭ + a quality. Apply to see it \
+             on the Progression lens in the current key; it appears there \
+             marked with ★.",
+            TS_XS,
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
+    // Custom-exercises editor — one card per exercise: an ordered list of
+    // steps (string / fret / finger ±), plus Apply / + step / Delete.
+    let mut exercise_cards: Vec<_> = Vec::new();
+    for e in &state.user_exercises {
+        let name = e.name.clone();
+        let mut step_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+        for (si, st) in e.steps.iter().enumerate() {
+            let finger = if st.finger == 0 {
+                "–".to_string()
+            } else {
+                st.finger.to_string()
+            };
+            let lbl = format!("str {} · {}fr · f{}", st.string + 1, st.fret, finger);
+            let (a, b, c, d, ee, ff, g) = (
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+                name.clone(),
+            );
+            step_rows.push(
+                flex_row((
+                    sized_box(label(lbl).text_size(TS_XS))
+                        .fixed_width(masonry::layout::Length::px(150.0)),
+                    button_sm("str −", move |s: &mut AppState| s.nudge_ex_step(&a, si, 0, -1)),
+                    button_sm("str +", move |s: &mut AppState| s.nudge_ex_step(&b, si, 0, 1)),
+                    button_sm("fr −", move |s: &mut AppState| s.nudge_ex_step(&c, si, 1, -1)),
+                    button_sm("fr +", move |s: &mut AppState| s.nudge_ex_step(&d, si, 1, 1)),
+                    button_sm("f −", move |s: &mut AppState| s.nudge_ex_step(&ee, si, 2, -1)),
+                    button_sm("f +", move |s: &mut AppState| s.nudge_ex_step(&ff, si, 2, 1)),
+                    button_sm("✕", move |s: &mut AppState| s.remove_ex_step(&g, si)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1)
+                .into_any_flex(),
+            );
+        }
+        let active = state.exercise_idx
+            == state
+                .user_exercises
+                .iter()
+                .position(|q| q.name == name)
+                .map(|pos| exercise_catalog().len() + pos)
+                .unwrap_or(usize::MAX);
+        let prefix = if active { "● " } else { "  " };
+        let (na, nadd, ndel) = (name.clone(), name.clone(), name.clone());
+        exercise_cards.push(card(
+            state.palette,
+            flex_col((
+                flex_row((
+                    label(format!("{prefix}★ {name}")).text_size(TS_SM).color(
+                        if active {
+                            state.palette.tertiary
+                        } else {
+                            state.palette.text
+                        },
+                    ),
+                    button_sm("Apply", move |s: &mut AppState| s.apply_user_exercise(&na)),
+                    button_sm("+ step", move |s: &mut AppState| s.add_ex_step(&nadd)),
+                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_exercise(&ndel)),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_2),
+                flex_col(step_rows)
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .main_axis_alignment(MainAxisAlignment::Start)
+                    .gap(SP_1),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+        ));
+    }
+    let exercise_section = flex_col((
+        label("Custom exercises").text_size(TS_MD),
+        text_button("+ New exercise", |s: &mut AppState| s.new_user_exercise()),
+        flex_col(exercise_cards)
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+        dim_prose(
+            state.palette,
+            "Exercises are a recorded step sequence: each step is a string \
+             + fret + finger. Build it with the ± buttons, Apply to step \
+             through it on the Exercise lens (★).",
+            TS_XS,
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Start)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+
     card(
         state.palette,
         flex_col((
@@ -4354,6 +6710,12 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                  forks the active theme into an editable copy.",
                 TS_XS,
             ),
+            // Custom tunings section.
+            tuning_section,
+            // Custom progressions section.
+            progression_section,
+            // Custom exercises section.
+            exercise_section,
             // Persistence section. Reset and explicit save sit here
             // alongside the path so power users have one place to
             // think about durable state.
@@ -4532,23 +6894,19 @@ fn tuner_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         for spec in specs {
             let spec = **spec; // copy out of the &&TuningSpec
             let active = spec.name == active_tuning_name;
-            let prefix = if active { "● " } else { "  " };
             tunings_items.push(
-                text_button(
-                    format!("{}{}", prefix, spec.name),
-                    move |s: &mut AppState| {
-                        let tuning = Tuning::from_spec(&spec);
-                        s.fretboard = Fretboard::new(tuning, 12);
-                    },
-                )
+                list_item_button(state.palette, active, spec.name, move |s: &mut AppState| {
+                    let tuning = Tuning::from_spec(&spec);
+                    s.fretboard = Fretboard::new(tuning, 24);
+                })
                 .into_any_flex(),
             );
         }
     }
-    let tunings_list_card = card(
+    let tunings_list_card = nav_card(
         state.palette,
         flex_col((
-            label("Tunings").text_size(TS_MD),
+            header_label(state.palette, "Tunings", TS_MD),
             // Vertical-scroll viewport so long catalogs (extended-
             // range / specialized) fit without pushing the rest of
             // the tab off-screen.
@@ -4860,6 +7218,19 @@ fn enumerate_voicings(
     result
 }
 
+/// Per-string open/muted markers for the chord-card fretboard form.
+fn voicing_to_marks(voicing: &ChordVoicing) -> Vec<StringMark> {
+    voicing
+        .strings
+        .iter()
+        .map(|sp| match sp {
+            StringPlay::Played { fret: 0, .. } => StringMark::Open,
+            StringPlay::Played { .. } => StringMark::None,
+            StringPlay::Muted => StringMark::Muted,
+        })
+        .collect()
+}
+
 /// Map a ChordVoicing to fretboard Positions, dropping muted strings.
 fn voicing_to_positions(voicing: &ChordVoicing) -> Vec<Position> {
     voicing
@@ -4912,6 +7283,90 @@ where
         .border(palette.surface_2, masonry::layout::Length::const_px(1.0))
 }
 
+/// Like [`card`], but lighter-weight: tighter `SP_1` padding so a large
+/// canvas (the fretboard neck) reads as a clean panel rather than a
+/// thickly-matted one. Same hairline border + surface.
+fn thin_card<V>(palette: Palette, inner: V) -> impl WidgetView<AppState>
+where
+    V: WidgetView<AppState>,
+{
+    sized_box(inner)
+        .padding(SP_1)
+        .corner_radius(SP_2)
+        .background_color(palette.surface)
+        .border(palette.surface_2, masonry::layout::Length::const_px(1.0))
+}
+
+/// Wrap a fretboard neck canvas as a surface widget: a thin card with a
+/// compact start-fret control strip above the neck (`▼` toward the nut,
+/// `▲` up the neck). Lets a ≤12-fret window slide past the 12th fret
+/// while the neck flexes to fill the rest of the pane.
+fn fretboard_widget<V>(state: &AppState, neck: V) -> impl WidgetView<AppState> + use<V>
+where
+    V: WidgetView<AppState>,
+{
+    let start = state.fret_start;
+    let caption = if start == 0 {
+        "from nut".to_string()
+    } else {
+        format!("fret {start}+")
+    };
+    let strip = flex_row((
+        dim_label(state.palette, caption, TS_XS),
+        FlexSpacer::Flex(1.0),
+        button_sm("▼", |s: &mut AppState| s.nudge_fret_start(-1)),
+        button_sm("▲", |s: &mut AppState| s.nudge_fret_start(1)),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .gap(SP_1);
+    thin_card(
+        state.palette,
+        flex_col((strip, neck.flex(1.0)))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1),
+    )
+}
+
+/// Like [`card`], but the surface carries a faint `secondary` tint —
+/// for "chrome" surfaces (browse-list sidebars) that read as the
+/// support hue rather than neutral content. Matches the header strip's
+/// tint, so navigation chrome shares one secondary identity.
+fn nav_card<V>(palette: Palette, inner: V) -> impl WidgetView<AppState>
+where
+    V: WidgetView<AppState>,
+{
+    let surface = audio_widgets::theme::mix(palette.secondary, palette.surface, 0.85);
+    sized_box(inner)
+        .padding(SP_2)
+        .corner_radius(SP_2)
+        .background_color(surface)
+        .border(palette.surface_2, masonry::layout::Length::const_px(1.0))
+}
+
+/// A selectable browse-list row. Selected rows read in `tertiary` (the
+/// "you are here" emphasis hue) with a `●` cue; others in body `text`.
+/// Built with `button` so the label color is ours to set.
+fn list_item_button<F>(
+    palette: Palette,
+    active: bool,
+    text: impl Into<String>,
+    callback: F,
+) -> impl WidgetView<AppState>
+where
+    F: Fn(&mut AppState) + Send + Sync + 'static,
+{
+    let prefix = if active { "● " } else { "  " };
+    let color = if active { palette.tertiary } else { palette.text };
+    button(
+        label(format!("{prefix}{}", text.into()))
+            .text_size(TS_SM)
+            .color(color),
+        move |s: &mut AppState| callback(s),
+    )
+}
+
 // `ACTIVE_PALETTE` const stand-in lived here until 2026-05-18.
 // Replaced by threading `state.palette` (by value — `Palette` is
 // `Copy`) through `card()` and the semantic-color label helpers.
@@ -4921,19 +7376,14 @@ where
 /// Empirically-measured per-card width used by the chord-card
 /// reflow chunking on the Progressions tab.
 ///
-/// Each card renders ~370px wide in practice — the
-/// `sized_box.fixed_width` set on the inner flex_col below is
-/// honored as a *preference*, not a hard clamp, and masonry's flex
-/// layout tends to give the card the natural width of its contents
-/// (chord-name label + role + diagram + arrows). Rather than fight
-/// that, the chunking math here matches the observed render width,
-/// so `cards_per_row = floor((panel_w + gap) / (CHORD_CARD_W + gap))`
-/// produces sensible row counts that scale with window width.
-///
-/// Tune this if the wrap point feels wrong: bump higher to wrap
-/// earlier (fewer cards per row at the same window width), lower
-/// to fit more.
-const CHORD_CARD_W: f64 = 370.0;
+/// Sized to the card's actual content — a 120px chord diagram in a
+/// button (≈32px padding + border) plus the chord-name / role labels
+/// and the ◀ counter ▶ arrows row, all left-aligned. The old 370px
+/// value left ~200px of dead space inside every card (sparse,
+/// inefficient), so cards reflow to compact columns and
+/// `cards_per_row = floor((panel_w + gap) / (CHORD_CARD_W + gap))`
+/// (capped at 4) packs up to four across a wide pane.
+const CHORD_CARD_W: f64 = 172.0;
 
 /// Max gap between two clicks to register as a double-click.
 /// 400ms is the conventional desktop default (Windows uses ~500ms by
@@ -5073,6 +7523,9 @@ where
     button_view(label(text).text_size(TS_XS), move |s: &mut AppState| {
         callback(s);
     })
+    // Tight padding so single-glyph cycle arrows (◀/▶) read as
+    // compact affordances rather than chunky buttons.
+    .padding(masonry::properties::Padding::from_vh(SP_1, SP_2))
 }
 
 /// Medium button — `TS_SM` text. Equivalent to the default

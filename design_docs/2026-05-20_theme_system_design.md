@@ -169,11 +169,26 @@ of *user* themes lives per-app (it's app settings), but the types are shared.
   push secondary/tertiary into more spots (chord cards, sub-actions, active
   tab) later.
 - 2026-05-20: **Color sliders picker.** Replaced the hex inputs with, per seed,
-  a live **swatch + R/G/B sliders** (`AppState::set_seed_channel`) that
-  re-derive the whole palette as you drag, plus a hex readout. Sliders are
-  controlled (write state every tick) so they avoid the textbox
-  reset-on-rebuild that made the hex inputs need a buffer. Still RGB (HSL/OKLCH
-  sliders are a nicer-feel follow-up); per-role overrides still future.
+  a live **swatch + sliders** that re-derive the whole palette as you drag,
+  plus a hex readout. Sliders are controlled (write state every tick) so they
+  avoid the textbox reset-on-rebuild that made the hex inputs need a buffer.
+- 2026-05-20: **HSL sliders** (replacing RGB) for both seed + text-tier
+  editors — `color_to_hsl`/`color_from_hsl` in `audio_widgets::theme`;
+  H 0–360, S/L 0–100. More intuitive "pick a hue" feel. (OKLCH sliders remain a
+  possible further refinement.)
+- 2026-05-20: **Active-tab marker** — the active tab now shows in `tertiary`
+  (+ a bracket cue for colorblind safety) and inactive tab labels take
+  `text_header`, via `button(label(..).color(..), ..)`. Another visible home
+  for tertiary on top of root dots / playhead.
+- 2026-05-20: **More triad territory.** Two helpers — `nav_card` (a
+  `secondary`-tinted card, matching the header) and `list_item_button`
+  (selected row in `tertiary` with a `●` cue, else body `text`) — applied
+  across all five browse-list sidebars (Scales / Chords / Progressions /
+  Exercises / Tunings). So **secondary = chrome/nav surfaces** (header +
+  sidebars) and **tertiary = "you are here"** (selected rows + active tab +
+  root dots + playhead) now read consistently app-wide; sidebar headings use
+  `header_label`. Further spots (chord-card backgrounds, sub-action buttons)
+  remain available on request.
 
 ## Out of scope (this doc)
 

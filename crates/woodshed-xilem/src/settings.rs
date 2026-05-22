@@ -34,7 +34,75 @@ use woodshedding::tuning::Instrument;
 use audio_widgets::theme::{Seeds, color_from_hex, color_to_hex};
 
 use crate::theme::ThemeMode;
-use crate::{ChromaticPc, ClickPattern, AccentMode, LabelMode, SidebarVisibility, Tab};
+use crate::{
+    ChromaticPc, ClickPattern, AccentMode, LabelMode, SidebarVisibility, SurfaceModule, Tab,
+    default_surface,
+};
+
+/// Serde default for [`Settings::fret_span`] — the full 12-fret neck.
+fn default_fret_span() -> u8 {
+    12
+}
+
+/// Serde default for [`Settings::arpeggio_bpm`].
+fn default_arpeggio_bpm() -> f32 {
+    80.0
+}
+
+/// Serde default for additive bool fields that should default on.
+fn default_true() -> bool {
+    true
+}
+
+/// One step of a user exercise: which string (0-based, low → high),
+/// fret, and fretting finger (1–4; 0 = unspecified).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExStepSpec {
+    pub string: u8,
+    pub fret: u8,
+    pub finger: u8,
+}
+
+/// A user-authored exercise: a name + a fixed recorded step sequence.
+/// (Catalog exercises are *generators*; user ones are explicit steps,
+/// since a generator closure can't be serialized.)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserExerciseDef {
+    pub name: String,
+    pub steps: Vec<ExStepSpec>,
+}
+
+/// One chord in a user progression: scale degree (1–7), an alteration
+/// index (into `DegreeAlteration::ALL`), and a quality index (into
+/// `RoleQuality::ALL`). Stored as small ints so the theory enums don't
+/// need serde.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProgRoleSpec {
+    pub degree: u8,
+    pub alteration: u8,
+    pub quality: u8,
+}
+
+/// A user-authored chord progression: a name + an ordered list of
+/// degree-based roles (key-agnostic, like the catalog progressions).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserProgressionDef {
+    pub name: String,
+    pub roles: Vec<ProgRoleSpec>,
+}
+
+/// A user-authored tuning, persisted as open-string MIDI note numbers
+/// (low → high). `name` doubles as its id. Built-in tunings live in the
+/// theory crate's catalog; these are the user's own. The string-count is
+/// implicit in `midi.len()`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserTuningDef {
+    pub name: String,
+    /// Instrument string-adapter (see `instrument_to_str`).
+    pub instrument: String,
+    /// Open-string MIDI notes, low string → high.
+    pub midi: Vec<i32>,
+}
 
 /// A user-authored theme, persisted as hex seed strings (peniko `Color`
 /// isn't serde-friendly, and hex round-trips legibly in the JSON). The
@@ -153,7 +221,36 @@ pub struct Settings {
     pub tab: Tab,
     pub theme_mode: ThemeMode,
     /// User-authored themes (additive; built-ins live in code).
+    /// Fraction (0..1) of the fretboard↔info pane split, shared across
+    /// all fretboard tabs. `0.0` (the default) clamps to the minimum
+    /// fretboard width — a narrow neck that "looks like the instrument."
+    #[serde(default)]
+    pub split_ratio: f64,
+    /// Visible fretboard span (frets shown from the nut), 4..=12. The
+    /// fretboard's scope dial; shared across the fretboard tabs.
+    #[serde(default = "default_fret_span")]
+    pub fret_span: u8,
+    /// First visible fret of the windowed display (0 = nut). Additive;
+    /// older saves default to nut-anchored.
+    #[serde(default)]
+    pub fret_start: u8,
+    /// The instrument-surface composition (mounted widget modules, in
+    /// order, with visibility + size weight). Additive: an older save
+    /// without it loads the fretboard-only default. Sanitized on load
+    /// (see `sanitize_surface`) to keep the "exactly one Fretboard"
+    /// invariant.
+    #[serde(default = "default_surface")]
+    pub surface: Vec<SurfaceModule>,
     pub user_themes: Vec<UserThemeDef>,
+    /// User-authored tunings (additive; built-ins live in the catalog).
+    #[serde(default)]
+    pub user_tunings: Vec<UserTuningDef>,
+    /// User-authored chord progressions (additive).
+    #[serde(default)]
+    pub user_progressions: Vec<UserProgressionDef>,
+    /// User-authored exercises (additive).
+    #[serde(default)]
+    pub user_exercises: Vec<UserExerciseDef>,
     /// Name of the active user theme, or `None` to use the built-in
     /// `theme_mode`. A name that no longer resolves falls back to the
     /// built-in on load.
@@ -170,28 +267,49 @@ pub struct Settings {
     /// instrument" — same path the cold-start uses.
     pub tuning_name: Option<String>,
     pub sidebars: SidebarVisibility,
+    /// Shared musical root/key — one current pitch class the theory
+    /// lenses (Scales / Chords / Progressions) all read, so they're
+    /// coherent views of one musical moment. (Was three separate
+    /// per-tab roots; unified 2026-05-21.)
+    #[serde(default, alias = "scale_root_pc")]
+    pub root: ChromaticPc,
 
     // Scales tab
     pub scale_idx: usize,
-    pub scale_root_pc: ChromaticPc,
     pub scale_label_mode: LabelMode,
 
     // Chords tab
     pub chord_idx: usize,
-    pub chord_root_pc: ChromaticPc,
     pub chord_label_mode: LabelMode,
     pub chord_show_voicing: bool,
     pub chord_voicing_idx: usize,
 
     // Progressions tab
     pub progression_idx: Option<usize>,
-    pub progression_key_pc: ChromaticPc,
     pub progression_overlay_mode: bool,
 
     // Exercises tab
     pub exercise_idx: usize,
     pub exercise_starting_fret: u8,
     pub exercise_bpm: f32,
+
+    // Arpeggios lens. `arpeggio_idx` indexes the chord catalog (the
+    // quality). Additive — older saves default these.
+    #[serde(default)]
+    pub arpeggio_idx: usize,
+    #[serde(default)]
+    pub arpeggio_position_idx: usize,
+    #[serde(default = "default_arpeggio_bpm")]
+    pub arpeggio_bpm: f32,
+    #[serde(default)]
+    pub arpeggio_direction: crate::ArpeggioDirection,
+    #[serde(default)]
+    pub arpeggio_label: crate::ArpeggioLabel,
+    #[serde(default)]
+    pub arpeggio_inversion: u8,
+    /// Whether the arpeggio/exercise step-through sounds each note.
+    #[serde(default = "default_true")]
+    pub transport_sound: bool,
 
     // Metronome tab
     pub bpm: f32,
@@ -214,25 +332,37 @@ impl Default for Settings {
         Self {
             tab: Tab::default(),
             theme_mode: ThemeMode::default(),
+            split_ratio: 0.0,
+            fret_span: default_fret_span(),
+            fret_start: 0,
+            surface: default_surface(),
             user_themes: Vec::new(),
+            user_tunings: Vec::new(),
+            user_progressions: Vec::new(),
+            user_exercises: Vec::new(),
             active_user_theme: None,
             active_instrument: instrument_to_str(Instrument::Guitar).to_string(),
             tuning_name: None,
             sidebars: SidebarVisibility::default(),
+            root: ChromaticPc::default(),
             scale_idx: 0,
-            scale_root_pc: ChromaticPc::default(),
             scale_label_mode: LabelMode::default(),
             chord_idx: 0,
-            chord_root_pc: ChromaticPc::default(),
             chord_label_mode: LabelMode::default(),
             chord_show_voicing: false,
             chord_voicing_idx: 0,
             progression_idx: None,
-            progression_key_pc: ChromaticPc::default(),
             progression_overlay_mode: false,
             exercise_idx: 0,
             exercise_starting_fret: 0,
             exercise_bpm: 60.0,
+            arpeggio_idx: 0,
+            arpeggio_position_idx: 0,
+            arpeggio_bpm: default_arpeggio_bpm(),
+            arpeggio_direction: crate::ArpeggioDirection::default(),
+            arpeggio_label: crate::ArpeggioLabel::default(),
+            arpeggio_inversion: 0,
+            transport_sound: true,
             bpm: 100.0,
             metronome_time_sig_num: 4,
             metronome_click: ClickPattern::default(),

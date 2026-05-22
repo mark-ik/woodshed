@@ -378,6 +378,50 @@ pub fn color_from_hex(s: &str) -> Option<Color> {
     Some(Color::from_rgba8(r, g, b, 0xFF))
 }
 
+/// Decompose an opaque color into HSL — hue `0..360`, saturation +
+/// lightness `0..1`. For the color-picker sliders (more intuitive than
+/// raw RGB for choosing a hue).
+pub fn color_to_hsl(c: Color) -> (f64, f64, f64) {
+    let [r8, g8, b8, _] = c.to_rgba8().to_u8_array();
+    let (r, g, b) = (r8 as f64 / 255.0, g8 as f64 / 255.0, b8 as f64 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let l = (max + min) / 2.0;
+    let d = max - min;
+    if d.abs() < 1e-9 {
+        return (0.0, 0.0, l);
+    }
+    let s = d / (1.0 - (2.0 * l - 1.0).abs());
+    let h = if max == r {
+        ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    ((h * 60.0).rem_euclid(360.0), s, l)
+}
+
+/// Build an opaque color from HSL (`h` in degrees, `s`/`l` in `0..1`).
+pub fn color_from_hsl(h: f64, s: f64, l: f64) -> Color {
+    let s = s.clamp(0.0, 1.0);
+    let l = l.clamp(0.0, 1.0);
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let hp = h.rem_euclid(360.0) / 60.0;
+    let x = c * (1.0 - (hp.rem_euclid(2.0) - 1.0).abs());
+    let (r1, g1, b1) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = l - c / 2.0;
+    let to8 = |v: f64| ((v + m).clamp(0.0, 1.0) * 255.0).round() as u8;
+    Color::from_rgba8(to8(r1), to8(g1), to8(b1), 0xFF)
+}
+
 /// Near-white or near-black, whichever has the higher WCAG contrast
 /// against `bg`. Used for `on_*` text/icon colors over brand fills.
 pub fn best_on(bg: Color) -> Color {
