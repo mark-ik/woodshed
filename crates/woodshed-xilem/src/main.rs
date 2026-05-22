@@ -22,11 +22,11 @@ use masonry_winit::app::{EventLoop, EventLoopBuilder};
 use tokio::time;
 use winit::error::EventLoopError;
 use xilem::core::fork;
-use xilem::core::one_of::{OneOf2, OneOf3, OneOf4, OneOf9};
+use xilem::core::one_of::{OneOf2, OneOf3, OneOf4};
 use xilem::style::Style;
 use xilem::view::{
     AnyFlexChild, FlexExt, FlexSpacer, button, flex_col, flex_row, label, portal,
-    progress_bar, prose, resize_observer, sized_box, slider, task_raw, text_button,
+    prose, resize_observer, sized_box, slider, task_raw, text_button,
     text_input,
 };
 use xilem::{AnyWidgetView, AppState as XilemAppState, WidgetView, WindowId, Xilem, window};
@@ -40,7 +40,7 @@ use woodshed_audio::{
 
 use woodshedding::chord::{ChordFormula, catalog as chord_catalog};
 use woodshedding::exercise::{
-    Exercise, ExerciseDirection, ExerciseParams, ExerciseStep, catalog as exercise_catalog,
+    ExerciseDirection, ExerciseParams, ExerciseStep, catalog as exercise_catalog,
 };
 use woodshedding::fretboard::{
     BassConstraint, ChordVoicing, Fretboard, Position, StringPlay,
@@ -67,7 +67,7 @@ use theme::{
 };
 use audio_widgets::waveform_view;
 use widgets::{
-    DiagramColors, SectionBand, SectionColors, StringMark, chord_lane_view,
+    SectionBand, SectionColors, StringMark, chord_lane_view,
     fretboard_view, section_lane_view,
 };
 
@@ -2080,6 +2080,17 @@ impl AppState {
         }
     }
 
+    /// Step the rehearsal cursor and load that card onto the stage
+    /// (clamped to the queue ends). No-op on an empty queue.
+    fn rehearse_step(&mut self, dir: i32) {
+        let len = self.rehearsal.queue.len();
+        if len == 0 {
+            return;
+        }
+        let next = (self.rehearsal.cursor as i32 + dir).clamp(0, len as i32 - 1) as usize;
+        self.load_card(next);
+    }
+
     /// Rebuild the metronome pattern from the current settings and
     /// push it to the engine. If the metronome is playing, the
     /// pattern restarts from beat 1 (set_pattern resets sample/step
@@ -2441,10 +2452,12 @@ fn tab_bar(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     };
 
     let mut buttons: Vec<AnyFlexChild<AppState>> = Vec::new();
-    // The four theory tabs collapse into one "Fretboard" destination
-    // (they're lenses of one surface — see the lens switcher below).
+    // The five fretboard lenses collapse into one "Stage" destination —
+    // the instrument stage is the center of gravity; the material-kind
+    // selector below picks what's on it (it's card selection, not five
+    // separate pages).
     buttons.push(tab_button(
-        "Fretboard".to_string(),
+        "Stage".to_string(),
         tab_has_fretboard(active),
         |s: &mut AppState| {
             if !tab_has_fretboard(s.tab) {
@@ -2488,8 +2501,11 @@ fn lens_bar(
     }
     let active = state.tab;
     let palette = state.palette;
+    // Each entry picks what *material kind* the stage shows. Reads as
+    // card selection (which kind of card is on the stage), not a page
+    // switch — the surface, root, and tuning carry across unchanged.
     let lens = move |text: &str, tab: Tab| {
-        // Active lens pops in tertiary with a ● cue; inactive lenses
+        // Active kind pops in tertiary with a ● cue; inactive kinds
         // take body `text` (legible — not the disabled-looking dim).
         let (txt, color) = if tab == active {
             (format!("● {text}"), palette.tertiary)
@@ -2517,10 +2533,36 @@ fn lens_bar(
     };
     let tuner_shown = state.module_shown(ModuleKind::Tuner);
     let metro_shown = state.module_shown(ModuleKind::Metronome);
+    // "Now rehearsing" strip — when the queue holds cards, the stage
+    // shows which one the cursor is on and steps through them with
+    // ◀/▶, so the rehearsal queue drives the stage as a live practice
+    // flow (not just a list you Load from). Right-aligned, only when
+    // the queue is non-empty.
+    let queue_len = state.rehearsal.queue.len();
+    let rehearse_strip: OneOf2<_, _> = if queue_len > 0 {
+        let cursor = state.rehearsal.cursor;
+        let name = state
+            .rehearsal
+            .card_at_cursor()
+            .map(|c| c.name.clone())
+            .unwrap_or_default();
+        OneOf2::A(
+            flex_row((
+                dim_label(palette, format!("Rehearsing {}/{queue_len}", cursor + 1), TS_XS),
+                label(name).text_size(TS_XS).color(palette.tertiary),
+                button_sm("◀", |s: &mut AppState| s.rehearse_step(-1)),
+                button_sm("▶", |s: &mut AppState| s.rehearse_step(1)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(SP_1),
+        )
+    } else {
+        OneOf2::B(sized_box(label("")).fixed_width(SP_0))
+    };
     OneOf2::A(
         sized_box(
             flex_row((
-                dim_label(palette, "Lens:", TS_XS),
+                dim_label(palette, "Material:", TS_XS),
                 lens("Scale", Tab::Scales),
                 lens("Chord", Tab::Chords),
                 lens("Arpeggio", Tab::Arpeggios),
@@ -2530,12 +2572,15 @@ fn lens_bar(
                 dim_label(palette, "   Show:", TS_XS),
                 module_toggle("Tuner", ModuleKind::Tuner, tuner_shown),
                 module_toggle("Metronome", ModuleKind::Metronome, metro_shown),
+                // Rehearsal cursor, pushed to the right edge.
+                FlexSpacer::Flex(1.0),
+                rehearse_strip,
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .main_axis_alignment(MainAxisAlignment::Start)
             .gap(SP_2),
         )
-        // Left inset so "Lens:" aligns with the content below instead
+        // Left inset so "Material:" aligns with the content below instead
         // of hugging the window edge.
         .padding(masonry::properties::Padding::from_vh(SP_0, SP_2)),
     )
@@ -8005,8 +8050,6 @@ where
 // asking call sites to remember the chain order.
 // =================================================================
 
-use xilem::style::Style as _;
-
 /// Secondary metadata text — counters ("1/12"), role labels
 /// ("iii"), "Up next: …" previews. Lower contrast than `text` so
 /// the eye reads it as supporting information.
@@ -8202,7 +8245,7 @@ pub fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
         let default_properties = state.default_properties.clone();
         let root = app_logic(state);
         std::iter::once(
-            window(window_id, "Woodshed (Xilem)", root)
+            window(window_id, "Woodshed", root)
                 .with_base_color(base_color)
                 .with_default_properties(default_properties)
                 .with_options(|o| {

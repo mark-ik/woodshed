@@ -140,3 +140,25 @@ yet touching the tab strip.
     and jumps to the matching lens.
   - Pending interactive check by Mark: capture from each of the 5 lenses, Load
     round-trips correctly, reorder/remove behave, queue survives a restart.
+- 2026-05-22: **R3 shipped (builds + runs clean).** Reframed the nav so the
+  stage is the center of gravity and lens-switching reads as card selection.
+  - **R3a — cruft removed:** window title "Woodshed (Xilem)" → "Woodshed"; the
+    "Xilem migration scaffold" header label was already replaced by ➕ Rehearse
+    in R1. Cleared 6 dead imports (`OneOf9`, `progress_bar`, `Exercise`,
+    `DiagramColors`, `SP_5/6/8`, duplicate `Style as _`). Warnings 13 → 7 (the
+    remaining 7 are pre-existing dead code: `danger_label`, `palette_for`,
+    `light`, two enum `ALL`/`label`, two `unused variable` — left alone, not
+    redesign cruft).
+  - **R3b — nav reframe:** tab-bar "Fretboard" meta-destination → **Stage**; the
+    lens bar's "Lens:" prefix → **"Material:"** (the five entries now read as
+    *which kind of card is on the stage*, not five separate pages). Surface +
+    root + tuning still carry across unchanged, as before.
+  - **R3c — rehearsal cursor on the stage:** when the queue is non-empty, the
+    Material bar shows a right-aligned **"Rehearsing k/N · card-name"** strip with
+    ◀/▶ that step the cursor and load each card onto the stage
+    (`AppState::rehearse_step`). The queue now drives the stage as a live
+    practice flow, not just a list you Load from.
+  - Deferred (logged, not done): header ◀▶ stepper-grammar consolidation
+    (instrument/tuning/fret-span share the arrow idiom) — the cyclers are
+    functional and Mark previously chose them over popup overlays, so this is a
+    visual-density polish for later, not a structural blocker.

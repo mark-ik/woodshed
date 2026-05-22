@@ -16,7 +16,7 @@
 //! `TS_SM`) exactly as before — the `palette.*` API stays flat.
 
 pub use audio_widgets::theme::{
-    SP_0, SP_1, SP_2, SP_3, SP_4, SP_5, SP_6, SP_8, TS_2XL, TS_LG, TS_MD, TS_SM, TS_XL, TS_XS,
+    SP_0, SP_1, SP_2, SP_3, SP_4, TS_2XL, TS_LG, TS_MD, TS_SM, TS_XL, TS_XS,
     ThemeMode, mono_family,
 };
 
