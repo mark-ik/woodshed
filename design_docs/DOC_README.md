@@ -13,6 +13,11 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-05-22_rehearsal_redesign_plan.md](2026-05-22_rehearsal_redesign_plan.md)
+  — Prototype → designed UI. Card vocabulary (tagged-union `Card`), a rehearsal
+  queue/projections spine, bulldoze-then-build the lens nav. Branch
+  `rehearsal-redesign`; leads with R1 material portability ("➕ Rehearse" from
+  any lens). **Current active redesign.**
 - [2026-04-30_initial_plan.md](2026-04-30_initial_plan.md) — Initial
   scaffold and roadmap from theory crate through Iced UI to first
   desktop release.
