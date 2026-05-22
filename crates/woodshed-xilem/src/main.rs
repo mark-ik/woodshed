@@ -622,10 +622,6 @@ impl Rehearsal {
         }
     }
 
-    fn card_at_cursor(&self) -> Option<&Card> {
-        self.queue.get(self.cursor)
-    }
-
     /// Swap the card at `idx` with its neighbor in `dir` (-1 up, +1 down),
     /// keeping the cursor following the moved card if it was the cursor.
     fn move_card(&mut self, idx: usize, dir: i32) {
@@ -1681,18 +1677,6 @@ impl AppState {
         self.progression_voicing_idx = vec![0; 1];
     }
 
-    /// Select a user progression on the Progression lens (jumps there).
-    fn apply_user_progression(&mut self, name: &str) {
-        if let Some(pos) = self.user_progressions.iter().position(|p| p.name == name) {
-            self.progression_idx = Some(progression_catalog().len() + pos);
-            self.progression_expanded_chord = Some(0);
-            let count = self.user_progressions[pos].roles.len();
-            self.progression_voicing_idx = vec![0; count];
-            self.tab = Tab::Progressions;
-            self.last_lens = Tab::Progressions;
-        }
-    }
-
     fn edit_user_progression(
         &mut self,
         name: &str,
@@ -1781,17 +1765,6 @@ impl AppState {
         self.exercise_idx = exercise_catalog().len() + pos;
         self.exercise_step_idx = 0;
         self.exercise_playing = false;
-    }
-
-    /// Select a user exercise on the Exercise lens (jumps there).
-    fn apply_user_exercise(&mut self, name: &str) {
-        if let Some(pos) = self.user_exercises.iter().position(|e| e.name == name) {
-            self.exercise_idx = exercise_catalog().len() + pos;
-            self.exercise_step_idx = 0;
-            self.exercise_playing = false;
-            self.tab = Tab::Exercises;
-            self.last_lens = Tab::Exercises;
-        }
     }
 
     fn edit_user_exercise(&mut self, name: &str, f: impl FnOnce(&mut settings::UserExerciseDef)) {
@@ -2538,19 +2511,16 @@ fn lens_bar(
     // ◀/▶, so the rehearsal queue drives the stage as a live practice
     // flow (not just a list you Load from). Right-aligned, only when
     // the queue is non-empty.
+    // Compact on purpose: just the cursor counter + ◀/▶. The card's
+    // name/material is already shown prominently on the stage, so
+    // repeating it here only makes this strip overflow narrow windows.
     let queue_len = state.rehearsal.queue.len();
     let rehearse_strip: OneOf2<_, _> = if queue_len > 0 {
         let cursor = state.rehearsal.cursor;
-        let name = state
-            .rehearsal
-            .card_at_cursor()
-            .map(|c| c.name.clone())
-            .unwrap_or_default();
         OneOf2::A(
             flex_row((
-                dim_label(palette, format!("Rehearsing {}/{queue_len}", cursor + 1), TS_XS),
-                label(name).text_size(TS_XS).color(palette.tertiary),
                 button_sm("◀", |s: &mut AppState| s.rehearse_step(-1)),
+                dim_label(palette, format!("♪ {}/{queue_len}", cursor + 1), TS_XS),
                 button_sm("▶", |s: &mut AppState| s.rehearse_step(1)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -4967,6 +4937,74 @@ fn positions_for_practice_item(
 /// Key controls live on the right column to match the Scales/Chords
 /// layout. Scale (Major / Minor / mode) is hardcoded to Major for
 /// now — a key-mode picker is a follow-up if needed.
+/// Inline editor for a user-authored progression (redesign R4) — lives
+/// on the Progression lens (where you pick the card) rather than in
+/// Settings. One row per degree-based chord (degree ± / ♯♭ / quality
+/// cycle / remove) plus + chord / Delete. The progression is already the
+/// selected one on the lens, so there's no "Apply" here. Fully owns its
+/// data (clones the name into each closure), so it doesn't hold a borrow
+/// of `state`.
+fn user_progression_editor(
+    palette: Palette,
+    def: &settings::UserProgressionDef,
+) -> impl WidgetView<AppState> + use<> {
+    let name = def.name.clone();
+    let mut chord_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+    for (ci, r) in def.roles.iter().enumerate() {
+        let alt = DegreeAlteration::ALL[(r.alteration as usize).min(DegreeAlteration::ALL.len() - 1)];
+        let qual = RoleQuality::ALL[(r.quality as usize).min(RoleQuality::ALL.len() - 1)];
+        let lbl = format!("{}{} · {}", alt.symbol(), r.degree, qual.chord_formula_name());
+        let (n1, n2, n3, n4, n5, n6) = (
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+        );
+        chord_rows.push(
+            flex_row((
+                sized_box(label(lbl).text_size(TS_XS))
+                    .fixed_width(masonry::layout::Length::px(150.0)),
+                button_sm("deg −", move |s: &mut AppState| s.nudge_prog_degree(&n1, ci, -1)),
+                button_sm("deg +", move |s: &mut AppState| s.nudge_prog_degree(&n2, ci, 1)),
+                button_sm("♯/♭", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
+                button_sm("◀", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
+                button_sm("▶", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
+                button_sm("✕", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1)
+            .into_any_flex(),
+        );
+    }
+    let (nadd, ndel) = (name.clone(), name.clone());
+    card(
+        palette,
+        flex_col((
+            flex_row((
+                label(format!("★ Editing: {name}"))
+                    .text_size(TS_SM)
+                    .color(palette.tertiary),
+                FlexSpacer::Flex(1.0),
+                button_sm("+ chord", move |s: &mut AppState| s.add_prog_chord(&nadd)),
+                button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_progression(&ndel)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+            flex_col(chord_rows)
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+    )
+}
+
 fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let key_root = state.root.to_pitch(4);
     // Use the catalog's first scale as the key — that's "Major".
@@ -5026,6 +5064,10 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
             )
             .constrain_horizontal(true)
             .flex(1.0),
+            // Author a new custom progression right where you pick one
+            // (redesign R4) — selected immediately, editor opens in the
+            // right pane.
+            text_button("+ New progression", |s: &mut AppState| s.new_user_progression()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -5497,10 +5539,30 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     // (which would hide content entirely with no way to recover
     // without resizing the window).
     use masonry::layout::Length as MLen;
+    // Custom-progression editor (redesign R4): when the selected
+    // progression is a user one (★), its editor opens in the right pane
+    // below the chord grid — authoring lives where you pick the card,
+    // not in Settings. Owns its data, so it doesn't hold a borrow of
+    // `state` across the surface_left `&mut`.
+    let palette = state.palette;
+    let prog_editor: OneOf2<_, _> = match state.progression_idx {
+        Some(idx) if idx >= cat_count => match state.user_progressions.get(idx - cat_count) {
+            Some(def) => OneOf2::A(user_progression_editor(palette, def)),
+            None => OneOf2::B(sized_box(label("")).fixed_height(SP_0)),
+        },
+        _ => OneOf2::B(sized_box(label("")).fixed_height(SP_0)),
+    };
+    let right_pane = scroll_tab(card(
+        palette,
+        flex_col((chord_cards, prog_editor))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_3),
+    ));
     let surface = surface_left(state, fretboard_card.boxed());
     flex_row((
         sidebar,
-        xilem::view::split(surface, scroll_tab(card(state.palette, chord_cards)))
+        xilem::view::split(surface, right_pane)
             .split_point(state.split_ratio)
         .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
@@ -5741,6 +5803,82 @@ fn roman_numeral(degree: u8, lower: bool) -> &'static str {
 ///   time. Best for learning the pattern note-by-note.
 /// - **Auto**: Play button starts a task that advances at the
 ///   chosen BPM. Best for practicing the exercise at tempo.
+/// Inline editor for a user-authored exercise (redesign R4) — lives on
+/// the Exercise lens (where you pick the card) rather than in Settings.
+/// One row per step (string ± / fret ± / finger ± / remove) plus + step /
+/// Delete. Fully owns its data so it doesn't hold a borrow of `state`.
+fn user_exercise_editor(
+    palette: Palette,
+    def: &settings::UserExerciseDef,
+) -> impl WidgetView<AppState> + use<> {
+    let name = def.name.clone();
+    let mut step_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
+    for (si, st) in def.steps.iter().enumerate() {
+        let finger = if st.finger == 0 {
+            "–".to_string()
+        } else {
+            st.finger.to_string()
+        };
+        let lbl = format!("str {} · {}fr · f{}", st.string + 1, st.fret, finger);
+        let (a, b, c, d, ee, ff, g) = (
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+            name.clone(),
+        );
+        step_rows.push(
+            flex_row((
+                sized_box(label(lbl).text_size(TS_XS))
+                    .fixed_width(masonry::layout::Length::px(150.0)),
+                button_sm("str −", move |s: &mut AppState| s.nudge_ex_step(&a, si, 0, -1)),
+                button_sm("str +", move |s: &mut AppState| s.nudge_ex_step(&b, si, 0, 1)),
+                button_sm("fr −", move |s: &mut AppState| s.nudge_ex_step(&c, si, 1, -1)),
+                button_sm("fr +", move |s: &mut AppState| s.nudge_ex_step(&d, si, 1, 1)),
+                button_sm("f −", move |s: &mut AppState| s.nudge_ex_step(&ee, si, 2, -1)),
+                button_sm("f +", move |s: &mut AppState| s.nudge_ex_step(&ff, si, 2, 1)),
+                button_sm("✕", move |s: &mut AppState| s.remove_ex_step(&g, si)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_1)
+            .into_any_flex(),
+        );
+    }
+    let (nadd, ndel) = (name.clone(), name.clone());
+    card(
+        palette,
+        flex_col((
+            flex_row((
+                label(format!("★ Editing: {name}"))
+                    .text_size(TS_SM)
+                    .color(palette.tertiary),
+                FlexSpacer::Flex(1.0),
+                button_sm("+ step", move |s: &mut AppState| s.add_ex_step(&nadd)),
+                button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_exercise(&ndel)),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_2),
+            flex_col(step_rows)
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .main_axis_alignment(MainAxisAlignment::Start)
+                .gap(SP_1),
+            dim_prose(
+                palette,
+                "Steps are string + fret + finger. Build with the ± buttons; \
+                 the transport above steps through them.",
+                TS_XS,
+            ),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_1),
+    )
+}
+
 fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     /// How many previous steps to render as a fading trail behind
     /// the current step. 4 = current + 3 history.
@@ -6096,6 +6234,9 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             )
             .constrain_horizontal(true)
             .flex(1.0),
+            // Author a new custom exercise right where you pick one
+            // (redesign R4) — editor opens in the right pane.
+            text_button("+ New exercise", |s: &mut AppState| s.new_user_exercise()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -6126,10 +6267,29 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         ),
     )
     .boxed();
+    // Custom-exercise editor (redesign R4): when the selected exercise is
+    // a user one (★), its editor opens in the right pane below the info
+    // panel — authoring lives where you pick the card, not in Settings.
+    let palette = state.palette;
+    let ex_editor: OneOf2<_, _> = if state.exercise_idx >= ex_cat_count {
+        match state.user_exercises.get(state.exercise_idx - ex_cat_count) {
+            Some(def) => OneOf2::A(user_exercise_editor(palette, def)),
+            None => OneOf2::B(sized_box(label("")).fixed_height(SP_0)),
+        }
+    } else {
+        OneOf2::B(sized_box(label("")).fixed_height(SP_0))
+    };
+    let right_pane = scroll_tab(card(
+        palette,
+        flex_col((info_panel, ex_editor))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .main_axis_alignment(MainAxisAlignment::Start)
+            .gap(SP_3),
+    ));
     let surface = surface_left(state, fretboard_card);
     let visible = flex_row((
         exercise_sidebar,
-        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+        xilem::view::split(surface, right_pane)
             .split_point(state.split_ratio)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
@@ -6965,195 +7125,6 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_1);
 
-    // Custom-progressions editor — one card per progression: an ordered
-    // list of degree-based chords (degree ± / alteration / quality cycle
-    // / remove), plus Apply / + chord / Delete.
-    let mut prog_cards: Vec<_> = Vec::new();
-    for p in &state.user_progressions {
-        let name = p.name.clone();
-        let mut chord_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
-        for (ci, r) in p.roles.iter().enumerate() {
-            let alt =
-                DegreeAlteration::ALL[(r.alteration as usize).min(DegreeAlteration::ALL.len() - 1)];
-            let qual = RoleQuality::ALL[(r.quality as usize).min(RoleQuality::ALL.len() - 1)];
-            let lbl = format!("{}{} · {}", alt.symbol(), r.degree, qual.chord_formula_name());
-            let (n1, n2, n3, n4, n5, n6) = (
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-            );
-            chord_rows.push(
-                flex_row((
-                    sized_box(label(lbl).text_size(TS_XS))
-                        .fixed_width(masonry::layout::Length::px(150.0)),
-                    button_sm("deg −", move |s: &mut AppState| s.nudge_prog_degree(&n1, ci, -1)),
-                    button_sm("deg +", move |s: &mut AppState| s.nudge_prog_degree(&n2, ci, 1)),
-                    button_sm("♯/♭", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
-                    button_sm("◀", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
-                    button_sm("▶", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
-                    button_sm("✕", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_1)
-                .into_any_flex(),
-            );
-        }
-        let active = state.progression_idx
-            == state
-                .user_progressions
-                .iter()
-                .position(|q| q.name == name)
-                .map(|pos| progression_catalog().len() + pos);
-        let prefix = if active { "● " } else { "  " };
-        let (na, nadd, ndel) = (name.clone(), name.clone(), name.clone());
-        prog_cards.push(card(
-            state.palette,
-            flex_col((
-                flex_row((
-                    label(format!("{prefix}★ {name}")).text_size(TS_SM).color(
-                        if active {
-                            state.palette.tertiary
-                        } else {
-                            state.palette.text
-                        },
-                    ),
-                    button_sm("Apply", move |s: &mut AppState| s.apply_user_progression(&na)),
-                    button_sm("+ chord", move |s: &mut AppState| s.add_prog_chord(&nadd)),
-                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_progression(&ndel)),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_2),
-                flex_col(chord_rows)
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .main_axis_alignment(MainAxisAlignment::Start)
-                    .gap(SP_1),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_1),
-        ));
-    }
-    let progression_section = flex_col((
-        label("Custom progressions").text_size(TS_MD),
-        text_button("+ New progression", |s: &mut AppState| s.new_user_progression()),
-        flex_col(prog_cards)
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_2),
-        dim_prose(
-            state.palette,
-            "Progressions are degree-based (key-agnostic): each chord is a \
-             scale degree (1–7) + optional ♯/♭ + a quality. Apply to see it \
-             on the Progression lens in the current key; it appears there \
-             marked with ★.",
-            TS_XS,
-        ),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Start)
-    .main_axis_alignment(MainAxisAlignment::Start)
-    .gap(SP_1);
-
-    // Custom-exercises editor — one card per exercise: an ordered list of
-    // steps (string / fret / finger ±), plus Apply / + step / Delete.
-    let mut exercise_cards: Vec<_> = Vec::new();
-    for e in &state.user_exercises {
-        let name = e.name.clone();
-        let mut step_rows: Vec<AnyFlexChild<AppState>> = Vec::new();
-        for (si, st) in e.steps.iter().enumerate() {
-            let finger = if st.finger == 0 {
-                "–".to_string()
-            } else {
-                st.finger.to_string()
-            };
-            let lbl = format!("str {} · {}fr · f{}", st.string + 1, st.fret, finger);
-            let (a, b, c, d, ee, ff, g) = (
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-                name.clone(),
-            );
-            step_rows.push(
-                flex_row((
-                    sized_box(label(lbl).text_size(TS_XS))
-                        .fixed_width(masonry::layout::Length::px(150.0)),
-                    button_sm("str −", move |s: &mut AppState| s.nudge_ex_step(&a, si, 0, -1)),
-                    button_sm("str +", move |s: &mut AppState| s.nudge_ex_step(&b, si, 0, 1)),
-                    button_sm("fr −", move |s: &mut AppState| s.nudge_ex_step(&c, si, 1, -1)),
-                    button_sm("fr +", move |s: &mut AppState| s.nudge_ex_step(&d, si, 1, 1)),
-                    button_sm("f −", move |s: &mut AppState| s.nudge_ex_step(&ee, si, 2, -1)),
-                    button_sm("f +", move |s: &mut AppState| s.nudge_ex_step(&ff, si, 2, 1)),
-                    button_sm("✕", move |s: &mut AppState| s.remove_ex_step(&g, si)),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_1)
-                .into_any_flex(),
-            );
-        }
-        let active = state.exercise_idx
-            == state
-                .user_exercises
-                .iter()
-                .position(|q| q.name == name)
-                .map(|pos| exercise_catalog().len() + pos)
-                .unwrap_or(usize::MAX);
-        let prefix = if active { "● " } else { "  " };
-        let (na, nadd, ndel) = (name.clone(), name.clone(), name.clone());
-        exercise_cards.push(card(
-            state.palette,
-            flex_col((
-                flex_row((
-                    label(format!("{prefix}★ {name}")).text_size(TS_SM).color(
-                        if active {
-                            state.palette.tertiary
-                        } else {
-                            state.palette.text
-                        },
-                    ),
-                    button_sm("Apply", move |s: &mut AppState| s.apply_user_exercise(&na)),
-                    button_sm("+ step", move |s: &mut AppState| s.add_ex_step(&nadd)),
-                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_exercise(&ndel)),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_2),
-                flex_col(step_rows)
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .main_axis_alignment(MainAxisAlignment::Start)
-                    .gap(SP_1),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_1),
-        ));
-    }
-    let exercise_section = flex_col((
-        label("Custom exercises").text_size(TS_MD),
-        text_button("+ New exercise", |s: &mut AppState| s.new_user_exercise()),
-        flex_col(exercise_cards)
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_2),
-        dim_prose(
-            state.palette,
-            "Exercises are a recorded step sequence: each step is a string \
-             + fret + finger. Build it with the ± buttons, Apply to step \
-             through it on the Exercise lens (★).",
-            TS_XS,
-        ),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Start)
-    .main_axis_alignment(MainAxisAlignment::Start)
-    .gap(SP_1);
-
     card(
         state.palette,
         flex_col((
@@ -7187,12 +7158,10 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                  forks the active theme into an editable copy.",
                 TS_XS,
             ),
-            // Custom tunings section.
+            // Custom tunings section. (Progression + exercise authoring
+            // moved to their lenses in redesign R4 — Settings is for
+            // preferences + tunings, which are shared context, not cards.)
             tuning_section,
-            // Custom progressions section.
-            progression_section,
-            // Custom exercises section.
-            exercise_section,
             // Persistence section. Reset and explicit save sit here
             // alongside the path so power users have one place to
             // think about durable state.

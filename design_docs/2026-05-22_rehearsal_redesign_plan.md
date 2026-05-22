@@ -80,9 +80,12 @@ yet touching the tab strip.
   card*, not five separate pages. Remove dev cruft ("(Xilem)" title, "Xilem
   migration scaffold" label) in the same pass. *Done when:* the stage is the
   center of gravity and lens-switching is card-selection, not page-switching.
-- **R4 — Move material authoring out of Settings.** The custom tuning/
-  progression/exercise editors (★) leave Settings and attach to card creation
-  where they belong. *Done when:* Settings holds only settings.
+- **R4 — Move material authoring out of Settings.** The custom progression /
+  exercise editors (★) leave Settings and attach to their lenses (where you pick
+  the card). **Tunings stay in Settings** (Mark's call, 2026-05-22): a tuning is
+  shared context, not a card kind, and doesn't belong on the top bar. *Done
+  when:* Settings holds preferences + tunings only; progression/exercise
+  authoring lives on its lens. ✅ shipped — see Progress.
 - **R5 (later) — Exercises as traversal over cards/compositions.** Generalize
   the exercise step-engine so an exercise can traverse *any* card or a
   composition (not just its own stored steps): "play this progression as an
@@ -162,3 +165,21 @@ yet touching the tab strip.
     (instrument/tuning/fret-span share the arrow idiom) — the cyclers are
     functional and Mark previously chose them over popup overlays, so this is a
     visual-density polish for later, not a structural blocker.
+  - Follow-up fix: the "Rehearsing k/N · name" strip clipped mid-word at narrow
+    window widths → compacted to **◀ ♪ k/N ▶** (the card's name/material is
+    already shown on the stage, so dropping it from the strip removes the
+    overflow without losing information).
+- 2026-05-22: **R4 shipped (builds + runs clean).** Material authoring moved out
+  of Settings to where you pick the card.
+  - **Decision:** progressions → Progression lens, exercises → Exercise lens,
+    **tunings stay in Settings** (shared context, not a card; kept off the top
+    bar per Mark).
+  - Extracted `user_progression_editor(palette, &def)` and
+    `user_exercise_editor(palette, &def)` free fns (own their data, no `state`
+    borrow). Each lens sidebar gains **+ New …**; when the selected item is a
+    user one (★), its editor opens in the **right pane below** the chord grid /
+    info panel — filling the right-pane dead space the critique flagged.
+  - Removed the Custom-progressions + Custom-exercises sections from
+    `settings_view` (≈190 lines spliced out); Settings now = Theme + Custom
+    tunings + Persistence. Deleted the now-dead `apply_user_progression` /
+    `apply_user_exercise` (the lens list rows select directly). No new warnings.
