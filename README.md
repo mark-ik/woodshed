@@ -8,6 +8,15 @@ walks you through rotations of material at tempo so the app drives you
 rather than the other way around. The theory model generalizes to other
 stringed instruments (bass, ukulele, banjo).
 
+`woodshedding` follows the gerund-crate convention used across Mark's
+repos (`murmuring`, `mooting`, etc.): the gerund names the portable core
+that makes the activity possible. In this repo, woodshedding means the
+act of turning musical material into playable practice: identify the
+material, realize it on an instrument, arrange it into a sequence, and
+drive it through rehearsal. The crate does not own the desktop UI or
+audio engines; it owns the pure theory, instrument, progression,
+exercise, and practice-set operations those shells depend on.
+
 Built in Rust with [Xilem](https://github.com/linebender/xilem) +
 [Masonry](https://github.com/linebender/xilem/tree/main/masonry) for the
 UI (migrated from Iced 2026-05-18). Targets desktop first (Windows,
@@ -22,7 +31,7 @@ description, doc policy, and the active plan.
 
 ```
 crates/
-  woodshedding/    Pure-Rust theory primitives (no I/O, no UI, no audio)
+  woodshedding/    Portable gerund core: pure theory/instrument/practice operations
   woodshed-audio/  Tuner-grade pitch detection + sequencer/click engine
   woodshed-xilem/  Xilem + Masonry application — depends on the two above
 design_docs/       Plans, policy, project description

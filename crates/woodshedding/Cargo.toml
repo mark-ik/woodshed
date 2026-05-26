@@ -1,7 +1,7 @@
 [package]
 name = "woodshedding"
 version = "0.1.0"
-description = "Music theory primitives for stringed instruments: pitches, intervals, tunings, scales, chords, progressions, fretboard mapping, and practice exercises. Pure data and math; no I/O, no UI, no audio."
+description = "Portable core for woodshedding: pure theory, string-instrument realization, progressions, exercises, fretboard mapping, voicings, and practice sets. No I/O, UI, or audio."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

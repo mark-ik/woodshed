@@ -19,12 +19,219 @@ tab strip (Scales · Chords · Progressions · Exercises · Arpeggios) is the
 prototype's seam and the first thing to rework: those five are not five
 coordinate features, they are *card kinds* + *traversal modes* over one stage.
 
+## Next spine: rehearsal elements (agreed direction 2026-05-23)
+
+The R1/R2 `Card` queue proved material portability, but `CardKind` still mirrors
+the old tabs. The stronger model is a **rehearsal queue of elements played in
+sequence**, where each element owns enough context to say:
+
+- **what** material is being practiced;
+- **where/how** it is realized on the instrument;
+- **how** it is articulated or traversed;
+- **how long / how often** it should be rehearsed.
+
+That is the shared shape the current **Fretboard**, **Practice**, and **Song**
+surfaces are all reaching for:
+
+- Fretboard/Stage wants the current element's instrument realization.
+- Practice wants named or generated element sequences with auto-advance.
+- Song wants bar/section element sequences with looping, audio, and per-bar
+  context.
+- Progressions are named templates that compile into chord elements.
+- Exercises are traversal/generation recipes that compile into elements or
+  decorate existing elements.
+- Arpeggios are articulations/traversals over chord or voicing material, not a
+  peer ontology beside chord.
+
+So the next implementation should not add yet another page. It should make
+Practice and Song compile into the same rehearsal runtime, then let their UIs
+be projections over that runtime.
+
+### Target model
+
+Keep the first implementation boring and serializable. Names/ids resolve at the
+edge, just like R1 cards already do. Important split: `MaterialRef` is **atomic
+practiceable material**, not every thing the UI can name. Progressions,
+exercises, practice sets, and songs are sequence sources that compile/project
+into `Vec<RehearsalElement>`.
+
+```rust
+struct Rehearsal {
+    title: String,
+    source: Option<RehearsalSource>,
+    elements: Vec<RehearsalElement>,
+    cursor: usize,
+    loop_mode: LoopMode,
+    clock: ClockAuthority,
+}
+
+struct RehearsalElement {
+    label: String,
+    material: MaterialRef,
+    realization: RealizationSpec,
+    articulation: ArticulationSpec,
+    timing: TimingSpec,
+}
+
+enum MaterialRef {
+    Scale { name: String, root: PitchRef },
+    Chord { name: String, root: PitchRef },
+    // Optional later promotion if a saved voicing needs identity
+    // independent of "Chord + RealizationSpec::voicing_idx".
+    Voicing { chord: String, root: PitchRef, voicing_id: String },
+    Riff { name: String }, // later
+    NoteGroup { notes: Vec<PitchRef> }, // later
+}
+
+enum RehearsalSource {
+    Manual,
+    PracticeSet { name: String },
+    Progression { name: String, key: PitchRef },
+    ExerciseRecipe { name: String },
+    SongProjection { song_name: String },
+}
+
+struct RealizationSpec {
+    instrument: String,
+    tuning: Option<String>,
+    fret_window: Option<FretWindow>,
+    voicing_idx: Option<usize>,
+}
+
+enum ArticulationSpec {
+    Block,
+    Arpeggiate { direction: ArpeggioDirection },
+    ExercisePattern { name: String }, // decorator over existing material
+    Strum { direction: StrumDirection }, // later, once affordances exist
+}
+
+struct TimingSpec {
+    bpm: Option<f32>,
+    meter: Option<TimeSignatureRef>,
+    advance: AdvancePolicy,
+}
+
+enum AdvancePolicy {
+    Bars(u8),
+    Seconds(f32),
+    Repetitions(u16),
+    Manual,
+}
+
+enum ClockAuthority {
+    Manual,
+    MetronomeGrid,
+    SongEngine,
+}
+```
+
+U1 should implement only the variants today's app exercises. The enum shape
+keeps room for the known consumers, but unused variants should not get behavior
+until U2/U3/U4 pulls them into use.
+
+This does **not** mean all of this lands in `woodshedding` on day one. The rule:
+portable, no-UI/no-audio operation types belong in `woodshedding`; app
+persistence, selected-row state, engine handles, recorded buffers, and Xilem
+views stay in consuming crates.
+
+### Implementation phases: unifying Practice and Song
+
+- **U1 — Add an app-side `RehearsalElement` runtime next to `Card`.** Do this
+  before moving anything into `woodshedding`. Keep it name-based, serde-friendly,
+  and mechanically derived from today's app state. Add conversion from current
+  `Card` to a one-element rehearsal sequence. Keep U1 thin: implement only
+  current app behaviors (`Block` / `Arpeggiate`, `Bars` / `Manual`, manual
+  queue stepping). *Done when:* the current Rehearsal tab can render both old
+  Cards and new Elements, with no behavior loss.
+- **U2 — Compile `PracticeSet` into `RehearsalElement`s.** Replace
+  `PracticeItem`-specific rendering paths with `practice_set_to_rehearsal`.
+  Preserve `practice_bpm`, `practice_bars_per_item`, auto-advance, and the
+  current elapsed-seconds runner by mapping them into `AdvancePolicy::Bars`,
+  `AdvancePolicy::Seconds`, or `AdvancePolicy::Manual` as appropriate. Resolve
+  each element through one shared stage adapter. *Done when:* the Practice tab
+  is a generator/selector for a rehearsal queue, not a separate runner.
+- **U3 — Compile progressions into element sequences.** A selected
+  `Progression` produces one chord element per role, with key/root context and
+  a default block articulation. Later toggles can switch those elements to
+  arpeggiate/strum/etc. *Done when:* a ii-V-I can become a rehearsal queue in
+  one action and can be looped like any practice set.
+- **U4 — Compile Song bars into element sequences.** Keep
+  `woodshed-audio::Song` as the audio/bar engine for now; add an app-side
+  projection from `Song::bars` into rehearsal elements. Each bar becomes an
+  element (or repeated element when `length > 1`) with chord material, tempo,
+  meter, section label, click, and recorded-loop metadata. *Done when:* the Song
+  page and Rehearsal queue agree on cursor/current element, while the song
+  engine still owns recorded audio playback.
+
+  **Clock authority:** U4 is a projection boundary, not absorption. When a song
+  or recorded loop is active, `SongEngine` owns time and the rehearsal cursor
+  follows the song cursor. When free-practicing, the metronome grid or manual
+  advance owns time. Do not introduce a third clock in the rehearsal runtime.
+- **U5 — One stage resolver.** Replace duplicated code paths:
+  `load_card`, `positions_for_practice_item`, and song chord display should
+  converge on `resolve_rehearsal_element_for_stage`. It returns positions,
+  labels, selected voicing/shape, transport hints, and warnings if material no
+  longer resolves. *Done when:* Fretboard/Stage, Practice, Progression, Arpeggio,
+  and Song use the same realization path.
+
+  This is the highest-effort refactor in the series. Today scales/chords/
+  progressions/arpeggios/practice each compute `Vec<Position>` near their view
+  code, and `load_card` mostly restores indices + switches tabs. U5 is where
+  that work moves behind one resolver keyed by `RehearsalElement`.
+
+  **Open before U7:** instrument/articulation affordances. `Arpeggiate` makes
+  sense for fretted chord/voicing material; `Strum` does not apply to every
+  future instrument. Before articulation specs move into `woodshedding`, model
+  which instruments/materials support which articulations.
+- **U6 — Rehearsal page becomes queue/timeline + inspector.** The queue is the
+  canonical practice surface: select, reorder, loop, duplicate, remove, edit
+  articulation, edit timing/repeats. Practice and Song become ways to generate
+  or project this queue, not separate conceptual engines. *Done when:* a user can
+  build a custom sequence from chords/scales/progressions/exercises/song bars
+  and practice it from one surface.
+- **U7 — Promote stable pure types into `woodshedding`.** Once U1-U6 settle the
+  vocabulary, move the portable pieces (`MaterialRef`, `RealizationSpec`,
+  `ArticulationSpec`, `TimingSpec`, `AdvancePolicy`, sequence compilation
+  helpers) into `woodshedding`. Do not move Xilem state, settings adapters, audio
+  buffers, clock authority glue, or engine handles. *Done when:* future CLI/web/
+  app shells can consume the same rehearsal-operation core without depending on
+  `woodshed-xilem`.
+- **U8 — Cleanup / collapse old affordances.** Remove or demote the old separate
+  Practice runner state, redundant progression stepping, and tab-mirrored
+  `CardKind` assumptions. Keep browser/projection affordances only where they
+  help author material. Relationship explorer remains deferred.
+
+### Relationship to R5/R6
+
+The U-series **subsumes R5**. "Exercises as traversal over cards/compositions"
+becomes two explicit paths: exercise recipes can **generate** element sequences,
+or exercise patterns can **decorate** existing material as articulation. R6
+(relationship explorer) stays deferred and should remain a projection over the
+settled element/material graph, not a prerequisite for this work.
+
+### Validation gates
+
+- Existing `cargo test -p woodshedding` stays green throughout.
+- Add unit tests for conversion functions:
+  - `PracticeSet -> RehearsalElement` preserves item count and labels.
+  - `Progression source -> RehearsalElement` produces one chord element per role
+    with the expected chord roots in key.
+  - `Song projection -> RehearsalElement` preserves bar count/length, tempo,
+    meter, labels, chord refs, and cursor mapping.
+- Add app-level smoke checks before deleting old paths:
+  - mixed manual cards still load on the stage;
+  - a generated practice set auto-advances through the same queue cursor;
+  - a song bar cursor highlights the same element the queue considers current;
+  - old settings files without element queues still load through `serde(default)`.
+
 ## Decisions on the critique (Mark)
 
 1. **Rehearsal queue** — agreed. A queue of cards/compositions you step through
    is the missing backbone; today's tabs are a flat menu, not a practice flow.
-2. **Musical-object vocabulary (cards)** — agreed. Unify scale/chord/voicing/
-   progression/arpeggio/exercise under one `Card` vocabulary.
+2. **Musical-object vocabulary (cards)** — agreed for the R1 capture layer:
+   heterogeneous lens selections needed one portable queue item. The U-series
+   corrects the ontology: progression/exercise/arpeggio are not all atomic
+   material; they compile to or decorate rehearsal elements.
 3. **UI critique (cruft, dead space, stepper-arrow noise)** — agreed. Remove
    dev scaffolding, fill right-pane dead space with material, reduce the
    ◀▶-stepper grammar.
@@ -39,10 +246,11 @@ coordinate features, they are *card kinds* + *traversal modes* over one stage.
 
 ### My refinements (carried into the model)
 
-- **Card is a tagged union, not trait-soup.** One `enum Card { Scale, Chord,
-  Voicing, Progression, Arpeggio, Exercise }` with shared metadata (id, name,
-  tags, root/key context), not a `dyn Card` trait. Pattern-match at the
-  projection sites. Keeps it `serde`-trivial and avoids premature abstraction.
+- **R1 Card is a tagged union, not trait-soup.** The shipped adapter uses
+  `CardKind` variants for Scale/Chord/Progression/Exercise/Arpeggio with shared
+  metadata, not a `dyn Card` trait. Keep that serde-trivial shape while it is a
+  migration adapter, but do not promote the tab-shaped variants as final theory:
+  U-series splits atomic material from sequence generators and articulations.
 - **Rehearsal is the integration hot-spot.** Every projection (stage, song,
   queue) reads from the rehearsal layer; that's where the wiring concentrates.
   Build it as a thin owned model (`Rehearsal { queue: Vec<CardRef>, cursor }`),
@@ -86,12 +294,12 @@ yet touching the tab strip.
   shared context, not a card kind, and doesn't belong on the top bar. *Done
   when:* Settings holds preferences + tunings only; progression/exercise
   authoring lives on its lens. ✅ shipped — see Progress.
-- **R5 (later) — Exercises as traversal over cards/compositions.** Generalize
-  the exercise step-engine so an exercise can traverse *any* card or a
-  composition (not just its own stored steps): "play this progression as an
-  arpeggio run," "walk this scale in thirds." This is where exercise becomes the
-  *verb* the spine describes.
-- **R6 (later) — Relationship explorer.** Deferred per refinement above.
+- **R5 (folded into U-series) — Exercises as traversal over elements.**
+  Generalize the exercise step-engine so an exercise can generate rehearsal
+  elements or decorate existing material as an articulation: "play this
+  progression as an arpeggio run," "walk this scale in thirds." See U2/U5/U6.
+- **R6 (later) — Relationship explorer.** Deferred per refinement above and
+  still not part of the U-series implementation path.
 
 ### UI-polish backlog (fold into the phases, not a separate pass)
 

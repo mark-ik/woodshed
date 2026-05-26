@@ -74,8 +74,19 @@ section whenever a durable working insight emerges from a session.
   chords, and arbitrary tunings; the upstream models do not support
   those, and inheriting their data shape costs more than it saves. Build
   the theory crate from scratch.
+- **Gerund crates name activity cores**: `woodshedding` follows the same
+  convention as `murmuring` and `mooting`: the gerund names the portable
+  operation core that makes the activity possible, where such a core
+  exists. If a crate is tempting to describe generically as "data
+  structures," explain the activity those structures enable. Here,
+  woodshedding means turning musical material into playable practice:
+  identify material, realize it on an instrument, arrange it into
+  progressions/exercises/practice sets, and feed app shells that rehearse
+  it.
 - **Pure core, thin shell**: `crates/woodshedding` must remain pure data
-  + math — no I/O, no UI, no audio. The app crate consumes it.
+  + math — no I/O, no UI, no audio. It may model the portable operations
+  required for woodshedding, but app-specific rehearsal UI, persistence,
+  and audio engines live in consuming crates.
 - **Desktop first, mobile later**: ship to itch.io / Gumroad for desktop
   before attempting mobile. Iced mobile support is the eventual path;
   contributing to it is part of the project's broader value but does not

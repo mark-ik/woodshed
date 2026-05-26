@@ -39,9 +39,9 @@ xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # default features (which include `imaging_vello` for the renderer
 # backend) — disabling defaults causes the Masonry imaging layer to
 # panic with "a renderer backend feature is required" at first paint.
-xilem = { path = "../xilem/xilem", version = "0.4.0" }
-masonry = { path = "../xilem/masonry", version = "0.4.0" }
-masonry_winit = { path = "../xilem/masonry_winit", version = "0.4.0" }
+xilem = { path = "../../crates/xilem/xilem", version = "0.4.0" }
+masonry = { path = "../../crates/xilem/masonry", version = "0.4.0" }
+masonry_winit = { path = "../../crates/xilem/masonry_winit", version = "0.4.0" }
 winit = "0.30"
 
 # Audio
