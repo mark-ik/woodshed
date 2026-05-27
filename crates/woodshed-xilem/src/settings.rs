@@ -35,7 +35,7 @@ use audio_widgets::theme::{Seeds, color_from_hex, color_to_hex};
 
 use crate::theme::ThemeMode;
 use crate::{
-    ChromaticPc, ClickPattern, AccentMode, LabelMode, Rehearsal, SidebarVisibility, SurfaceModule,
+    ChromaticPc, ClickPattern, AccentMode, LabelMode, Set, SidebarVisibility, SurfaceModule,
     Tab, default_surface,
 };
 
@@ -251,10 +251,10 @@ pub struct Settings {
     /// User-authored exercises (additive).
     #[serde(default)]
     pub user_exercises: Vec<UserExerciseDef>,
-    /// The rehearsal queue (redesign R1). Additive: older saves load an
-    /// empty queue.
+    /// The set (redesign U1). Additive: older saves (which had a
+    /// differently-shaped `rehearsal` field) load an empty set.
     #[serde(default)]
-    pub rehearsal: Rehearsal,
+    pub set: Set,
     /// Name of the active user theme, or `None` to use the built-in
     /// `theme_mode`. A name that no longer resolves falls back to the
     /// built-in on load.
@@ -344,7 +344,7 @@ impl Default for Settings {
             user_tunings: Vec::new(),
             user_progressions: Vec::new(),
             user_exercises: Vec::new(),
-            rehearsal: Rehearsal::default(),
+            set: Set::default(),
             active_user_theme: None,
             active_instrument: instrument_to_str(Instrument::Guitar).to_string(),
             tuning_name: None,

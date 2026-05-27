@@ -531,94 +531,130 @@ impl SurfaceModule {
     }
 }
 
-/// Woodshed's musical-object vocabulary (rehearsal redesign, R1). A
-/// `Card` is a self-describing, persistable handle to one piece of
-/// practiceable material — captured from a lens together with the musical
-/// context (root, instrument) needed to re-realize it on the instrument
-/// stage later. Selections are stored by *name*, not by catalog index, so
-/// a catalog edit between sessions doesn't scramble a saved rehearsal
-/// queue. (`CardKind` is a tagged union rather than a `dyn Card` trait —
-/// keeps it serde-trivial and matches at the projection sites.)
+/// Woodshed's musical-object vocabulary (rehearsal redesign, U1). A
+/// `Set` is an ordered run of `Card`s you practice in sequence; a `Card`
+/// is one piece of material with enough context to put it on the neck and
+/// play it. Said as a teacher would: "take this card, the material is C
+/// minor pentatonic, in this setting, with this touch, hold it eight
+/// bars." Everything resolves by *name* at the edge, so a catalog edit
+/// between sessions can't scramble a saved set.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct Card {
-    /// Human-readable label, e.g. "C — Major scale", "Am7 · voicing 2".
-    name: String,
-    /// Musical root/key captured at the moment the card was made.
-    root: ChromaticPc,
-    /// Instrument the material was framed on (string adapter, see
-    /// `settings::instrument_to_str`); drives tuning lookup at realization.
-    instrument: String,
-    /// The material kind + its kind-specific selection.
-    kind: CardKind,
+    /// Human-readable label, e.g. "C minor — scale", "Am7 · voicing 2".
+    label: String,
+    /// What you're working on.
+    material: Material,
+    /// How it sits on the neck (the space axis).
+    setting: Setting,
+    /// How you play it.
+    touch: Touch,
+    /// Tempo / how long to stay on it.
+    timing: Timing,
+    /// Which recipe stamped this card (a one-time stamp, not a live
+    /// binding). `None` = hand-added.
+    from: Option<Recipe>,
 }
 
-/// The kind-specific payload of a [`Card`]. One variant per lens; the
-/// selection inside each is stored by name (catalog or user-authored —
-/// names are unique within their domain) so it survives catalog drift.
+/// The atomic, practiceable "what" of a card. Progressions / exercises /
+/// songs are *recipes* that fill a set with these, not variants here.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-enum CardKind {
-    Scale {
-        scale: String,
-    },
-    Chord {
-        chord: String,
-        voicing_idx: usize,
-        show_voicing: bool,
-    },
-    Progression {
-        progression: String,
-    },
-    Exercise {
-        exercise: String,
-    },
-    Arpeggio {
-        chord: String,
-        inversion: u8,
-        direction: ArpeggioDirection,
-    },
+enum Material {
+    Scale { name: String, root: ChromaticPc },
+    Chord { name: String, root: ChromaticPc },
+    /// A fixed playable sequence; a user/catalog exercise's steps live
+    /// here, referenced by name.
+    Riff { name: String },
 }
 
-impl CardKind {
-    /// Short kind tag for badges / grouping in the queue view.
+impl Material {
+    /// Short kind tag for badges in the set view.
     fn tag(&self) -> &'static str {
         match self {
             Self::Scale { .. } => "Scale",
             Self::Chord { .. } => "Chord",
-            Self::Progression { .. } => "Progression",
-            Self::Exercise { .. } => "Exercise",
-            Self::Arpeggio { .. } => "Arpeggio",
+            Self::Riff { .. } => "Riff",
         }
     }
 }
 
-/// The rehearsal layer (redesign spine): an ordered queue of cards the
-/// user steps through as live practice, plus a cursor into it. Every
-/// projection (queue view, and later the instrument stage) reads from
-/// here, so the wiring concentrates in one owned model rather than
-/// threading through each view. Persisted so a practice session survives
+/// Where a card came from: the recipe that stamped it.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+enum Recipe {
+    Progression { name: String, key: ChromaticPc },
+    Exercise { name: String },
+}
+
+/// How the card sits on the neck (the space axis): instrument setup +
+/// where/which-shape on the neck.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct Setting {
+    /// Instrument family (string adapter); drives tuning lookup.
+    instrument: String,
+    /// Specific tuning name, or `None` for the instrument default.
+    #[serde(default)]
+    tuning: Option<String>,
+    /// Capo position in frets (`None`/0 = open). Resolver applies the
+    /// pitch shift; the shape you finger is unchanged.
+    #[serde(default)]
+    capo: Option<u8>,
+    /// Selected voicing for chord material; `None` = all chord tones.
+    #[serde(default)]
+    voicing_idx: Option<usize>,
+}
+
+/// How you play the card.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+enum Touch {
+    #[default]
+    Block,
+    Arpeggiate { direction: ArpeggioDirection, inversion: u8 },
+}
+
+/// Tempo and how long to stay on a card.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct Timing {
+    #[serde(default)]
+    bpm: Option<f32>,
+    #[serde(default)]
+    hold: Hold,
+}
+
+/// How long to stay on a card before moving on. (U1 steps the set
+/// manually; richer holds arrive with the timeline in U6.)
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+enum Hold {
+    #[default]
+    Manual,
+    Bars(u8),
+    Seconds(f32),
+    Reps(u16),
+}
+
+/// A set: an ordered run of cards plus a cursor (the card on the stage).
+/// Every view (the stage, and later the timeline) reads from here, so the
+/// wiring concentrates in one owned model. Persisted so a session survives
 /// a restart.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-struct Rehearsal {
-    queue: Vec<Card>,
-    /// Index of the card currently loaded onto the stage. Meaningless
-    /// when `queue` is empty; clamped on mutation.
+struct Set {
+    cards: Vec<Card>,
+    /// Index of the card on the stage. Meaningless when `cards` is empty;
+    /// clamped on mutation.
     cursor: usize,
 }
 
-impl Rehearsal {
+impl Set {
     fn push(&mut self, card: Card) {
-        self.queue.push(card);
+        self.cards.push(card);
     }
 
-    /// Remove the card at `idx`, keeping the cursor pointing at a valid
-    /// (or one-past-shrunk) slot.
+    /// Remove the card at `idx`, keeping the cursor on a valid slot.
     fn remove(&mut self, idx: usize) {
-        if idx >= self.queue.len() {
+        if idx >= self.cards.len() {
             return;
         }
-        self.queue.remove(idx);
-        if self.cursor >= self.queue.len() {
-            self.cursor = self.queue.len().saturating_sub(1);
+        self.cards.remove(idx);
+        if self.cursor >= self.cards.len() {
+            self.cursor = self.cards.len().saturating_sub(1);
         }
     }
 
@@ -626,11 +662,11 @@ impl Rehearsal {
     /// keeping the cursor following the moved card if it was the cursor.
     fn move_card(&mut self, idx: usize, dir: i32) {
         let target = idx as i32 + dir;
-        if idx >= self.queue.len() || target < 0 || target as usize >= self.queue.len() {
+        if idx >= self.cards.len() || target < 0 || target as usize >= self.cards.len() {
             return;
         }
         let target = target as usize;
-        self.queue.swap(idx, target);
+        self.cards.swap(idx, target);
         if self.cursor == idx {
             self.cursor = target;
         } else if self.cursor == target {
@@ -984,9 +1020,9 @@ struct AppState {
     user_progressions: Vec<settings::UserProgressionDef>,
     /// User-authored exercises (runtime mirror of `Settings.user_exercises`).
     user_exercises: Vec<settings::UserExerciseDef>,
-    /// The rehearsal queue (redesign R1): cards collected from the lenses
-    /// for stepped practice. Persisted via `Settings.rehearsal`.
-    rehearsal: Rehearsal,
+    /// The set (redesign U1): cards collected from the lenses for stepped
+    /// practice. Persisted via `Settings.set`.
+    set: Set,
     /// Name of the active user theme, or `None` = use the built-in
     /// `theme_mode`.
     active_user: Option<String>,
@@ -1158,7 +1194,7 @@ impl AppState {
             user_tunings: Vec::new(),
             user_progressions: Vec::new(),
             user_exercises: Vec::new(),
-            rehearsal: Rehearsal::default(),
+            set: Set::default(),
             active_user: None,
             default_properties: Arc::new(build_default_properties(&Palette::default())),
             window_id: WindowId::next(),
@@ -1191,9 +1227,9 @@ impl AppState {
         self.user_tunings = s.user_tunings;
         self.user_progressions = s.user_progressions;
         self.user_exercises = s.user_exercises;
-        self.rehearsal = s.rehearsal;
-        if self.rehearsal.cursor >= self.rehearsal.queue.len() {
-            self.rehearsal.cursor = self.rehearsal.queue.len().saturating_sub(1);
+        self.set = s.set;
+        if self.set.cursor >= self.set.cards.len() {
+            self.set.cursor = self.set.cards.len().saturating_sub(1);
         }
         self.theme_mode = s.theme_mode;
         match s
@@ -1296,7 +1332,7 @@ impl AppState {
             user_tunings: self.user_tunings.clone(),
             user_progressions: self.user_progressions.clone(),
             user_exercises: self.user_exercises.clone(),
-            rehearsal: self.rehearsal.clone(),
+            set: self.set.clone(),
             active_user_theme: self.active_user.clone(),
             active_instrument: settings::instrument_to_str(self.active_instrument).to_string(),
             tuning_name: Some(self.fretboard.tuning.name.clone()),
@@ -1887,68 +1923,114 @@ impl AppState {
     /// has nothing selected (e.g. Progressions cold-start). The card
     /// stores selections by name + the shared root/instrument so it can
     /// be re-realized on the stage later.
-    fn capture_card(&self) -> Option<Card> {
+    fn capture_cards(&self) -> Vec<Card> {
         let root = self.root;
         let root_label = root.display();
-        let instrument = settings::instrument_to_str(self.active_instrument).to_string();
-        let (name, kind) = match self.tab {
+        // Fresh default setting for the active instrument (U1 leaves
+        // tuning/capo unset; the stage uses the live tuning).
+        let base_setting = || Setting {
+            instrument: settings::instrument_to_str(self.active_instrument).to_string(),
+            tuning: None,
+            capo: None,
+            voicing_idx: None,
+        };
+        match self.tab {
             Tab::Scales => {
                 let scale = self.current_scale().name.to_string();
-                (format!("{root_label} — {scale} scale"), CardKind::Scale { scale })
+                vec![Card {
+                    label: format!("{root_label} — {scale} scale"),
+                    material: Material::Scale { name: scale, root },
+                    setting: base_setting(),
+                    touch: Touch::Block,
+                    timing: Timing::default(),
+                    from: None,
+                }]
             }
             Tab::Chords => {
                 let chord = self.current_chord().name.to_string();
                 let voicing = self.chord_voicing_idx;
-                let name = if self.chord_show_voicing {
-                    format!("{root_label}{chord} · voicing {}", voicing + 1)
+                let (label, voicing_idx) = if self.chord_show_voicing {
+                    (format!("{root_label}{chord} · voicing {}", voicing + 1), Some(voicing))
                 } else {
-                    format!("{root_label}{chord} · tones")
+                    (format!("{root_label}{chord} · tones"), None)
                 };
-                (
-                    name,
-                    CardKind::Chord {
-                        chord,
-                        voicing_idx: voicing,
-                        show_voicing: self.chord_show_voicing,
-                    },
-                )
-            }
-            Tab::Progressions => {
-                let progression = self.current_progression_name()?;
-                (
-                    format!("{progression} in {root_label}"),
-                    CardKind::Progression { progression },
-                )
-            }
-            Tab::Exercises => {
-                let exercise = self.current_exercise_name()?;
-                (exercise.clone(), CardKind::Exercise { exercise })
+                vec![Card {
+                    label,
+                    material: Material::Chord { name: chord, root },
+                    setting: Setting { voicing_idx, ..base_setting() },
+                    touch: Touch::Block,
+                    timing: Timing::default(),
+                    from: None,
+                }]
             }
             Tab::Arpeggios => {
                 let chord = self.current_chord_for_arpeggio().name.to_string();
                 let inv = self.arpeggio_inversion;
-                let inv_label = if inv == 0 {
-                    String::new()
-                } else {
-                    format!(" · inv {inv}")
-                };
-                (
-                    format!("{root_label}{chord} arp{inv_label}"),
-                    CardKind::Arpeggio {
-                        chord,
-                        inversion: inv,
-                        direction: self.arpeggio_direction,
-                    },
-                )
+                let inv_label = if inv == 0 { String::new() } else { format!(" · inv {inv}") };
+                vec![Card {
+                    label: format!("{root_label}{chord} arp{inv_label}"),
+                    material: Material::Chord { name: chord, root },
+                    setting: base_setting(),
+                    touch: Touch::Arpeggiate { direction: self.arpeggio_direction, inversion: inv },
+                    timing: Timing::default(),
+                    from: None,
+                }]
             }
-            _ => return None,
-        };
-        Some(Card {
-            name,
-            root,
-            instrument,
-            kind,
-        })
+            // A progression is a recipe: it fills the set with one chord
+            // card per role (U3-lite; uses the same apply-in-key the lens
+            // already does). Each card is `from` the progression.
+            Tab::Progressions => {
+                let Some(name) = self.current_progression_name() else {
+                    return Vec::new();
+                };
+                let key_root = self.root.to_pitch(4);
+                let Some(major) = scale_catalog().iter().find(|s| s.name == "Major") else {
+                    return Vec::new();
+                };
+                let cat = progression_catalog();
+                let chords = if let Some(p) = cat.iter().find(|p| p.name == name) {
+                    p.apply_in_key(key_root, major).ok()
+                } else if let Some(def) = self.user_progressions.iter().find(|p| p.name == name) {
+                    apply_roles_in_key(&user_progression_roles(def), key_root, major).ok()
+                } else {
+                    None
+                };
+                let Some(chords) = chords else {
+                    return Vec::new();
+                };
+                chords
+                    .into_iter()
+                    .map(|c| {
+                        let croot = ChromaticPc::from_pc(c.root.midi().rem_euclid(12) as u8);
+                        Card {
+                            label: format_progression_chord_symbol(&c),
+                            material: Material::Chord {
+                                name: c.formula.name.to_string(),
+                                root: croot,
+                            },
+                            setting: base_setting(),
+                            touch: Touch::Block,
+                            timing: Timing::default(),
+                            from: Some(Recipe::Progression { name: name.clone(), key: root }),
+                        }
+                    })
+                    .collect()
+            }
+            Tab::Exercises => {
+                let Some(exercise) = self.current_exercise_name() else {
+                    return Vec::new();
+                };
+                vec![Card {
+                    label: exercise.clone(),
+                    material: Material::Riff { name: exercise.clone() },
+                    setting: base_setting(),
+                    touch: Touch::Block,
+                    timing: Timing::default(),
+                    from: Some(Recipe::Exercise { name: exercise }),
+                }]
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// The chord quality the arpeggio lens is built on (its `arpeggio_idx`
@@ -1958,11 +2040,11 @@ impl AppState {
         &cat[self.arpeggio_idx.min(cat.len() - 1)]
     }
 
-    /// Capture the active lens's material as a card and push it onto the
-    /// rehearsal queue. No-op when there's nothing to capture.
+    /// Capture the active lens's material as one or more cards and push
+    /// them onto the set. No-op when there's nothing to capture.
     fn rehearse_current(&mut self) {
-        if let Some(card) = self.capture_card() {
-            self.rehearsal.push(card);
+        for card in self.capture_cards() {
+            self.set.push(card);
         }
     }
 
@@ -1971,81 +2053,70 @@ impl AppState {
     /// lens-specific selection (resolved by name), and switch to the
     /// matching lens. Moves the rehearsal cursor to `idx`.
     fn load_card(&mut self, idx: usize) {
-        let Some(card) = self.rehearsal.queue.get(idx).cloned() else {
+        let Some(card) = self.set.cards.get(idx).cloned() else {
             return;
         };
-        self.rehearsal.cursor = idx;
-        self.root = card.root;
+        self.set.cursor = idx;
         // Restore the instrument family (best-effort: retunes to that
         // instrument's default tuning — a card stores the family, not a
         // specific custom tuning).
-        let instrument = settings::instrument_from_str(&card.instrument);
+        let instrument = settings::instrument_from_str(&card.setting.instrument);
         if instrument != self.active_instrument {
             if let Some(spec) = tuning_catalog().iter().find(|s| s.instrument == instrument) {
                 self.active_instrument = instrument;
                 self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
             }
         }
-        match card.kind {
-            CardKind::Scale { scale } => {
-                if let Some(i) = scale_catalog().iter().position(|s| s.name == scale) {
+        match &card.material {
+            Material::Scale { name, root } => {
+                self.root = *root;
+                if let Some(i) = scale_catalog().iter().position(|s| s.name == *name) {
                     self.scale_idx = i;
                 }
                 self.tab = Tab::Scales;
             }
-            CardKind::Chord {
-                chord,
-                voicing_idx,
-                show_voicing,
-            } => {
-                if let Some(i) = chord_catalog().iter().position(|c| c.name == chord) {
-                    self.chord_idx = i;
+            // A chord card lands on the Arpeggio lens when its touch is
+            // arpeggiate, otherwise the Chord lens.
+            Material::Chord { name, root } => {
+                self.root = *root;
+                match &card.touch {
+                    Touch::Arpeggiate { direction, inversion } => {
+                        if let Some(i) = chord_catalog().iter().position(|c| c.name == *name) {
+                            self.arpeggio_idx = i;
+                        }
+                        self.arpeggio_direction = *direction;
+                        self.arpeggio_inversion = *inversion;
+                        self.arpeggio_position_idx = 0;
+                        self.arpeggio_step_idx = 0;
+                        self.arpeggio_playing = false;
+                        self.tab = Tab::Arpeggios;
+                    }
+                    Touch::Block => {
+                        if let Some(i) = chord_catalog().iter().position(|c| c.name == *name) {
+                            self.chord_idx = i;
+                        }
+                        match card.setting.voicing_idx {
+                            Some(v) => {
+                                self.chord_voicing_idx = v;
+                                self.chord_show_voicing = true;
+                            }
+                            None => self.chord_show_voicing = false,
+                        }
+                        self.tab = Tab::Chords;
+                    }
                 }
-                self.chord_voicing_idx = voicing_idx;
-                self.chord_show_voicing = show_voicing;
-                self.tab = Tab::Chords;
             }
-            CardKind::Progression { progression } => {
-                let cat = progression_catalog();
-                if let Some(i) = cat.iter().position(|p| p.name == progression) {
-                    self.progression_idx = Some(i);
-                } else if let Some(pos) = self
-                    .user_progressions
-                    .iter()
-                    .position(|p| p.name == progression)
-                {
-                    self.progression_idx = Some(cat.len() + pos);
-                }
-                self.progression_expanded_chord = Some(0);
-                self.tab = Tab::Progressions;
-            }
-            CardKind::Exercise { exercise } => {
+            // A riff currently maps to an exercise (catalog or user) by name.
+            Material::Riff { name } => {
                 let cat = exercise_catalog();
-                if let Some(i) = cat.iter().position(|e| e.name == exercise) {
+                if let Some(i) = cat.iter().position(|e| e.name == *name) {
                     self.exercise_idx = i;
-                } else if let Some(pos) =
-                    self.user_exercises.iter().position(|e| e.name == exercise)
-                {
+                } else if let Some(pos) = self.user_exercises.iter().position(|e| e.name == *name) {
                     self.exercise_idx = cat.len() + pos;
                 }
                 self.exercise_step_idx = 0;
                 self.exercise_playing = false;
                 self.tab = Tab::Exercises;
-            }
-            CardKind::Arpeggio {
-                chord,
-                inversion,
-                direction,
-            } => {
-                if let Some(i) = chord_catalog().iter().position(|c| c.name == chord) {
-                    self.arpeggio_idx = i;
-                }
-                self.arpeggio_inversion = inversion;
-                self.arpeggio_direction = direction;
-                self.arpeggio_position_idx = 0;
-                self.arpeggio_step_idx = 0;
-                self.arpeggio_playing = false;
-                self.tab = Tab::Arpeggios;
             }
         }
         if tab_has_fretboard(self.tab) {
@@ -2053,14 +2124,14 @@ impl AppState {
         }
     }
 
-    /// Step the rehearsal cursor and load that card onto the stage
-    /// (clamped to the queue ends). No-op on an empty queue.
+    /// Step the set cursor and load that card onto the stage (clamped to
+    /// the ends). No-op on an empty set.
     fn rehearse_step(&mut self, dir: i32) {
-        let len = self.rehearsal.queue.len();
+        let len = self.set.cards.len();
         if len == 0 {
             return;
         }
-        let next = (self.rehearsal.cursor as i32 + dir).clamp(0, len as i32 - 1) as usize;
+        let next = (self.set.cursor as i32 + dir).clamp(0, len as i32 - 1) as usize;
         self.load_card(next);
     }
 
@@ -2357,7 +2428,7 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // and pushes it onto the rehearsal queue (redesign R1). Only on lens
     // tabs; the count badge shows the queue depth so the capture is
     // visible without leaving the lens.
-    let queue_len = state.rehearsal.queue.len();
+    let queue_len = state.set.cards.len();
     let rehearse_ctl: OneOf2<_, _> = if tab_has_fretboard(current_tab) {
         let rehearse_label = if queue_len > 0 {
             format!("➕ Rehearse ({queue_len})")
@@ -2514,9 +2585,9 @@ fn lens_bar(
     // Compact on purpose: just the cursor counter + ◀/▶. The card's
     // name/material is already shown prominently on the stage, so
     // repeating it here only makes this strip overflow narrow windows.
-    let queue_len = state.rehearsal.queue.len();
+    let queue_len = state.set.cards.len();
     let rehearse_strip: OneOf2<_, _> = if queue_len > 0 {
-        let cursor = state.rehearsal.cursor;
+        let cursor = state.set.cursor;
         OneOf2::A(
             flex_row((
                 button_sm("◀", |s: &mut AppState| s.rehearse_step(-1)),
@@ -2609,7 +2680,7 @@ where
 /// will grow into the practice-flow backbone (queue → stage stepping).
 fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let palette = state.palette;
-    let len = state.rehearsal.queue.len();
+    let len = state.set.cards.len();
 
     let title = flex_col((
         header_label(palette, "Rehearsal", TS_LG),
@@ -2642,9 +2713,9 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .gap(SP_2),
         ))
     } else {
-        let cursor = state.rehearsal.cursor;
+        let cursor = state.set.cursor;
         let mut rows: Vec<AnyFlexChild<AppState>> = Vec::new();
-        for (i, c) in state.rehearsal.queue.iter().enumerate() {
+        for (i, c) in state.set.cards.iter().enumerate() {
             let is_cursor = i == cursor;
             let name_color = if is_cursor { palette.tertiary } else { palette.text };
             let marker = if is_cursor { "▶" } else { " " };
@@ -2652,12 +2723,12 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 palette,
                 flex_row((
                     label(marker).text_size(TS_SM).color(palette.tertiary),
-                    dim_label(palette, c.kind.tag(), TS_XS),
-                    label(c.name.clone()).text_size(TS_SM).color(name_color).flex(1.0),
-                    button_sm("▲", move |s: &mut AppState| s.rehearsal.move_card(i, -1)),
-                    button_sm("▼", move |s: &mut AppState| s.rehearsal.move_card(i, 1)),
+                    dim_label(palette, c.material.tag(), TS_XS),
+                    label(c.label.clone()).text_size(TS_SM).color(name_color).flex(1.0),
+                    button_sm("▲", move |s: &mut AppState| s.set.move_card(i, -1)),
+                    button_sm("▼", move |s: &mut AppState| s.set.move_card(i, 1)),
                     text_button("Load", move |s: &mut AppState| s.load_card(i)),
-                    button_sm("✕", move |s: &mut AppState| s.rehearsal.remove(i)),
+                    button_sm("✕", move |s: &mut AppState| s.set.remove(i)),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .main_axis_alignment(MainAxisAlignment::Start)
@@ -2672,8 +2743,8 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         let clear = flex_row((
             FlexSpacer::Flex(1.0),
             text_button("Clear all", |s: &mut AppState| {
-                s.rehearsal.queue.clear();
-                s.rehearsal.cursor = 0;
+                s.set.cards.clear();
+                s.set.cursor = 0;
             }),
         ))
         .main_axis_alignment(MainAxisAlignment::End);
