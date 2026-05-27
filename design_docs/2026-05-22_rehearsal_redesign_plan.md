@@ -19,115 +19,197 @@ tab strip (Scales · Chords · Progressions · Exercises · Arpeggios) is the
 prototype's seam and the first thing to rework: those five are not five
 coordinate features, they are *card kinds* + *traversal modes* over one stage.
 
-## Next spine: rehearsal elements (agreed direction 2026-05-23)
+## Next spine: the set and its cards (agreed direction 2026-05-23)
 
-The R1/R2 `Card` queue proved material portability, but `CardKind` still mirrors
-the old tabs. The stronger model is a **rehearsal queue of elements played in
-sequence**, where each element owns enough context to say:
+> **Doc housekeeping:** this section is the live plan going forward. R1–R4
+> (below) are shipped foundation; when U1 begins, lead the doc with the card
+> model and demote the R-series to Progress/history so the file reads as one
+> roadmap, not two.
+
+The R1/R2 `Card` queue proved material portability, but its kinds still mirror
+the old tabs. The stronger model is a **set: cards played in sequence**, where
+each card owns enough context to say:
 
 - **what** material is being practiced;
-- **where/how** it is realized on the instrument;
-- **how** it is articulated or traversed;
-- **how long / how often** it should be rehearsed.
+- **where** it sits on the neck (its setting);
+- **how** it's played (its touch);
+- **how long** to stay on it (its timing).
 
-That is the shared shape the current **Fretboard**, **Practice**, and **Song**
+That is the shared shape the current **Stage**, **Practice**, and **Song**
 surfaces are all reaching for:
 
-- Fretboard/Stage wants the current element's instrument realization.
-- Practice wants named or generated element sequences with auto-advance.
-- Song wants bar/section element sequences with looping, audio, and per-bar
+- Stage wants the current card's setting on the neck.
+- Practice wants named or generated card sequences with auto-advance.
+- Song wants bar/section card sequences with looping, audio, and per-bar
   context.
-- Progressions are named templates that compile into chord elements.
-- Exercises are traversal/generation recipes that compile into elements or
-  decorate existing elements.
-- Arpeggios are articulations/traversals over chord or voicing material, not a
-  peer ontology beside chord.
+- Progressions, exercises, practice sets, and songs are **recipes** that fill a
+  set with cards.
+- Arpeggios are a **touch** over chord or voicing material, not a peer kind
+  beside chord.
 
 So the next implementation should not add yet another page. It should make
-Practice and Song compile into the same rehearsal runtime, then let their UIs
-be projections over that runtime.
+Practice and Song fill the same set, then let their UIs be **views** over it.
+
+### Two axes: neck (space) × set (time)
+
+Woodshed has two orthogonal axes, and they are the two halves of the card model:
+
+- **The neck is space.** Strings by frets, where a note lives. Movement here
+  (slide the capo, change the voicing, pan the fret window) changes *how the
+  current card sits on the neck* without moving through the session. This axis
+  is the card's **setting**.
+- **The set is time.** The horizontal sequence of cards. Movement here (advance
+  the cursor) changes *which card is current*; the neck reframes to follow. This
+  axis is the card's **material** + **touch** + **timing**.
+
+The case that confirms the model: a **capo** sits on the space axis. It's part
+of the instrument setup, where the card sits on the neck, so it's a **setting**
+field, not **material** (see the struct). Two visual "horizontals" must stay
+distinct: the capo slides along the neck's own fret axis (space); the set scrubs
+along time. They look alike and mean different things.
+
+This also locates the crate boundary: **space stays in Woodshed** (the neck
+rendering, the moat), while **the time axis travels** (the same sequence/timeline
+shape Strophe makes literal as recorded loops). Promote the time-axis types at
+U7; keep the neck rendering here.
 
 ### Target model
 
 Keep the first implementation boring and serializable. Names/ids resolve at the
-edge, just like R1 cards already do. Important split: `MaterialRef` is **atomic
-practiceable material**, not every thing the UI can name. Progressions,
-exercises, practice sets, and songs are sequence sources that compile/project
-into `Vec<RehearsalElement>`.
+edge, just like R1 cards already do. Important split: `Material` is **atomic
+practiceable material**, not everything the UI can name. Progressions,
+exercises, practice sets, and songs are **recipes** that fill a set with
+`Card`s.
 
 ```rust
-struct Rehearsal {
+struct Set {
     title: String,
-    source: Option<RehearsalSource>,
-    elements: Vec<RehearsalElement>,
+    cards: Vec<Card>,
     cursor: usize,
     loop_mode: LoopMode,
-    clock: ClockAuthority,
+    // No set-level `from` or `clock`: a set is heterogeneous (U6 mixes
+    // chords/scales/progressions/song bars), so provenance is per-card
+    // (`Card::from`) and the clock is derived from the card under the
+    // cursor, not stored. See "Where a card came from, and what keeps
+    // time" below.
 }
 
-struct RehearsalElement {
+struct Card {
     label: String,
-    material: MaterialRef,
-    realization: RealizationSpec,
-    articulation: ArticulationSpec,
-    timing: TimingSpec,
+    material: Material, // what you're working on
+    setting: Setting,   // where/how it sits on the neck
+    touch: Touch,       // how you play it
+    timing: Timing,     // how long to stay on it
+    // Where this card came from: which recipe stamped it. A one-time
+    // stamp, NOT a live binding: editing the card does not resync to its
+    // recipe, and re-running a recipe appends/replaces fresh cards rather
+    // than mutating these in place. `None` = hand-added. (Default
+    // decision; see below — flip to a span-level live binding only if
+    // recipe-sync is wanted.)
+    from: Option<Recipe>,
 }
 
-enum MaterialRef {
+enum Material {
     Scale { name: String, root: PitchRef },
     Chord { name: String, root: PitchRef },
-    // Optional later promotion if a saved voicing needs identity
-    // independent of "Chord + RealizationSpec::voicing_idx".
-    Voicing { chord: String, root: PitchRef, voicing_id: String },
+    // Do NOT add until a named-voicing-library feature pulls it. A
+    // specific voicing is expressible today as `Chord +
+    // Setting::voicing_idx`; a `Voicing` variant would create a second
+    // path to the same positions and force the U5 resolver to handle
+    // both. Add it only when a voicing needs identity divorced from a
+    // chord (a saved/named custom voicing).
+    // Voicing { chord: String, root: PitchRef, voicing_id: String },
     Riff { name: String }, // later
     NoteGroup { notes: Vec<PitchRef> }, // later
 }
 
-enum RehearsalSource {
-    Manual,
+// A recipe makes cards: a progression, a practice set, an exercise, or a
+// song each fills a set. No `Manual` variant: a hand-added card is
+// `from: None`. (One way to say "no recipe", not two.)
+enum Recipe {
     PracticeSet { name: String },
     Progression { name: String, key: PitchRef },
-    ExerciseRecipe { name: String },
-    SongProjection { song_name: String },
+    Exercise { name: String },
+    Song { name: String },
 }
 
-struct RealizationSpec {
+// The setting: how the card sits on the neck (the space axis).
+struct Setting {
     instrument: String,
     tuning: Option<String>,
     fret_window: Option<FretWindow>,
+    // Capo: part of the instrument setup, so it lives here on the space
+    // axis. It raises every open string by N frets — the shape you
+    // finger stays the same, the pitch it sounds rises — so the U5
+    // resolver applies the shift when it computes sounding notes. `None`
+    // = no capo. Distinct from `fret_window`, which only pans the view.
+    capo: Option<u8>,
+    // Some fields only apply to some material (voicing_idx is chord-only;
+    // a scale ignores it). Don't type this coupling: the U5 resolver
+    // *ignores* fields that don't apply to the material rather than
+    // erroring.
     voicing_idx: Option<usize>,
 }
 
-enum ArticulationSpec {
+// The touch: how you play the card.
+enum Touch {
     Block,
     Arpeggiate { direction: ArpeggioDirection },
-    ExercisePattern { name: String }, // decorator over existing material
+    ExercisePattern { name: String }, // a way of walking the material (e.g. in thirds)
     Strum { direction: StrumDirection }, // later, once affordances exist
 }
 
-struct TimingSpec {
+// The timing: tempo, meter, and how long to stay on the card.
+struct Timing {
     bpm: Option<f32>,
     meter: Option<TimeSignatureRef>,
-    advance: AdvancePolicy,
+    hold: Hold,
 }
 
-enum AdvancePolicy {
+// How long to stay on a card before moving on.
+enum Hold {
     Bars(u8),
     Seconds(f32),
-    Repetitions(u16),
+    Reps(u16),
     Manual,
 }
 
-enum ClockAuthority {
+// What keeps time. A resolver output, NOT a stored field. Derived from
+// the card under the cursor: a Song recipe or recorded loop → Song;
+// otherwise Metronome (if running) or Manual. This is what lets one set
+// interleave song-locked and free-practice cards.
+enum Clock {
     Manual,
-    MetronomeGrid,
-    SongEngine,
+    Metronome,
+    Song,
 }
 ```
 
 U1 should implement only the variants today's app exercises. The enum shape
 keeps room for the known consumers, but unused variants should not get behavior
 until U2/U3/U4 pulls them into use.
+
+#### Where a card comes from, and what keeps time
+
+Two properties that look set-global are actually per-card, because U6's set is
+heterogeneous (it mixes chords/scales/progressions/song bars in one sequence):
+
+- **Where a card came from: a one-time stamp (default).** A recipe
+  (`PracticeSet` / `Progression` / `Song`) *fills* the set with cards that each
+  carry a `from` label, then become editable clay. Editing a stamped card does
+  not resync to its recipe; re-running a recipe appends or replaces a fresh
+  batch. This keeps U6 ("reorder, duplicate, edit") simple and makes a mixed set
+  expressible (each card knows its own `from`, the set carries none). **Decision
+  flag:** the alternative is a *live* binding (change the progression's key and
+  its cards recompile in place), which needs `from` on a *span* of cards and a
+  defined regeneration step. Defaulting to one-time stamp; revisit only if
+  recipe-sync becomes a real want. The `Recipe -> Card` validation test can't be
+  written until this is locked, and the missing test is the tell.
+- **What keeps time: derived at the cursor.** Not stored; computed from the
+  current card (a `Song` recipe or recorded loop gives `Clock::Song`, else
+  `Clock::Metronome` / `Clock::Manual`). The cursor moving onto a song bar hands
+  time to the engine; moving back to a free scale returns it to the metronome.
+  Same rule U4 states, generalized so one set can interleave both.
 
 This does **not** mean all of this lands in `woodshedding` on day one. The rule:
 portable, no-UI/no-audio operation types belong in `woodshedding`; app
@@ -136,93 +218,102 @@ views stay in consuming crates.
 
 ### Implementation phases: unifying Practice and Song
 
-- **U1 — Add an app-side `RehearsalElement` runtime next to `Card`.** Do this
+- **U1 — Grow the shipped `Card` into the richer card, app-side.** Do this
   before moving anything into `woodshedding`. Keep it name-based, serde-friendly,
-  and mechanically derived from today's app state. Add conversion from current
-  `Card` to a one-element rehearsal sequence. Keep U1 thin: implement only
-  current app behaviors (`Block` / `Arpeggiate`, `Bars` / `Manual`, manual
-  queue stepping). *Done when:* the current Rehearsal tab can render both old
-  Cards and new Elements, with no behavior loss.
-- **U2 — Compile `PracticeSet` into `RehearsalElement`s.** Replace
-  `PracticeItem`-specific rendering paths with `practice_set_to_rehearsal`.
-  Preserve `practice_bpm`, `practice_bars_per_item`, auto-advance, and the
-  current elapsed-seconds runner by mapping them into `AdvancePolicy::Bars`,
-  `AdvancePolicy::Seconds`, or `AdvancePolicy::Manual` as appropriate. Resolve
-  each element through one shared stage adapter. *Done when:* the Practice tab
-  is a generator/selector for a rehearsal queue, not a separate runner.
-- **U3 — Compile progressions into element sequences.** A selected
-  `Progression` produces one chord element per role, with key/root context and
-  a default block articulation. Later toggles can switch those elements to
-  arpeggiate/strum/etc. *Done when:* a ii-V-I can become a rehearsal queue in
-  one action and can be looped like any practice set.
-- **U4 — Compile Song bars into element sequences.** Keep
-  `woodshed-audio::Song` as the audio/bar engine for now; add an app-side
-  projection from `Song::bars` into rehearsal elements. Each bar becomes an
-  element (or repeated element when `length > 1`) with chord material, tempo,
-  meter, section label, click, and recorded-loop metadata. *Done when:* the Song
-  page and Rehearsal queue agree on cursor/current element, while the song
-  engine still owns recorded audio playback.
+  and mechanically derived from today's app state: today's card (name + root +
+  kind) becomes a card with `material` / `setting` / `touch` / `timing`, behind
+  a `serde(default)` migration so old saved sets still load. Keep U1 thin:
+  implement only current behaviors (`Block` / `Arpeggiate`, `Hold::Bars` /
+  `Hold::Manual`, manual stepping). *Done when:* the set renders today's cards
+  unchanged on the richer shape, with no behavior loss.
+- **U2 — Fill a set from a `PracticeSet`.** Replace `PracticeItem`-specific
+  rendering paths with `practice_set_to_cards`. Preserve `practice_bpm`,
+  `practice_bars_per_item`, auto-advance, and the current elapsed-seconds runner
+  by mapping them onto `Hold::Bars`, `Hold::Seconds`, or `Hold::Manual` as
+  appropriate. Resolve each card through one shared stage adapter. *Done when:*
+  the Practice tab is a recipe that fills a set, not a separate runner.
+- **U3 — Fill a set from a progression.** A selected `Progression` produces one
+  chord card per role, with key/root context and a default `Block` touch. Later
+  toggles can switch those cards to arpeggiate/strum/etc. *Done when:* a ii-V-I
+  becomes a set in one action and loops like any practice set.
+- **U4 — Fill a set from Song bars.** Keep `woodshed-audio::Song` as the
+  audio/bar engine for now; add an app-side step that turns `Song::bars` into
+  cards. Each bar becomes a card (or a repeated card when `length > 1`) with
+  chord material, tempo, meter, section label, click, and recorded-loop
+  metadata. *Done when:* the Song page and the set agree on the cursor/current
+  card, while the song engine still owns recorded audio playback.
 
-  **Clock authority:** U4 is a projection boundary, not absorption. When a song
-  or recorded loop is active, `SongEngine` owns time and the rehearsal cursor
-  follows the song cursor. When free-practicing, the metronome grid or manual
-  advance owns time. Do not introduce a third clock in the rehearsal runtime.
-- **U5 — One stage resolver.** Replace duplicated code paths:
-  `load_card`, `positions_for_practice_item`, and song chord display should
-  converge on `resolve_rehearsal_element_for_stage`. It returns positions,
-  labels, selected voicing/shape, transport hints, and warnings if material no
-  longer resolves. *Done when:* Fretboard/Stage, Practice, Progression, Arpeggio,
-  and Song use the same realization path.
+  **What keeps time:** U4 is a view boundary, not absorption. When a song or
+  recorded loop is active, the engine owns time (`Clock::Song`) and the set
+  cursor follows the song cursor. When free-practicing, the metronome or manual
+  hold owns time. Do not add a third clock.
+- **U5 — One stage resolver.** Converge the duplicated paths (`load_card`,
+  `positions_for_practice_item`, and song chord display) onto
+  `resolve_card_for_stage`. It returns positions, labels, the selected
+  voicing/shape, transport hints, and warnings if material no longer resolves.
+  *Done when:* Stage, Practice, Progression, Arpeggio, and Song use the same
+  resolve path.
 
   This is the highest-effort refactor in the series. Today scales/chords/
   progressions/arpeggios/practice each compute `Vec<Position>` near their view
-  code, and `load_card` mostly restores indices + switches tabs. U5 is where
-  that work moves behind one resolver keyed by `RehearsalElement`.
+  code, and `load_card` mostly restores indices and switches tabs. U5 is where
+  that work moves behind one resolver keyed by a `Card`.
 
-  **Open before U7:** instrument/articulation affordances. `Arpeggiate` makes
-  sense for fretted chord/voicing material; `Strum` does not apply to every
-  future instrument. Before articulation specs move into `woodshedding`, model
-  which instruments/materials support which articulations.
-- **U6 — Rehearsal page becomes queue/timeline + inspector.** The queue is the
-  canonical practice surface: select, reorder, loop, duplicate, remove, edit
-  articulation, edit timing/repeats. Practice and Song become ways to generate
-  or project this queue, not separate conceptual engines. *Done when:* a user can
-  build a custom sequence from chords/scales/progressions/exercises/song bars
-  and practice it from one surface.
+  **Open before U7:** instrument/touch affordances. `Arpeggiate` makes sense for
+  fretted chord/voicing material; `Strum` does not apply to every future
+  instrument. Before touch types move into `woodshedding`, model which
+  instruments/materials support which touches.
+- **U6 — The set becomes a horizontal timeline track + inspector.** The set is
+  the time axis, so render it as a **horizontal lane of cards with a playhead**,
+  running under the neck, not the vertical list R2 shipped (that was a first
+  cut; supersede it). The lane is the canonical practice surface: select,
+  reorder (drag along the lane), loop, duplicate, remove, and edit the current
+  card's touch/timing/setting in an inspector. Because it's one lane, **Practice
+  and Song stop being separate runners and become the same track**: a practice
+  set, a progression, and a song's bars all fill the one horizontal stream,
+  which is also the shape Strophe's loop timeline takes. *Done when:* a user can
+  build a set from chords / scales / progressions / exercises / song bars and
+  scrub/play it from one horizontal surface, with the neck reframing per card.
 - **U7 — Promote stable pure types into `woodshedding`.** Once U1-U6 settle the
-  vocabulary, move the portable pieces (`MaterialRef`, `RealizationSpec`,
-  `ArticulationSpec`, `TimingSpec`, `AdvancePolicy`, sequence compilation
-  helpers) into `woodshedding`. Do not move Xilem state, settings adapters, audio
-  buffers, clock authority glue, or engine handles. *Done when:* future CLI/web/
-  app shells can consume the same rehearsal-operation core without depending on
-  `woodshed-xilem`.
+  vocabulary, move the portable pieces (`Material`, `Setting`, `Touch`,
+  `Timing`, `Hold`, recipe-compilation helpers) into `woodshedding`. Do not move
+  Xilem state, settings adapters, audio buffers, clock glue, or engine handles.
+  *Done when:* future CLI/web/app shells can consume the same card/set core
+  without depending on `woodshed-xilem`.
 - **U8 — Cleanup / collapse old affordances.** Remove or demote the old separate
-  Practice runner state, redundant progression stepping, and tab-mirrored
-  `CardKind` assumptions. Keep browser/projection affordances only where they
-  help author material. Relationship explorer remains deferred.
+  Practice runner state, redundant progression stepping, and tab-mirrored card
+  kinds. Keep browse/view affordances only where they help author material.
+  Relationship explorer remains deferred.
 
 ### Relationship to R5/R6
 
 The U-series **subsumes R5**. "Exercises as traversal over cards/compositions"
-becomes two explicit paths: exercise recipes can **generate** element sequences,
-or exercise patterns can **decorate** existing material as articulation. R6
-(relationship explorer) stays deferred and should remain a projection over the
-settled element/material graph, not a prerequisite for this work.
+becomes two explicit paths: an exercise recipe can **fill** a set with cards, or
+an exercise pattern can **decorate** existing material as a `Touch`. R6
+(relationship explorer) stays deferred and should remain a view over the settled
+card/material graph, not a prerequisite for this work.
 
 ### Validation gates
 
 - Existing `cargo test -p woodshedding` stays green throughout.
 - Add unit tests for conversion functions:
-  - `PracticeSet -> RehearsalElement` preserves item count and labels.
-  - `Progression source -> RehearsalElement` produces one chord element per role
-    with the expected chord roots in key.
-  - `Song projection -> RehearsalElement` preserves bar count/length, tempo,
-    meter, labels, chord refs, and cursor mapping.
+  - `PracticeSet -> Card`s preserves item count and labels, and tags each card's
+    `from` with the recipe.
+  - `Progression -> Card`s produces one chord card per role with the expected
+    chord roots in key.
+  - `Song -> Card`s preserves bar count/length, tempo, meter, labels, chord
+    refs, and cursor mapping.
+  - One-time-stamp behavior: editing a stamped card, then re-running its recipe,
+    appends/replaces rather than mutating the edited card in place (locks in the
+    "where a card came from" decision above).
+  - Clock is derived correctly: a set mixing a song card and a free-practice
+    card reports `Clock::Song` on the former and `Clock::Metronome` / `Manual`
+    on the latter at the cursor.
 - Add app-level smoke checks before deleting old paths:
-  - mixed manual cards still load on the stage;
-  - a generated practice set auto-advances through the same queue cursor;
-  - a song bar cursor highlights the same element the queue considers current;
-  - old settings files without element queues still load through `serde(default)`.
+  - mixed hand-added cards still load on the stage;
+  - a practice set auto-advances through the same set cursor;
+  - a song bar cursor highlights the same card the set considers current;
+  - old settings files without saved sets still load through `serde(default)`.
 
 ## Decisions on the critique (Mark)
 
