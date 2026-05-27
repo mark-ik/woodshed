@@ -586,6 +586,15 @@ enum Recipe {
     Song { name: String },
 }
 
+/// A window onto the neck: the first visible fret and how many frets
+/// wide. A card can pin one (e.g. a practice item's hand position); when
+/// `None` the stage uses the live fret window.
+#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct FretWindow {
+    start: u8,
+    span: u8,
+}
+
 /// How the card sits on the neck (the space axis): instrument setup +
 /// where/which-shape on the neck.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -602,6 +611,10 @@ struct Setting {
     /// Selected voicing for chord material; `None` = all chord tones.
     #[serde(default)]
     voicing_idx: Option<usize>,
+    /// Pinned neck window (e.g. a practice item's hand position); `None`
+    /// = use the live fret window. Read by `resolve_card_for_stage`.
+    #[serde(default)]
+    fret_window: Option<FretWindow>,
 }
 
 /// How you play the card.
@@ -690,6 +703,31 @@ impl Set {
     }
 }
 
+/// What a card puts on the neck (U5): the resolved dots + labels, an
+/// optional pinned window, and a warning when the material no longer
+/// resolves. The one shape every stage consumer renders, computed by
+/// [`AppState::resolve_card_for_stage`].
+struct StageRender {
+    positions: Vec<Position>,
+    labels: Vec<String>,
+    /// Window the card asks for (`None` = use the live fret window).
+    fret_window: Option<FretWindow>,
+    /// Set when the card's material couldn't be resolved (renamed /
+    /// removed catalog entry); the caller shows it instead of an empty neck.
+    warning: Option<String>,
+}
+
+impl StageRender {
+    fn empty(warning: String) -> Self {
+        Self {
+            positions: Vec::new(),
+            labels: Vec::new(),
+            fret_window: None,
+            warning: Some(warning),
+        }
+    }
+}
+
 /// Total frets in the fretboard *model* (positions are computed up to
 /// here). The visible display is a window of `fret_span` frets starting
 /// at `fret_start`; this is the ceiling that window can slide to.
@@ -749,12 +787,6 @@ fn practice_item_to_card(
     bars: u8,
     set_name: &str,
 ) -> Card {
-    let setting = Setting {
-        instrument: instrument.to_string(),
-        tuning: None,
-        capo: None,
-        voicing_idx: None,
-    };
     let timing = Timing {
         bpm: Some(bpm),
         hold: Hold::Bars(bars),
@@ -762,23 +794,40 @@ fn practice_item_to_card(
     let from = Some(Recipe::PracticeSet {
         name: set_name.to_string(),
     });
-    let material = match item {
-        PracticeItem::Scale { formula, root, .. } => Material::Scale {
-            name: formula.name.to_string(),
-            root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
-        },
-        PracticeItem::Chord { formula, root, .. } => Material::Chord {
-            name: formula.name.to_string(),
-            root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
-        },
-        PracticeItem::Exercise { exercise, .. } => Material::Riff {
-            name: exercise.name.to_string(),
-        },
+    // Scale/chord items pin their 5-fret hand position as the card's
+    // fret window; exercises span the neck (no window).
+    let (material, fret_window) = match item {
+        PracticeItem::Scale { formula, root, position } => (
+            Material::Scale {
+                name: formula.name.to_string(),
+                root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+            },
+            Some(FretWindow { start: *position, span: 5 }),
+        ),
+        PracticeItem::Chord { formula, root, position } => (
+            Material::Chord {
+                name: formula.name.to_string(),
+                root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+            },
+            Some(FretWindow { start: *position, span: 5 }),
+        ),
+        PracticeItem::Exercise { exercise, .. } => (
+            Material::Riff {
+                name: exercise.name.to_string(),
+            },
+            None,
+        ),
     };
     Card {
         label: item.label(),
         material,
-        setting,
+        setting: Setting {
+            instrument: instrument.to_string(),
+            tuning: None,
+            capo: None,
+            voicing_idx: None,
+            fret_window,
+        },
         touch: Touch::Block,
         timing,
         from,
@@ -824,6 +873,7 @@ fn song_to_cards(song: &Song, instrument: &str) -> Vec<Card> {
                     tuning: None,
                     capo: None,
                     voicing_idx: None,
+                    fret_window: None,
                 },
                 touch: Touch::Block,
                 timing: Timing {
@@ -2046,6 +2096,7 @@ impl AppState {
             tuning: None,
             capo: None,
             voicing_idx: None,
+            fret_window: None,
         };
         match self.tab {
             Tab::Scales => {
@@ -2266,6 +2317,115 @@ impl AppState {
         }
         if tab_has_fretboard(self.tab) {
             self.last_lens = self.tab;
+        }
+    }
+
+    /// The canonical "card → neck" path (U5): given a card, compute the
+    /// dots + labels + window to draw, resolving its material by name
+    /// against the live fretboard. One resolver the stage consumers share,
+    /// instead of each lens recomputing positions. (U7 will lift the
+    /// portable core into `woodshedding`; the user-exercise lookup stays
+    /// app-side.)
+    fn resolve_card_for_stage(&self, card: &Card) -> StageRender {
+        let fb = &self.fretboard;
+        match &card.material {
+            Material::Scale { name, root } => {
+                let Some(formula) = scale_catalog().iter().find(|s| s.name == *name) else {
+                    return StageRender::empty(format!("scale \"{name}\" not found"));
+                };
+                let mut positions = fb
+                    .positions_for_scale(formula, root.to_pitch(4))
+                    .unwrap_or_default();
+                apply_fret_window(&mut positions, card.setting.fret_window);
+                let labels = compute_labels(LabelMode::Notes, &positions);
+                StageRender {
+                    positions,
+                    labels,
+                    fret_window: card.setting.fret_window,
+                    warning: None,
+                }
+            }
+            Material::Chord { name, root } => {
+                let Some(formula) = chord_catalog().iter().find(|c| c.name == *name) else {
+                    return StageRender::empty(format!("chord \"{name}\" not found"));
+                };
+                let root_pitch = root.to_pitch(4);
+                // A specific voicing renders that shape, windowed to it;
+                // otherwise every chord tone across the neck (the "tones"
+                // view), optionally clamped to a pinned window.
+                if let Some(vidx) = card.setting.voicing_idx {
+                    let voicings = enumerate_voicings(fb, formula, root_pitch);
+                    if let Some(v) = voicings.get(vidx) {
+                        let positions: Vec<Position> = voicing_to_positions(v)
+                            .into_iter()
+                            .filter(|p| p.fret > 0)
+                            .collect();
+                        let labels = compute_labels(LabelMode::Notes, &positions);
+                        let start = positions
+                            .iter()
+                            .map(|p| p.fret)
+                            .min()
+                            .unwrap_or(1)
+                            .saturating_sub(1);
+                        return StageRender {
+                            positions,
+                            labels,
+                            fret_window: Some(FretWindow { start, span: 5 }),
+                            warning: None,
+                        };
+                    }
+                }
+                let mut positions = fb
+                    .positions_for_chord(formula, root_pitch)
+                    .unwrap_or_default();
+                apply_fret_window(&mut positions, card.setting.fret_window);
+                let labels = compute_labels(LabelMode::Notes, &positions);
+                StageRender {
+                    positions,
+                    labels,
+                    fret_window: card.setting.fret_window,
+                    warning: None,
+                }
+            }
+            Material::Riff { name } => {
+                let steps: Vec<ExerciseStep> = if let Some(ex) =
+                    exercise_catalog().iter().find(|e| e.name == *name)
+                {
+                    ex.generate(
+                        &fb.tuning,
+                        &ExerciseParams {
+                            starting_fret: 1,
+                            direction: ExerciseDirection::Both,
+                            trill_repeats: 8,
+                        },
+                    )
+                } else if let Some(def) = self.user_exercises.iter().find(|e| e.name == *name) {
+                    user_exercise_steps(def)
+                } else {
+                    return StageRender::empty(format!("exercise \"{name}\" not found"));
+                };
+                let mut seen = std::collections::HashSet::new();
+                let positions: Vec<Position> = steps
+                    .into_iter()
+                    .filter(|s| seen.insert((s.string_index, s.fret)))
+                    .map(|s| Position {
+                        string_index: s.string_index,
+                        fret: s.fret,
+                        pitch: fb.pitch_at(s.string_index, s.fret),
+                        interval_from_root: None,
+                    })
+                    .collect();
+                let labels = positions
+                    .iter()
+                    .map(|p| format!("{}{}", p.pitch.name, accidental_short(p.pitch.accidental)))
+                    .collect();
+                StageRender {
+                    positions,
+                    labels,
+                    fret_window: None,
+                    warning: None,
+                }
+            }
         }
     }
 
@@ -4877,10 +5037,17 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let bars = state.practice_bars_per_item;
     let playing = state.practice_playing;
 
-    // Compute the fretboard positions for the current item.
+    // Compute the fretboard positions for the current item via the shared
+    // stage resolver (U5): the item becomes a card, then resolves like any
+    // other. Its hand position rides along as the card's fret window.
     let (positions, labels) = state
         .current_practice_item()
-        .map(|item| positions_for_practice_item(item, &state.fretboard))
+        .map(|item| {
+            let instrument = settings::instrument_to_str(state.active_instrument).to_string();
+            let card = practice_item_to_card(item, &instrument, bpm, bars, "");
+            let render = state.resolve_card_for_stage(&card);
+            (render.positions, render.labels)
+        })
         .unwrap_or_default();
     let board = state.fretboard.clone();
 
@@ -5145,61 +5312,12 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 /// Translate a [`PracticeItem`] into the fretboard positions + labels
 /// the visualization should display. Each variant has its own filter
 /// rules (scale / chord position window, exercise dedup).
-fn positions_for_practice_item(
-    item: &PracticeItem,
-    fretboard: &Fretboard,
-) -> (Vec<Position>, Vec<String>) {
-    match item {
-        PracticeItem::Scale { formula, root, position } => {
-            let all = fretboard
-                .positions_for_scale(formula, *root)
-                .unwrap_or_default();
-            let window_end = position.saturating_add(4);
-            let pos: Vec<Position> = all
-                .into_iter()
-                .filter(|p| p.fret == 0 || (p.fret >= *position && p.fret <= window_end))
-                .collect();
-            let labels = compute_labels(LabelMode::Notes, &pos);
-            (pos, labels)
-        }
-        PracticeItem::Chord { formula, root, position } => {
-            let all = fretboard
-                .positions_for_chord(formula, *root)
-                .unwrap_or_default();
-            let window_end = position.saturating_add(4);
-            let pos: Vec<Position> = all
-                .into_iter()
-                .filter(|p| p.fret == 0 || (p.fret >= *position && p.fret <= window_end))
-                .collect();
-            let labels = compute_labels(LabelMode::Notes, &pos);
-            (pos, labels)
-        }
-        PracticeItem::Exercise { exercise, starting_fret } => {
-            let steps = exercise.generate(
-                &fretboard.tuning,
-                &ExerciseParams {
-                    starting_fret: *starting_fret,
-                    direction: ExerciseDirection::Both,
-                    trill_repeats: 8,
-                },
-            );
-            let mut seen = std::collections::HashSet::new();
-            let pos: Vec<Position> = steps
-                .into_iter()
-                .filter(|s| seen.insert((s.string_index, s.fret)))
-                .map(|s| Position {
-                    string_index: s.string_index,
-                    fret: s.fret,
-                    pitch: fretboard.pitch_at(s.string_index, s.fret),
-                    interval_from_root: None,
-                })
-                .collect();
-            let labels: Vec<String> = pos
-                .iter()
-                .map(|p| format!("{}{}", p.pitch.name, accidental_short(p.pitch.accidental)))
-                .collect();
-            (pos, labels)
-        }
+/// Clamp positions to a pinned neck window (open strings always shown).
+/// No-op when the window is `None`. Used by `resolve_card_for_stage`.
+fn apply_fret_window(positions: &mut Vec<Position>, window: Option<FretWindow>) {
+    if let Some(w) = window {
+        let end = w.start.saturating_add(w.span.saturating_sub(1));
+        positions.retain(|p| p.fret == 0 || (p.fret >= w.start && p.fret <= end));
     }
 }
 
