@@ -631,6 +631,16 @@ enum Hold {
     Reps(u16),
 }
 
+/// Whether stepping past the end of the set wraps around.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum LoopMode {
+    #[default]
+    Off,
+    /// Wrap: stepping past the last card returns to the first (and vice
+    /// versa), so a set loops like a practice set.
+    All,
+}
+
 /// A set: an ordered run of cards plus a cursor (the card on the stage).
 /// Every view (the stage, and later the timeline) reads from here, so the
 /// wiring concentrates in one owned model. Persisted so a session survives
@@ -641,6 +651,9 @@ struct Set {
     /// Index of the card on the stage. Meaningless when `cards` is empty;
     /// clamped on mutation.
     cursor: usize,
+    /// Whether stepping wraps at the ends.
+    #[serde(default)]
+    loop_mode: LoopMode,
 }
 
 impl Set {
@@ -2194,15 +2207,36 @@ impl AppState {
         }
     }
 
-    /// Step the set cursor and load that card onto the stage (clamped to
-    /// the ends). No-op on an empty set.
+    /// Step the set cursor and load that card onto the stage. Wraps at the
+    /// ends when the set is looping, otherwise clamps. No-op on an empty set.
     fn rehearse_step(&mut self, dir: i32) {
         let len = self.set.cards.len();
         if len == 0 {
             return;
         }
-        let next = (self.set.cursor as i32 + dir).clamp(0, len as i32 - 1) as usize;
+        let raw = self.set.cursor as i32 + dir;
+        let next = match self.set.loop_mode {
+            LoopMode::All => raw.rem_euclid(len as i32) as usize,
+            LoopMode::Off => raw.clamp(0, len as i32 - 1) as usize,
+        };
         self.load_card(next);
+    }
+
+    /// Cycle a chord card's touch (Block ⇄ Arpeggiate). No-op for material
+    /// where it doesn't apply (scales/riffs play as written). Lets a
+    /// progression's chord run be switched to an arpeggiated one (U3).
+    fn cycle_card_touch(&mut self, idx: usize) {
+        if let Some(card) = self.set.cards.get_mut(idx) {
+            if matches!(card.material, Material::Chord { .. }) {
+                card.touch = match card.touch {
+                    Touch::Block => Touch::Arpeggiate {
+                        direction: ArpeggioDirection::UpDown,
+                        inversion: 0,
+                    },
+                    Touch::Arpeggiate { .. } => Touch::Block,
+                };
+            }
+        }
     }
 
     /// Rebuild the metronome pattern from the current settings and
@@ -2789,12 +2823,24 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             let is_cursor = i == cursor;
             let name_color = if is_cursor { palette.tertiary } else { palette.text };
             let marker = if is_cursor { "▶" } else { " " };
+            // Touch toggle, only where it means something (chord cards):
+            // flip Block ⇄ Arp. Other material plays as written.
+            let touch_ctl: OneOf2<_, _> = if matches!(c.material, Material::Chord { .. }) {
+                let t = match c.touch {
+                    Touch::Block => "Block",
+                    Touch::Arpeggiate { .. } => "Arp",
+                };
+                OneOf2::A(button_sm(t, move |s: &mut AppState| s.cycle_card_touch(i)))
+            } else {
+                OneOf2::B(sized_box(label("")).fixed_width(SP_0))
+            };
             let row = card(
                 palette,
                 flex_row((
                     label(marker).text_size(TS_SM).color(palette.tertiary),
                     dim_label(palette, c.material.tag(), TS_XS),
                     label(c.label.clone()).text_size(TS_SM).color(name_color).flex(1.0),
+                    touch_ctl,
                     button_sm("▲", move |s: &mut AppState| s.set.move_card(i, -1)),
                     button_sm("▼", move |s: &mut AppState| s.set.move_card(i, 1)),
                     text_button("Load", move |s: &mut AppState| s.load_card(i)),
@@ -2810,14 +2856,22 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .main_axis_alignment(MainAxisAlignment::Start)
             .gap(SP_2);
+        let loop_on = state.set.loop_mode == LoopMode::All;
         let clear = flex_row((
+            text_button(if loop_on { "Loop: on" } else { "Loop: off" }, |s: &mut AppState| {
+                s.set.loop_mode = if s.set.loop_mode == LoopMode::All {
+                    LoopMode::Off
+                } else {
+                    LoopMode::All
+                };
+            }),
             FlexSpacer::Flex(1.0),
             text_button("Clear all", |s: &mut AppState| {
                 s.set.cards.clear();
                 s.set.cursor = 0;
             }),
         ))
-        .main_axis_alignment(MainAxisAlignment::End);
+        .main_axis_alignment(MainAxisAlignment::Start);
         OneOf2::B(
             flex_col((list, clear))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
