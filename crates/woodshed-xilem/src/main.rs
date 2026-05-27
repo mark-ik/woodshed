@@ -582,6 +582,7 @@ impl Material {
 enum Recipe {
     Progression { name: String, key: ChromaticPc },
     Exercise { name: String },
+    PracticeSet { name: String },
 }
 
 /// How the card sits on the neck (the space axis): instrument setup +
@@ -721,6 +722,53 @@ fn user_exercise_steps(def: &settings::UserExerciseDef) -> Vec<ExerciseStep> {
             finger: s.finger,
         })
         .collect()
+}
+
+/// Convert one [`PracticeItem`] into a rehearsal [`Card`] (U2). Scales and
+/// chords carry their root + name; an exercise becomes a `Riff`. The
+/// item's hand `position` isn't pinned yet (the stage uses the live fret
+/// window); a per-card fret window arrives with the U5 resolver.
+fn practice_item_to_card(
+    item: &PracticeItem,
+    instrument: &str,
+    bpm: f32,
+    bars: u8,
+    set_name: &str,
+) -> Card {
+    let setting = Setting {
+        instrument: instrument.to_string(),
+        tuning: None,
+        capo: None,
+        voicing_idx: None,
+    };
+    let timing = Timing {
+        bpm: Some(bpm),
+        hold: Hold::Bars(bars),
+    };
+    let from = Some(Recipe::PracticeSet {
+        name: set_name.to_string(),
+    });
+    let material = match item {
+        PracticeItem::Scale { formula, root, .. } => Material::Scale {
+            name: formula.name.to_string(),
+            root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+        },
+        PracticeItem::Chord { formula, root, .. } => Material::Chord {
+            name: formula.name.to_string(),
+            root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+        },
+        PracticeItem::Exercise { exercise, .. } => Material::Riff {
+            name: exercise.name.to_string(),
+        },
+    };
+    Card {
+        label: item.label(),
+        material,
+        setting,
+        touch: Touch::Block,
+        timing,
+        from,
+    }
 }
 
 /// The default instrument-surface composition: just the fretboard.
@@ -2044,6 +2092,28 @@ impl AppState {
     /// them onto the set. No-op when there's nothing to capture.
     fn rehearse_current(&mut self) {
         for card in self.capture_cards() {
+            self.set.push(card);
+        }
+    }
+
+    /// Recipe: turn the selected practice set into cards on the set (U2).
+    /// Each item becomes a card holding the practice tempo and a
+    /// bars-per-item `Hold`, tagged `from` the practice set. The Practice
+    /// tab is a way to *fill* a set, not its own runner.
+    fn fill_set_from_practice(&mut self) {
+        let Some(set) = self.current_practice_set() else {
+            return;
+        };
+        let name = set.name.clone();
+        let instrument = settings::instrument_to_str(self.active_instrument).to_string();
+        let bpm = self.practice_bpm;
+        let bars = self.practice_bars_per_item;
+        let cards: Vec<Card> = set
+            .items
+            .iter()
+            .map(|item| practice_item_to_card(item, &instrument, bpm, bars, &name))
+            .collect();
+        for card in cards {
             self.set.push(card);
         }
     }
@@ -4790,6 +4860,13 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
+        // Recipe action (U2): turn this practice set into cards on the
+        // set, then jump to the Rehearsal tab to see them. The Practice
+        // tab is a way to *fill* a set at the current tempo / bars-per-item.
+        text_button("➕ Rehearse this set", |s: &mut AppState| {
+            s.fill_set_from_practice();
+            s.tab = Tab::Rehearsal;
+        }),
         // BPM picker — double-click the readout to edit, slider for
         // drag, ± for clicky tweaks.
         editable_big_number(
