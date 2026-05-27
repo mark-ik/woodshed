@@ -482,3 +482,29 @@ yet touching the tab strip.
     `settings_view` (≈190 lines spliced out); Settings now = Theme + Custom
     tunings + Persistence. Deleted the now-dead `apply_user_progression` /
     `apply_user_exercise` (the lens list rows select directly). No new warnings.
+- 2026-05-23: **U1–U5 shipped (each builds + runs clean; committed in order).**
+  The set-and-cards spine is now real code.
+  - **U1** (`6549cb4`): replaced `Card`/`CardKind`/`Rehearsal` with the rich
+    model — `Set { cards, cursor }`, `Card { label, material, setting, touch,
+    timing, from }`, atomic `Material` (Scale/Chord/Riff), `Setting`, `Touch`
+    (Block/Arpeggiate), `Timing`+`Hold`, `Recipe`. Capture maps each lens; a
+    progression *expands* to one chord card per role (pulled forward since
+    atomic material requires it); arpeggio is a Chord + Arpeggiate touch.
+    `Settings.rehearsal` → `Settings.set` (old data loads empty, not error).
+  - **U2** (`5016536`): Practice tab gains "➕ Rehearse this set" —
+    `practice_item_to_card` + `fill_set_from_practice`, mapping bars-per-item
+    onto `Hold::Bars`, tempo onto `Timing.bpm`, tagged `from` the set.
+  - **U3** (`f032a66`): `LoopMode` + `Set.loop_mode` (rehearse_step wraps when
+    looping); `cycle_card_touch` flips a chord card Block ⇄ Arp; Rehearsal view
+    gains a Loop toggle + a per-row Block/Arp button on chord cards.
+  - **U4a** (`1ce1b77`): `Recipe::Song` + `song_to_cards` (chord bars → chord
+    cards, tempo/length/section preserved; silent bars skipped) +
+    "➕ Rehearse this song" on the Song transport. **U4b** (live song
+    cursor/clock sync, `Clock::Song` owning time) deferred to ride with U5/U6.
+  - **U5 foundation** (`236cc05`): `StageRender` + `resolve_card_for_stage` —
+    the canonical card→neck path (Scale/Chord/Riff resolve by name; missing
+    name → warning, not empty neck). `Setting.fret_window` added; practice
+    items pin their hand position there. Practice tab now renders through the
+    resolver (first consumer; `positions_for_practice_item` removed). **Still
+    owed:** converging the five lens render paths onto the resolver, which
+    rides on U6's set-stage to avoid regressing the rich lens views in one pass.
