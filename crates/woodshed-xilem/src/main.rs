@@ -583,6 +583,7 @@ enum Recipe {
     Progression { name: String, key: ChromaticPc },
     Exercise { name: String },
     PracticeSet { name: String },
+    Song { name: String },
 }
 
 /// How the card sits on the neck (the space axis): instrument setup +
@@ -782,6 +783,57 @@ fn practice_item_to_card(
         timing,
         from,
     }
+}
+
+/// Project a [`Song`] into rehearsal cards (U4a). Each bar that carries a
+/// chord becomes a chord card with the bar's tempo and a bars-per-block
+/// `Hold`, tagged `from` the song; silent bars (no chord) are skipped
+/// since they hold no neck material. The song engine still owns recorded
+/// audio playback; this is a one-way projection, not absorption. (The
+/// live cursor/clock sync between a playing song and the set cursor lands
+/// with the U5 resolver / U6 timeline.)
+fn song_to_cards(song: &Song, instrument: &str) -> Vec<Card> {
+    let name = song.name.clone();
+    song.bars
+        .iter()
+        .filter_map(|bar| {
+            let chord = bar.chord_ref.as_ref()?;
+            // Frequency → pitch class (round to nearest MIDI note).
+            let midi = (69.0 + 12.0 * (chord.root_freq_hz / 440.0).log2()).round() as i32;
+            let root = ChromaticPc::from_pc(midi.rem_euclid(12) as u8);
+            let label = {
+                let chord_label = if chord.label.is_empty() {
+                    chord.formula_name.clone()
+                } else {
+                    chord.label.clone()
+                };
+                if bar.label.is_empty() {
+                    chord_label
+                } else {
+                    format!("{} · {}", bar.label, chord_label)
+                }
+            };
+            Some(Card {
+                label,
+                material: Material::Chord {
+                    name: chord.formula_name.clone(),
+                    root,
+                },
+                setting: Setting {
+                    instrument: instrument.to_string(),
+                    tuning: None,
+                    capo: None,
+                    voicing_idx: None,
+                },
+                touch: Touch::Block,
+                timing: Timing {
+                    bpm: Some(bar.bpm),
+                    hold: Hold::Bars(bar.length.max(1)),
+                },
+                from: Some(Recipe::Song { name: name.clone() }),
+            })
+        })
+        .collect()
 }
 
 /// The default instrument-surface composition: just the fretboard.
@@ -2127,6 +2179,16 @@ impl AppState {
             .map(|item| practice_item_to_card(item, &instrument, bpm, bars, &name))
             .collect();
         for card in cards {
+            self.set.push(card);
+        }
+    }
+
+    /// Recipe: project the current song's chord bars into cards on the set
+    /// (U4a). The song engine keeps owning recorded-audio playback; this
+    /// is a one-way projection.
+    fn fill_set_from_song(&mut self) {
+        let instrument = settings::instrument_to_str(self.active_instrument).to_string();
+        for card in song_to_cards(&self.song_view, &instrument) {
             self.set.push(card);
         }
     }
@@ -4235,6 +4297,13 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     ))
     .text_size(TS_XS);
 
+    // Recipe action (U4a): project the song's chord bars into cards on
+    // the set, then jump to the Rehearsal tab.
+    let rehearse_song_btn = text_button("➕ Rehearse this song", |s: &mut AppState| {
+        s.fill_set_from_song();
+        s.tab = Tab::Rehearsal;
+    });
+
     let transport = flex_row((
         rewind_btn,
         play_btn,
@@ -4243,6 +4312,8 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         click_btn,
         rec_mode_btn,
         cursor_label,
+        FlexSpacer::Flex(1.0),
+        rehearse_song_btn,
     ))
     .cross_axis_alignment(CrossAxisAlignment::Center)
     .main_axis_alignment(MainAxisAlignment::Start)
