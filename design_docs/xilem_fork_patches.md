@@ -139,7 +139,15 @@ persist a user-adjusted split (across views or restarts). Its `Action` was
 - In use to share/persist a pane split across tabs.
 ```
 
-**Open question (not part of these two PRs):** the same fork commit's message
-also mentions split-point from-start/from-end + `min_lengths` builders. Confirm
-whether those are already upstream or a third fork-only addition Woodshed leans
-on before claiming "Woodshed builds on upstream + these two PRs."
+**Resolved (2026-05-28):** diffed the fork's split files against `upstream/main`.
+The only fork commit touching them is `129d330e`, and its only additions over
+upstream are the `SplitDragged` action + `on_split_changed` (PR 2). The
+commit message over-claimed: `split_point`, `split_point_from_start`,
+`split_point_from_end`, `min_lengths`, and `SplitPoint::FromStart/FromEnd` are
+**already upstream** (confirmed present in `upstream/main`). So there is no
+third patch.
+
+**Bottom line:** Woodshed's entire upstream divergence is exactly these two PRs
+(runtime default-properties + `on_split_changed`). It needs no wgpu-29 pin and
+none of the external-compositor work. With PR 1 + PR 2 merged, Woodshed builds
+on stock `linebender/xilem`.
