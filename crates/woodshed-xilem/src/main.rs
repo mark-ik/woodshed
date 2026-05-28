@@ -22,7 +22,7 @@ use masonry_winit::app::{EventLoop, EventLoopBuilder};
 use tokio::time;
 use winit::error::EventLoopError;
 use xilem::core::fork;
-use xilem::core::one_of::{OneOf2, OneOf3, OneOf4};
+use xilem::core::one_of::{OneOf2, OneOf3};
 use xilem::style::Style;
 use xilem::view::{
     AnyFlexChild, FlexExt, FlexSpacer, button, flex_col, flex_row, label, portal,
@@ -1076,16 +1076,13 @@ struct AppState {
     /// catalogs being initialized).
     practice_sets: Vec<PracticeSet>,
     practice_selected_set: usize,
+    /// Browse cursor for previewing a set's items on the Practice tab.
     practice_item_idx: usize,
-    practice_playing: bool,
-    /// Practice-mode tempo; independent from the metronome tab's BPM
-    /// so practice can run at a slower learning tempo.
+    /// Practice-mode tempo + bars-per-item. They parameterize the
+    /// "Rehearse this set" recipe (each card's `Timing.bpm` / `Hold::Bars`);
+    /// the old inline runner was retired in U8.
     practice_bpm: f32,
-    /// How many bars to spend on each item before auto-advancing.
     practice_bars_per_item: u8,
-    /// Wall-clock seconds elapsed in the current item. Drives the
-    /// auto-advance and the progress display.
-    practice_elapsed_secs: f32,
 
     // === Shared ===
     /// Active instrument (drives which tuning catalog entry the
@@ -1335,10 +1332,8 @@ impl AppState {
             practice_sets: practice_catalog(),
             practice_selected_set: 0,
             practice_item_idx: 0,
-            practice_playing: false,
             practice_bpm: 60.0,
             practice_bars_per_item: 4,
-            practice_elapsed_secs: 0.0,
             engine,
             active_instrument,
             sidebars: SidebarVisibility::default(),
@@ -2606,29 +2601,6 @@ impl AppState {
     fn refresh_song_view(&mut self) {
         if let Some(Ok((_, h))) = self.song_engine.as_ref() {
             self.song_view = h.song();
-        }
-    }
-
-    /// Start the practice click track using the practice BPM. Reuses
-    /// the existing SequencerEngine — practice mode takes over the
-    /// audio output for the duration.
-    fn start_practice_click(&mut self) {
-        if let Ok((_, handle)) = &self.engine {
-            let pattern = build_metronome_pattern(
-                self.practice_bpm,
-                4,
-                Subdivision::QUARTER,
-                ClickPattern::BeatOnly,
-                AccentMode::Downbeat,
-            );
-            handle.set_pattern(pattern);
-            handle.play();
-        }
-    }
-
-    fn stop_practice_click(&mut self) {
-        if let Ok((_, handle)) = &self.engine {
-            handle.stop();
         }
     }
 
@@ -5187,11 +5159,8 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     let bpm = state.practice_bpm;
     let bars = state.practice_bars_per_item;
-    let playing = state.practice_playing;
 
-    // Compute the fretboard positions for the current item via the shared
-    // stage resolver (U5): the item becomes a card, then resolves like any
-    // other. Its hand position rides along as the card's fret window.
+    // Fretboard preview of the browsed item via the shared resolver (U5).
     let (positions, labels) = state
         .current_practice_item()
         .map(|item| {
@@ -5203,60 +5172,6 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .unwrap_or_default();
     let board = state.fretboard.clone();
 
-    // Progress within the item: how far through the bars we are.
-    let secs_per_item = (60.0 / bpm.max(1.0)) * 4.0 * bars as f32;
-    let progress_text = if playing {
-        let bar_now = ((state.practice_elapsed_secs / secs_per_item.max(0.001) * bars as f32)
-            .floor() as u32
-            + 1)
-        .min(bars as u32);
-        format!(
-            "Item {} / {}  ·  bar {} / {}",
-            item_idx + 1,
-            item_count,
-            bar_now,
-            bars
-        )
-    } else if item_count > 0 {
-        format!("Item {} / {}", item_idx + 1, item_count)
-    } else {
-        "no items".to_string()
-    };
-
-    // Next-item preview so users can mentally prepare for the change.
-    let next_preview = state
-        .current_practice_set()
-        .filter(|s| s.items.len() > 1)
-        .map(|s| {
-            let next_idx = (item_idx + 1) % s.items.len();
-            format!("Up next: {}", s.items[next_idx].label())
-        })
-        .unwrap_or_default();
-
-    // Four distinct shapes for the transport slot now that the engine-
-    // unavailable arm uses `danger_label` and the empty-set arm uses
-    // `disabled_label` — different opaque view types, so they need
-    // separate `OneOf4` variants.
-    let transport = if let Err(e) = &state.engine {
-        OneOf4::A(danger_prose(state.palette, format!("Audio engine unavailable: {e}"), TS_XS))
-    } else if playing {
-        OneOf4::B(text_button("■ Stop", |s: &mut AppState| {
-            s.practice_playing = false;
-            s.stop_practice_click();
-        }))
-    } else if item_count == 0 {
-        OneOf4::C(disabled_label(state.palette, "Pick a set first.", TS_XS))
-    } else {
-        OneOf4::D(text_button("▶ Play", |s: &mut AppState| {
-            s.practice_playing = true;
-            s.practice_elapsed_secs = 0.0;
-            s.start_practice_click();
-        }))
-    };
-
-    // Practice-set combobox — jump-pick from the catalog. Walking is
-    // less useful here than for scales/chords (sets are coarser units)
-    // but the ◀/▶ are kept for parity with other tabs.
     let set_options: Vec<ArcStr> = state
         .practice_sets
         .iter()
@@ -5265,9 +5180,21 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let set_selected = state.practice_selected_set.min(set_count.saturating_sub(1).max(0));
     let practice_open_combo = state.open_combobox;
 
+    // The Practice tab is a recipe/browser now (U8): pick a set, set its
+    // tempo + bars-per-item, preview the items, and "Rehearse this set" to
+    // fill the set on the Rehearsal tab — that's where you play through it.
+    // The old inline runner (Play/Stop, auto-advance) was retired; the set
+    // stage subsumes it.
     let info_panel = flex_col((
         header_label(state.palette, set_name, TS_LG),
         prose(set_desc).text_size(TS_XS),
+        dim_prose(
+            state.palette,
+            "Practice sets are recipes. Pick one, set the tempo and bars per \
+             item, then “Rehearse this set” to fill your set — the Rehearsal \
+             tab is where you play through it.",
+            TS_XS,
+        ),
         flex_row((
             combobox(
                 "practice.set",
@@ -5278,25 +5205,20 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 |s: &mut AppState, i: usize| {
                     s.practice_selected_set = i;
                     s.practice_item_idx = 0;
-                    s.practice_elapsed_secs = 0.0;
                 },
             ),
             button_sm("◀", move |s: &mut AppState| {
                 if set_count > 0 {
                     let cur = s.practice_selected_set.min(set_count - 1) as i32;
-                    s.practice_selected_set =
-                        ((cur - 1).rem_euclid(set_count as i32)) as usize;
+                    s.practice_selected_set = ((cur - 1).rem_euclid(set_count as i32)) as usize;
                     s.practice_item_idx = 0;
-                    s.practice_elapsed_secs = 0.0;
                 }
             }),
             button_sm("▶", move |s: &mut AppState| {
                 if set_count > 0 {
                     let cur = s.practice_selected_set.min(set_count - 1) as i32;
-                    s.practice_selected_set =
-                        ((cur + 1).rem_euclid(set_count as i32)) as usize;
+                    s.practice_selected_set = ((cur + 1).rem_euclid(set_count as i32)) as usize;
                     s.practice_item_idx = 0;
-                    s.practice_elapsed_secs = 0.0;
                 }
             }),
             label(format!("({set_idx} of {set_count})")).text_size(TS_XS),
@@ -5304,15 +5226,14 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
-        // Recipe action (U2): turn this practice set into cards on the
-        // set, then jump to the Rehearsal tab to see them. The Practice
-        // tab is a way to *fill* a set at the current tempo / bars-per-item.
+        // Recipe action (U2): fill the set from this practice set, then jump
+        // to the Rehearsal tab to play it.
         text_button("➕ Rehearse this set", |s: &mut AppState| {
             s.fill_set_from_practice();
             s.tab = Tab::Rehearsal;
         }),
-        // BPM picker — double-click the readout to edit, slider for
-        // drag, ± for clicky tweaks.
+        // Tempo + bars-per-item parameterize the recipe (they become each
+        // card's `Timing.bpm` and `Hold::Bars`).
         editable_big_number(
             state,
             "practice.bpm",
@@ -5320,39 +5241,24 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             format!("{:.0}", bpm),
             TS_SM,
             |s: &mut AppState, v: f64| {
-                let b = (v as f32).clamp(30.0, 240.0);
-                s.practice_bpm = b;
-                if let (true, Ok((_, h))) = (s.practice_playing, &s.engine) {
-                    h.set_bpm(b);
-                }
+                s.practice_bpm = (v as f32).clamp(30.0, 240.0);
             },
         ),
         sized_box(slider(30.0, 240.0, bpm as f64, |s: &mut AppState, v: f64| {
-            let b = (v as f32).clamp(30.0, 240.0);
-            s.practice_bpm = b;
-            if let (true, Ok((_, h))) = (s.practice_playing, &s.engine) {
-                h.set_bpm(b);
-            }
+            s.practice_bpm = (v as f32).clamp(30.0, 240.0);
         }))
         .fixed_width(masonry::layout::Length::px(360.0)),
         flex_row((
             text_button("−", |s: &mut AppState| {
                 s.practice_bpm = (s.practice_bpm - 1.0).clamp(30.0, 240.0);
-                if let (true, Ok((_, h))) = (s.practice_playing, &s.engine) {
-                    h.set_bpm(s.practice_bpm);
-                }
             }),
             text_button("+", |s: &mut AppState| {
                 s.practice_bpm = (s.practice_bpm + 1.0).clamp(30.0, 240.0);
-                if let (true, Ok((_, h))) = (s.practice_playing, &s.engine) {
-                    h.set_bpm(s.practice_bpm);
-                }
             }),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
-        // Bars-per-item picker.
         flex_row((
             label(format!("Bars per item: {bars}")).text_size(TS_SM),
             text_button("−", |s: &mut AppState| {
@@ -5365,80 +5271,42 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
-        // Item transport.
+        // Item browse (preview only — no transport/playback here).
         flex_row((
-            text_button("◀◀ Prev", move |s: &mut AppState| {
+            button_sm("◀◀ Prev", move |s: &mut AppState| {
                 if item_count > 0 {
                     let cur = s.practice_item_idx.min(item_count - 1) as i32;
-                    s.practice_item_idx =
-                        ((cur - 1).rem_euclid(item_count as i32)) as usize;
-                    s.practice_elapsed_secs = 0.0;
+                    s.practice_item_idx = ((cur - 1).rem_euclid(item_count as i32)) as usize;
                 }
             }),
-            transport,
-            text_button("Next ▶▶", move |s: &mut AppState| {
+            dim_label(
+                state.palette,
+                if item_count > 0 {
+                    format!("Item {} / {}", item_idx + 1, item_count)
+                } else {
+                    "no items".to_string()
+                },
+                TS_XS,
+            ),
+            button_sm("Next ▶▶", move |s: &mut AppState| {
                 if item_count > 0 {
                     let cur = s.practice_item_idx.min(item_count - 1) as i32;
-                    s.practice_item_idx =
-                        ((cur + 1).rem_euclid(item_count as i32)) as usize;
-                    s.practice_elapsed_secs = 0.0;
+                    s.practice_item_idx = ((cur + 1).rem_euclid(item_count as i32)) as usize;
                 }
             }),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_2),
-        // Current item label + progress.
         header_label(state.palette, item_label, TS_XL),
-        dim_label(state.palette, progress_text, TS_XS),
-        dim_label(state.palette, next_preview, TS_XS),
         FlexSpacer::Flex(1.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Start)
     .main_axis_alignment(MainAxisAlignment::Start)
     .gap(SP_2);
 
-    // Auto-advance task — fires every 50ms while playing, accumulates
-    // elapsed_secs, advances item when full duration elapsed.
-    let auto_task = playing.then(|| {
-        task_raw(
-            move |proxy, _| async move {
-                let mut tick = time::interval(Duration::from_millis(50));
-                tick.tick().await; // immediate first tick — skip
-                loop {
-                    tick.tick().await;
-                    if proxy.message(()).is_err() {
-                        break;
-                    }
-                }
-            },
-            move |s: &mut AppState, _: ()| {
-                if !s.practice_playing {
-                    return;
-                }
-                s.practice_elapsed_secs += 0.05;
-                let secs_per_item =
-                    (60.0 / s.practice_bpm.max(1.0)) * 4.0 * s.practice_bars_per_item as f32;
-                if s.practice_elapsed_secs >= secs_per_item {
-                    let count = s
-                        .current_practice_set()
-                        .map(|x| x.items.len())
-                        .unwrap_or(0);
-                    if count > 0 {
-                        s.practice_item_idx = (s.practice_item_idx + 1) % count;
-                    }
-                    s.practice_elapsed_secs = 0.0;
-                }
-            },
-        )
-    });
-
-    // Fretboard ↔ practice info use a draggable split, same as the
-    // other fretboard tabs (Scales / Chords / Progressions /
-    // Exercises). Cross-axis Start so opening anything tall on the
-    // info side doesn't stretch the fretboard.
     use masonry::layout::Length as MLen;
-    let visible = xilem::view::split(
+    xilem::view::split(
         card(
             state.palette,
             sized_box(fretboard_view(
@@ -5447,18 +5315,16 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 labels,
                 state.diagram_colors(),
                 None,
-                    (0, state.fret_span),
-                    Vec::new(),
+                (0, state.fret_span),
+                Vec::new(),
             ))
             .fixed_height(masonry::layout::Length::px(660.0)),
         ),
         card(state.palette, info_panel),
     )
     .split_point(state.split_ratio)
-        .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
-    .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0));
-
-    fork(visible, auto_task)
+    .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
+    .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
 }
 
 /// Translate a [`PracticeItem`] into the fretboard positions + labels
