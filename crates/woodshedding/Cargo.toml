@@ -12,3 +12,6 @@ keywords = ["music", "theory", "guitar", "scale", "chord"]
 categories = ["multimedia::audio", "data-structures"]
 
 [dependencies]
+# Card/set vocabulary (the `rehearsal` module) derives serde so app and
+# future CLI/web shells share one persistable core. Pure data, no I/O.
+serde = { workspace = true }

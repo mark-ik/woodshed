@@ -22,3 +22,4 @@ pub mod fretboard;
 pub mod exercise;
 pub mod progression;
 pub mod practice;
+pub mod rehearsal;

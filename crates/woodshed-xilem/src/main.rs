@@ -50,7 +50,11 @@ use woodshedding::progression::{
     ChordRole, DegreeAlteration, ProgressionChord, RoleQuality,
     apply_roles_in_key, catalog as progression_catalog,
 };
-use woodshedding::pitch::{NoteName, Pitch};
+use woodshedding::pitch::{NoteName, Pitch, PitchClass};
+use woodshedding::rehearsal::{
+    ArpeggioDirection, Card, FretWindow, Hold, LoopMode, Material, Recipe, Set, Setting, Timing,
+    Touch,
+};
 use woodshedding::scale::{ScaleFormula, catalog as scale_catalog};
 use woodshedding::tuning::{Instrument, Tuning, catalog as tuning_catalog};
 
@@ -194,32 +198,8 @@ impl SidebarVisibility {
     }
 }
 
-/// Direction the arpeggio transport walks the shape's notes (by pitch).
-/// `UpDown` ascends then descends without repeating the turnaround notes.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-enum ArpeggioDirection {
-    #[default]
-    UpDown,
-    Up,
-    Down,
-}
-
-impl ArpeggioDirection {
-    fn next(self) -> Self {
-        match self {
-            Self::UpDown => Self::Up,
-            Self::Up => Self::Down,
-            Self::Down => Self::UpDown,
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            Self::UpDown => "Up/Down",
-            Self::Up => "Up",
-            Self::Down => "Down",
-        }
-    }
-}
+// `ArpeggioDirection` now lives in `woodshedding::rehearsal` (U7) and is
+// imported below alongside the card/set vocabulary.
 
 /// What to print inside the arpeggio's fretboard dots. Adds `Steps`
 /// (the note's order in the ascending arpeggio) and `Blank` to the
@@ -407,6 +387,20 @@ impl ChromaticPc {
         Self::ALL[((idx + direction).rem_euclid(12)) as usize]
     }
 
+    /// 0..=11 chromatic value (C=0 … B=11). Bridges to the portable
+    /// `PitchClass` the rehearsal card model stores (U7).
+    fn pc(self) -> u8 {
+        Self::ALL.iter().position(|&p| p == self).unwrap_or(0) as u8
+    }
+
+    fn to_pitch_class(self) -> PitchClass {
+        PitchClass::new(self.pc())
+    }
+
+    fn from_pitch_class(pc: PitchClass) -> Self {
+        Self::from_pc(pc.value())
+    }
+
     /// Build from a chromatic pitch class (0 = C, 1 = C#, ..., 11 = B).
     fn from_pc(pc: u8) -> Self {
         Self::ALL[(pc as usize) % 12]
@@ -531,185 +525,6 @@ impl SurfaceModule {
     }
 }
 
-/// Woodshed's musical-object vocabulary (rehearsal redesign, U1). A
-/// `Set` is an ordered run of `Card`s you practice in sequence; a `Card`
-/// is one piece of material with enough context to put it on the neck and
-/// play it. Said as a teacher would: "take this card, the material is C
-/// minor pentatonic, in this setting, with this touch, hold it eight
-/// bars." Everything resolves by *name* at the edge, so a catalog edit
-/// between sessions can't scramble a saved set.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-struct Card {
-    /// Human-readable label, e.g. "C minor — scale", "Am7 · voicing 2".
-    label: String,
-    /// What you're working on.
-    material: Material,
-    /// How it sits on the neck (the space axis).
-    setting: Setting,
-    /// How you play it.
-    touch: Touch,
-    /// Tempo / how long to stay on it.
-    timing: Timing,
-    /// Which recipe stamped this card (a one-time stamp, not a live
-    /// binding). `None` = hand-added.
-    from: Option<Recipe>,
-}
-
-/// The atomic, practiceable "what" of a card. Progressions / exercises /
-/// songs are *recipes* that fill a set with these, not variants here.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-enum Material {
-    Scale { name: String, root: ChromaticPc },
-    Chord { name: String, root: ChromaticPc },
-    /// A fixed playable sequence; a user/catalog exercise's steps live
-    /// here, referenced by name.
-    Riff { name: String },
-}
-
-impl Material {
-    /// Short kind tag for badges in the set view.
-    fn tag(&self) -> &'static str {
-        match self {
-            Self::Scale { .. } => "Scale",
-            Self::Chord { .. } => "Chord",
-            Self::Riff { .. } => "Riff",
-        }
-    }
-}
-
-/// Where a card came from: the recipe that stamped it.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-enum Recipe {
-    Progression { name: String, key: ChromaticPc },
-    Exercise { name: String },
-    PracticeSet { name: String },
-    Song { name: String },
-}
-
-/// A window onto the neck: the first visible fret and how many frets
-/// wide. A card can pin one (e.g. a practice item's hand position); when
-/// `None` the stage uses the live fret window.
-#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
-struct FretWindow {
-    start: u8,
-    span: u8,
-}
-
-/// How the card sits on the neck (the space axis): instrument setup +
-/// where/which-shape on the neck.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-struct Setting {
-    /// Instrument family (string adapter); drives tuning lookup.
-    instrument: String,
-    /// Specific tuning name, or `None` for the instrument default.
-    #[serde(default)]
-    tuning: Option<String>,
-    /// Capo position in frets (`None`/0 = open). Resolver applies the
-    /// pitch shift; the shape you finger is unchanged.
-    #[serde(default)]
-    capo: Option<u8>,
-    /// Selected voicing for chord material; `None` = all chord tones.
-    #[serde(default)]
-    voicing_idx: Option<usize>,
-    /// Pinned neck window (e.g. a practice item's hand position); `None`
-    /// = use the live fret window. Read by `resolve_card_for_stage`.
-    #[serde(default)]
-    fret_window: Option<FretWindow>,
-}
-
-/// How you play the card.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-enum Touch {
-    #[default]
-    Block,
-    Arpeggiate { direction: ArpeggioDirection, inversion: u8 },
-}
-
-/// Tempo and how long to stay on a card.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-struct Timing {
-    #[serde(default)]
-    bpm: Option<f32>,
-    #[serde(default)]
-    hold: Hold,
-}
-
-/// How long to stay on a card before moving on. (U1 steps the set
-/// manually; richer holds arrive with the timeline in U6.)
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-enum Hold {
-    #[default]
-    Manual,
-    Bars(u8),
-    Seconds(f32),
-    Reps(u16),
-}
-
-/// Whether stepping past the end of the set wraps around.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-enum LoopMode {
-    #[default]
-    Off,
-    /// Wrap: stepping past the last card returns to the first (and vice
-    /// versa), so a set loops like a practice set.
-    All,
-}
-
-/// A set: an ordered run of cards plus a cursor (the card on the stage).
-/// Every view (the stage, and later the timeline) reads from here, so the
-/// wiring concentrates in one owned model. Persisted so a session survives
-/// a restart.
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-struct Set {
-    cards: Vec<Card>,
-    /// Index of the card on the stage. Meaningless when `cards` is empty;
-    /// clamped on mutation.
-    cursor: usize,
-    /// Whether stepping wraps at the ends.
-    #[serde(default)]
-    loop_mode: LoopMode,
-}
-
-impl Set {
-    fn push(&mut self, card: Card) {
-        self.cards.push(card);
-    }
-
-    /// Insert a copy of the card at `idx` right after it.
-    fn duplicate(&mut self, idx: usize) {
-        if let Some(c) = self.cards.get(idx).cloned() {
-            self.cards.insert(idx + 1, c);
-        }
-    }
-
-    /// Remove the card at `idx`, keeping the cursor on a valid slot.
-    fn remove(&mut self, idx: usize) {
-        if idx >= self.cards.len() {
-            return;
-        }
-        self.cards.remove(idx);
-        if self.cursor >= self.cards.len() {
-            self.cursor = self.cards.len().saturating_sub(1);
-        }
-    }
-
-    /// Swap the card at `idx` with its neighbor in `dir` (-1 up, +1 down),
-    /// keeping the cursor following the moved card if it was the cursor.
-    fn move_card(&mut self, idx: usize, dir: i32) {
-        let target = idx as i32 + dir;
-        if idx >= self.cards.len() || target < 0 || target as usize >= self.cards.len() {
-            return;
-        }
-        let target = target as usize;
-        self.cards.swap(idx, target);
-        if self.cursor == idx {
-            self.cursor = target;
-        } else if self.cursor == target {
-            self.cursor = idx;
-        }
-    }
-}
-
 /// What a card puts on the neck (U5): the resolved dots + labels, an
 /// optional pinned window, and a warning when the material no longer
 /// resolves. The one shape every stage consumer renders, computed by
@@ -807,14 +622,14 @@ fn practice_item_to_card(
         PracticeItem::Scale { formula, root, position } => (
             Material::Scale {
                 name: formula.name.to_string(),
-                root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+                root: PitchClass::new(root.midi().rem_euclid(12) as u8),
             },
             Some(FretWindow { start: *position, span: 5 }),
         ),
         PracticeItem::Chord { formula, root, position } => (
             Material::Chord {
                 name: formula.name.to_string(),
-                root: ChromaticPc::from_pc(root.midi().rem_euclid(12) as u8),
+                root: PitchClass::new(root.midi().rem_euclid(12) as u8),
             },
             Some(FretWindow { start: *position, span: 5 }),
         ),
@@ -856,7 +671,7 @@ fn song_to_cards(song: &Song, instrument: &str) -> Vec<Card> {
             let chord = bar.chord_ref.as_ref()?;
             // Frequency → pitch class (round to nearest MIDI note).
             let midi = (69.0 + 12.0 * (chord.root_freq_hz / 440.0).log2()).round() as i32;
-            let root = ChromaticPc::from_pc(midi.rem_euclid(12) as u8);
+            let root = PitchClass::new(midi.rem_euclid(12) as u8);
             let label = {
                 let chord_label = if chord.label.is_empty() {
                     chord.formula_name.clone()
@@ -2113,7 +1928,7 @@ impl AppState {
                 let scale = self.current_scale().name.to_string();
                 vec![Card {
                     label: format!("{root_label} — {scale} scale"),
-                    material: Material::Scale { name: scale, root },
+                    material: Material::Scale { name: scale, root: root.to_pitch_class() },
                     setting: base_setting(),
                     touch: Touch::Block,
                     timing: Timing::default(),
@@ -2130,7 +1945,7 @@ impl AppState {
                 };
                 vec![Card {
                     label,
-                    material: Material::Chord { name: chord, root },
+                    material: Material::Chord { name: chord, root: root.to_pitch_class() },
                     setting: Setting { voicing_idx, ..base_setting() },
                     touch: Touch::Block,
                     timing: Timing::default(),
@@ -2143,7 +1958,7 @@ impl AppState {
                 let inv_label = if inv == 0 { String::new() } else { format!(" · inv {inv}") };
                 vec![Card {
                     label: format!("{root_label}{chord} arp{inv_label}"),
-                    material: Material::Chord { name: chord, root },
+                    material: Material::Chord { name: chord, root: root.to_pitch_class() },
                     setting: base_setting(),
                     touch: Touch::Arpeggiate { direction: self.arpeggio_direction, inversion: inv },
                     timing: Timing::default(),
@@ -2175,7 +1990,7 @@ impl AppState {
                 chords
                     .into_iter()
                     .map(|c| {
-                        let croot = ChromaticPc::from_pc(c.root.midi().rem_euclid(12) as u8);
+                        let croot = PitchClass::new(c.root.midi().rem_euclid(12) as u8);
                         Card {
                             label: format_progression_chord_symbol(&c),
                             material: Material::Chord {
@@ -2185,7 +2000,10 @@ impl AppState {
                             setting: base_setting(),
                             touch: Touch::Block,
                             timing: Timing::default(),
-                            from: Some(Recipe::Progression { name: name.clone(), key: root }),
+                            from: Some(Recipe::Progression {
+                                name: name.clone(),
+                                key: root.to_pitch_class(),
+                            }),
                         }
                     })
                     .collect()
@@ -2275,7 +2093,7 @@ impl AppState {
         }
         match &card.material {
             Material::Scale { name, root } => {
-                self.root = *root;
+                self.root = ChromaticPc::from_pitch_class(*root);
                 if let Some(i) = scale_catalog().iter().position(|s| s.name == *name) {
                     self.scale_idx = i;
                 }
@@ -2284,7 +2102,7 @@ impl AppState {
             // A chord card lands on the Arpeggio lens when its touch is
             // arpeggiate, otherwise the Chord lens.
             Material::Chord { name, root } => {
-                self.root = *root;
+                self.root = ChromaticPc::from_pitch_class(*root);
                 match &card.touch {
                     Touch::Arpeggiate { direction, inversion } => {
                         if let Some(i) = chord_catalog().iter().position(|c| c.name == *name) {
@@ -2344,7 +2162,7 @@ impl AppState {
                     return StageRender::empty(format!("scale \"{name}\" not found"));
                 };
                 let mut positions = fb
-                    .positions_for_scale(formula, root.to_pitch(4))
+                    .positions_for_scale(formula, ChromaticPc::from_pitch_class(*root).to_pitch(4))
                     .unwrap_or_default();
                 apply_fret_window(&mut positions, card.setting.fret_window);
                 let labels = compute_labels(LabelMode::Notes, &positions);
@@ -2359,7 +2177,7 @@ impl AppState {
                 let Some(formula) = chord_catalog().iter().find(|c| c.name == *name) else {
                     return StageRender::empty(format!("chord \"{name}\" not found"));
                 };
-                let root_pitch = root.to_pitch(4);
+                let root_pitch = ChromaticPc::from_pitch_class(*root).to_pitch(4);
                 // A specific voicing renders that shape, windowed to it;
                 // otherwise every chord tone across the neck (the "tones"
                 // view), optionally clamped to a pinned window.

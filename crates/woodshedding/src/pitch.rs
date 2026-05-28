@@ -8,6 +8,26 @@ use core::fmt;
 
 use crate::interval::Interval;
 
+/// A chromatic pitch class, 0..=11 (C=0, C#/Db=1, ..., B=11) — pitch
+/// without octave or enharmonic spelling. The portable, serializable
+/// pitch-class the rehearsal card model stores; richer/UI types (an app's
+/// spelled pitch-class enum) convert in and out at the edge. Serializes as
+/// the bare `u8`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct PitchClass(u8);
+
+impl PitchClass {
+    /// Construct from any integer, wrapping into 0..=11.
+    pub const fn new(pc: u8) -> Self {
+        PitchClass(pc % 12)
+    }
+
+    /// The 0..=11 value.
+    pub const fn value(self) -> u8 {
+        self.0
+    }
+}
+
 /// The seven natural note names of Western music.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NoteName {
