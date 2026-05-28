@@ -74,7 +74,20 @@ pub enum Recipe {
     Progression { name: String, key: PitchClass },
     Exercise { name: String },
     PracticeSet { name: String },
-    Song { name: String },
+    /// `bar` is the source bar index in the song, so a playing song engine
+    /// can map its bar cursor back to the exact card (used by the
+    /// song-follow clock).
+    Song { name: String, bar: usize },
+}
+
+/// What keeps time for the card under the cursor. A derived, runtime value
+/// (not stored): the song engine when a song card is playing, the
+/// metronome when it's running, else manual stepping.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Clock {
+    Manual,
+    Metronome,
+    Song,
 }
 
 /// A window onto the neck: the first visible fret and how many frets wide.

@@ -52,8 +52,8 @@ use woodshedding::progression::{
 };
 use woodshedding::pitch::{NoteName, Pitch, PitchClass};
 use woodshedding::rehearsal::{
-    ArpeggioDirection, Card, FretWindow, Hold, LoopMode, Material, Recipe, Set, Setting, Timing,
-    Touch,
+    ArpeggioDirection, Card, Clock, FretWindow, Hold, LoopMode, Material, Recipe, Set, Setting,
+    Timing, Touch,
 };
 use woodshedding::scale::{ScaleFormula, catalog as scale_catalog};
 use woodshedding::tuning::{Instrument, Tuning, catalog as tuning_catalog};
@@ -667,7 +667,8 @@ fn song_to_cards(song: &Song, instrument: &str) -> Vec<Card> {
     let name = song.name.clone();
     song.bars
         .iter()
-        .filter_map(|bar| {
+        .enumerate()
+        .filter_map(|(bar_idx, bar)| {
             let chord = bar.chord_ref.as_ref()?;
             // Frequency → pitch class (round to nearest MIDI note).
             let midi = (69.0 + 12.0 * (chord.root_freq_hz / 440.0).log2()).round() as i32;
@@ -702,7 +703,7 @@ fn song_to_cards(song: &Song, instrument: &str) -> Vec<Card> {
                     bpm: Some(bar.bpm),
                     hold: Hold::Bars(bar.length.max(1)),
                 },
-                from: Some(Recipe::Song { name: name.clone() }),
+                from: Some(Recipe::Song { name: name.clone(), bar: bar_idx }),
             })
         })
         .collect()
@@ -2306,6 +2307,12 @@ impl AppState {
             return;
         }
         let cursor = self.set.cursor.min(len - 1);
+        // When a song owns the clock (a song card playing on the engine),
+        // the engine drives the cursor via `follow_song_cursor`; don't
+        // double-advance with our own timer (U4b).
+        if self.card_clock(&self.set.cards[cursor]) == Clock::Song {
+            return;
+        }
         let dur = card_duration_secs(&self.set.cards[cursor]);
         self.set_elapsed_secs += dt;
         if self.set_elapsed_secs >= dur {
@@ -2315,6 +2322,37 @@ impl AppState {
             } else {
                 self.cursor_step(1);
             }
+        }
+    }
+
+    /// Which clock governs `card` right now (U4b, derived not stored): the
+    /// song engine when a song card is playing, the metronome when it's
+    /// running, else manual stepping.
+    fn card_clock(&self, card: &Card) -> Clock {
+        if matches!(card.from, Some(Recipe::Song { .. })) && self.song_view.playing {
+            Clock::Song
+        } else if self.metronome_playing {
+            Clock::Metronome
+        } else {
+            Clock::Manual
+        }
+    }
+
+    /// While a song plays, point the set cursor at the card whose source
+    /// bar matches the engine's bar cursor — the song owns time, the set
+    /// follows (U4b). No-op when no song card matches the current bar.
+    fn follow_song_cursor(&mut self) {
+        if !self.song_view.playing {
+            return;
+        }
+        let bar = self.song_view.cursor.bar_idx;
+        if let Some(i) = self
+            .set
+            .cards
+            .iter()
+            .position(|c| matches!(&c.from, Some(Recipe::Song { bar: b, .. }) if *b == bar))
+        {
+            self.set.cursor = i;
         }
     }
 
@@ -2577,7 +2615,28 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             |s: &mut AppState, _: ()| s.tick_set_playback(0.05),
         )
     });
-    fork(fork(body, beat_poll), set_poll)
+    // Song-follow (U4b): while a song plays, refresh the cached song view
+    // and point the set cursor at the card matching the engine's bar — the
+    // song owns time, the set follows. Active across tabs while playing.
+    let song_follow = state.song_view.playing.then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(60));
+                tick.tick().await;
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            |s: &mut AppState, _: ()| {
+                s.refresh_song_view();
+                s.follow_song_cursor();
+            },
+        )
+    });
+    fork(fork(fork(body, beat_poll), set_poll), song_follow)
 }
 
 fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
@@ -2928,6 +2987,11 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         let cursor = state.set.cursor.min(len - 1);
         let card_now = state.set.cards[cursor].clone();
         let render = state.resolve_card_for_stage(&card_now);
+        let clock_label = match state.card_clock(&card_now) {
+            Clock::Song => "song",
+            Clock::Metronome => "metronome",
+            Clock::Manual => "manual",
+        };
 
         // Caption: current card + an unresolved-material warning.
         let warn: OneOf2<_, _> = match render.warning.clone() {
@@ -2938,7 +3002,13 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             header_label(palette, card_now.label.clone(), TS_MD),
             dim_label(
                 palette,
-                format!("{} · card {}/{}", card_now.material.tag(), cursor + 1, len),
+                format!(
+                    "{} · card {}/{} · clock: {}",
+                    card_now.material.tag(),
+                    cursor + 1,
+                    len,
+                    clock_label
+                ),
                 TS_XS,
             ),
             warn,
