@@ -39,9 +39,18 @@ xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # default features (which include `imaging_vello` for the renderer
 # backend) — disabling defaults causes the Masonry imaging layer to
 # panic with "a renderer backend feature is required" at first paint.
-xilem = { path = "../../crates/xilem/xilem", version = "0.4.0" }
-masonry = { path = "../../crates/xilem/masonry", version = "0.4.0" }
-masonry_winit = { path = "../../crates/xilem/masonry_winit", version = "0.4.0" }
+# UPSTREAM TRIAL (branch upstream-xilem-trial): point at stock
+# linebender/xilem at db215843 — the exact upstream commit the fork is
+# based on. The two fork patches (WindowView::with_default_properties,
+# Split::on_split_changed) are NOT here, so their call sites are stripped
+# in woodshed-xilem. Restore the path-deps below to go back to the fork.
+xilem = { git = "https://github.com/linebender/xilem", rev = "db215843fc0a821940db7bf04ed62104624c449f" }
+masonry = { git = "https://github.com/linebender/xilem", rev = "db215843fc0a821940db7bf04ed62104624c449f" }
+masonry_winit = { git = "https://github.com/linebender/xilem", rev = "db215843fc0a821940db7bf04ed62104624c449f" }
+# Fork path-deps (restore to revert this trial):
+# xilem = { path = "../../crates/xilem/xilem", version = "0.4.0" }
+# masonry = { path = "../../crates/xilem/masonry", version = "0.4.0" }
+# masonry_winit = { path = "../../crates/xilem/masonry_winit", version = "0.4.0" }
 winit = "0.30"
 
 # Audio

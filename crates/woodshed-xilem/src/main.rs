@@ -3726,7 +3726,6 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         sidebar,
         xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
     ))
@@ -3864,7 +3863,6 @@ fn surface_left(
             // ~a chord-card-diagram tall for the top pane, enough for a
             // compact widget's rows below.
             .min_lengths(MLen::const_px(190.0), MLen::const_px(170.0))
-            .on_split_changed(move |s: &mut AppState, p: f64| s.set_module_split(idx, p))
             .boxed();
         running_tail += w;
     }
@@ -4089,7 +4087,6 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         sidebar,
         xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
     ))
@@ -4313,7 +4310,6 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         chord_sidebar,
         xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
     ))
@@ -5256,7 +5252,6 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         card(state.palette, info_panel),
     )
     .split_point(state.split_ratio)
-    .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
     .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
 }
 
@@ -5923,8 +5918,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
         sidebar,
         xilem::view::split(surface, right_pane)
             .split_point(state.split_ratio)
-        .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
-            .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
+                .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
             .flex(1.0),
     ))
     // Cross-axis Stretch so the split fills the bounded tab-content
@@ -6650,7 +6644,6 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         exercise_sidebar,
         xilem::view::split(surface, right_pane)
             .split_point(state.split_ratio)
-            .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
     ))
@@ -8570,15 +8563,19 @@ pub fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
     let app = Xilem::new(state, move |state: &mut AppState| {
         let window_id = state.window_id;
         let base_color = state.palette.bg;
-        let default_properties = state.default_properties.clone();
         let root = app_logic(state);
         std::iter::once(
             window(window_id, "Woodshed", root)
                 .with_base_color(base_color)
-                .with_default_properties(default_properties)
+                // (upstream trial) `WindowView::with_default_properties` is a
+                // fork patch — dropped here. Startup theming still applies via
+                // `Xilem::with_default_properties` below; the loss is live
+                // re-color of default-styled widgets without a restart.
                 .with_options(|o| {
                     o.with_min_inner_size(LogicalSize::new(640.0, 480.0))
-                        .with_initial_inner_size(LogicalSize::new(960.0, 720.0))
+                        // Compact 800x600 launch size (chosen default — small
+                        // for tidy demos / recordings; min stays 640x480).
+                        .with_initial_inner_size(LogicalSize::new(800.0, 600.0))
                         .on_close(|s: &mut AppState| s.running = false)
                 }),
         )
