@@ -523,8 +523,24 @@ yet touching the tab strip.
     the end unless looping. New helpers: `set_cursor` / `cursor_step` (no lens
     switch), `Set::duplicate`. Playback is **visual** (neck walks the set);
     sounding each card + the U4b song-engine clock handoff are later.
-  - **Remaining in the U-series:** U7 (promote `Material`/`Setting`/`Touch`/
-    `Timing`/`Hold` + compile helpers into `woodshedding`), U8 (retire the old
-    Practice runner + redundant progression stepping). Deferred: U4b (song
-    engine owns the clock, cursor follows), full lens-render convergence onto
-    the resolver, and set-card audio.
+  - **U8** (`c867cc0`): retired the old Practice inline runner (Play/Stop, the
+    per-item auto-advance task, `practice_playing`/`practice_elapsed_secs`,
+    `start`/`stop_practice_click`, the `OneOf4` import) now that the set stage
+    subsumes practice playback. The Practice tab is a clean recipe/browser: pick
+    a set, set tempo + bars-per-item (they parameterize the cards), browse the
+    items (preview-only prev/next + neck), and "Rehearse this set" to fill the
+    set. Redundant progression "stepping" is just the lens authoring surface, so
+    it's left as-is.
+  - **U7 deferred (decision 2026-05-23):** promoting the card/set types into
+    `woodshedding` is parked. It would mean moving `ChromaticPc` (pervasive in
+    `main.rs`) + `ArpeggioDirection` into the theory crate and adding `serde`
+    there — a large, churny cross-crate refactor whose only payoff is a portable
+    core that **no second consumer uses yet**. Per build-to-consumer, do it when
+    Strophe actually reaches for the shared card/set core (the time axis that
+    "travels"), not speculatively.
+  - **State after U8:** the rehearsal-elements spine is shipped end to end —
+    capture from every source → one `Set` of `Card`s → a stage that renders and
+    auto-plays through them. Remaining (all deferred, consumer- or
+    need-gated): U4b (song engine owns the clock, set cursor follows), full
+    lens-render convergence onto `resolve_card_for_stage`, set-card audio, and
+    U7 promotion.
