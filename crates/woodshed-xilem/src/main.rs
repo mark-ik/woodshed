@@ -2265,6 +2265,7 @@ impl AppState {
     fn set_cursor(&mut self, idx: usize) {
         if idx < self.set.cards.len() {
             self.set.cursor = idx;
+            self.sound_current_card();
         }
     }
 
@@ -2280,12 +2281,52 @@ impl AppState {
             LoopMode::All => raw.rem_euclid(len as i32) as usize,
             LoopMode::Off => raw.clamp(0, len as i32 - 1) as usize,
         };
+        self.sound_current_card();
+    }
+
+    /// Sound the card under the cursor (set-card audio): a chord card plays
+    /// its tones as a block, a scale card plays its root so you hear the
+    /// key, a riff is silent for now. Respects the `transport_sound`
+    /// (🔊/🔇) toggle. One-shot voices via the song engine, mixed even when
+    /// the song isn't playing.
+    fn sound_current_card(&mut self) {
+        if !self.transport_sound {
+            return;
+        }
+        let freqs: Vec<f32> = {
+            let Some(card) = self.set.cards.get(self.set.cursor) else {
+                return;
+            };
+            match &card.material {
+                Material::Chord { name, root } => chord_catalog()
+                    .iter()
+                    .find(|c| c.name == *name)
+                    .and_then(|f| {
+                        f.apply_to(ChromaticPc::from_pitch_class(*root).to_pitch(3)).ok()
+                    })
+                    .map(|ps| ps.iter().map(|p| p.frequency() as f32).collect())
+                    .unwrap_or_default(),
+                Material::Scale { root, .. } => {
+                    vec![ChromaticPc::from_pitch_class(*root).to_pitch(3).frequency() as f32]
+                }
+                Material::Riff { .. } => Vec::new(),
+            }
+        };
+        if freqs.is_empty() {
+            return;
+        }
+        if let Some(h) = self.ensure_song_engine() {
+            for f in freqs {
+                h.play_note_now(f, 0.8);
+            }
+        }
     }
 
     fn start_set_playback(&mut self) {
         if !self.set.cards.is_empty() {
             self.set_playing = true;
             self.set_elapsed_secs = 0.0;
+            self.sound_current_card();
         }
     }
 
@@ -3078,10 +3119,14 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         } else {
             OneOf2::B(text_button("▶ Play", |s: &mut AppState| s.start_set_playback()))
         };
+        let sound_on = state.transport_sound;
         let transport = flex_row((
             play_ctl,
             button_sm("◀", |s: &mut AppState| s.cursor_step(-1)),
             button_sm("▶", |s: &mut AppState| s.cursor_step(1)),
+            button_sm(if sound_on { "🔊" } else { "🔇" }, |s: &mut AppState| {
+                s.transport_sound = !s.transport_sound;
+            }),
             dim_label(palette, "·", TS_XS),
             touch_ctl,
             button_sm("◀ move", move |s: &mut AppState| s.set.move_card(cursor, -1)),

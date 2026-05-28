@@ -540,7 +540,26 @@ yet touching the tab strip.
     "travels"), not speculatively.
   - **State after U8:** the rehearsal-elements spine is shipped end to end —
     capture from every source → one `Set` of `Card`s → a stage that renders and
-    auto-plays through them. Remaining (all deferred, consumer- or
-    need-gated): U4b (song engine owns the clock, set cursor follows), full
-    lens-render convergence onto `resolve_card_for_stage`, set-card audio, and
-    U7 promotion.
+    auto-plays through them.
+- 2026-05-23 (cont.): **U7 and U4b shipped; lens-convergence closed as a
+  non-goal.**
+  - **U7** (`5d9ce21`): card/set vocabulary promoted into
+    `woodshedding::rehearsal` (+ `PitchClass`, + `serde`); app converts
+    `ChromaticPc ↔ PitchClass` at the edges. See its commit / U7 note above.
+  - **U4b** (`221a882`): `Recipe::Song` carries the source bar index + a derived
+    `Clock`; `card_clock` + `follow_song_cursor` make the set cursor follow a
+    playing song engine bar-for-bar (a poll active across tabs); the set's own
+    timer is suppressed for song-clocked cards; the stage caption shows the
+    derived clock.
+  - **Full lens-render convergence — declined (decision 2026-05-23).** Verified
+    against the code: the position math (`positions_for_scale`/
+    `positions_for_chord`) already lives in `woodshedding::fretboard` and is
+    shared by both the lenses and `resolve_card_for_stage`; the stage already
+    renders root-pop via `fretboard_view`. The lenses' remaining per-view code
+    (overlay mode, per-chord voicing hues, arpeggio shapes, exercise trail) is
+    *intrinsic rendering*, not duplicated math — routing the rich authoring
+    views through a generic resolver would regress those features for no real
+    dedup. So the resolver stays the card→neck path for the stage / non-lens
+    projections; the lenses keep their own rendering. Convergence is "done where
+    it has value."
+  - **Remaining:** set-card audio (sound each card as the set plays/steps).
