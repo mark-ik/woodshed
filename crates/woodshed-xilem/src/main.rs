@@ -675,6 +675,13 @@ impl Set {
         self.cards.push(card);
     }
 
+    /// Insert a copy of the card at `idx` right after it.
+    fn duplicate(&mut self, idx: usize) {
+        if let Some(c) = self.cards.get(idx).cloned() {
+            self.cards.insert(idx + 1, c);
+        }
+    }
+
     /// Remove the card at `idx`, keeping the cursor on a valid slot.
     fn remove(&mut self, idx: usize) {
         if idx >= self.cards.len() {
@@ -2429,6 +2436,30 @@ impl AppState {
         }
     }
 
+    /// Point the set cursor at `idx` without switching lenses. The
+    /// Rehearsal tab's own stage renders the cursor card via the resolver,
+    /// so selecting a card there doesn't need a tab switch (unlike
+    /// `load_card`, which jumps to a lens for authoring).
+    fn set_cursor(&mut self, idx: usize) {
+        if idx < self.set.cards.len() {
+            self.set.cursor = idx;
+        }
+    }
+
+    /// Move the set cursor by `dir` (wrapping when looping, else clamping)
+    /// without switching lenses. For the Rehearsal stage's prev/next.
+    fn cursor_step(&mut self, dir: i32) {
+        let len = self.set.cards.len();
+        if len == 0 {
+            return;
+        }
+        let raw = self.set.cursor as i32 + dir;
+        self.set.cursor = match self.set.loop_mode {
+            LoopMode::All => raw.rem_euclid(len as i32) as usize,
+            LoopMode::Off => raw.clamp(0, len as i32 - 1) as usize,
+        };
+    }
+
     /// Step the set cursor and load that card onto the stage. Wraps at the
     /// ends when the set is looping, otherwise clamps. No-op on an empty set.
     fn rehearse_step(&mut self, dir: i32) {
@@ -2970,7 +3001,9 @@ fn tab_content(state: &mut AppState) -> Box<AnyWidgetView<AppState>> {
         Tab::Metronome => scroll_tab(metronome_view(state)).boxed(),
         Tab::Practice => scroll_tab(practice_view(state)).boxed(),
         Tab::Song => scroll_tab(song_view_render(state)).boxed(),
-        Tab::Rehearsal => scroll_tab(rehearsal_view(state)).boxed(),
+        // Not scroll_tab: the set stage fills the bounded height (the neck
+        // flexes), like the fretboard lenses.
+        Tab::Rehearsal => rehearsal_view(state).boxed(),
         Tab::Settings => scroll_tab(settings_view(state)).boxed(),
     }
 }
@@ -3012,16 +3045,15 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         header_label(palette, "Rehearsal", TS_LG),
         dim_label(
             palette,
-            "Material you've collected from the lenses, queued for practice. \
-             ▶ loads a card onto the stage; ▲▼ reorder; ✕ removes.",
+            "Your set: cards played in sequence. Click a card in the lane to put \
+             it on the neck; ◀ ▶ scrub; the row below edits the current card.",
             TS_XS,
         ),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Start)
     .gap(SP_1);
 
-    // Body is either an empty-state card or the queue list — different
-    // concrete view types, so unify under OneOf2.
+    // Empty set vs the stage+timeline — different view types, OneOf2.
     let body: OneOf2<_, _> = if len == 0 {
         OneOf2::A(card(
             palette,
@@ -3029,9 +3061,8 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 label("No cards yet.").text_size(TS_MD).color(palette.text),
                 dim_label(
                     palette,
-                    "On any fretboard lens (Scales · Chords · Progressions · \
-                     Exercises · Arpeggios), press “➕ Rehearse” in the header to \
-                     add the current material here.",
+                    "Press “➕ Rehearse” on any lens, or “Rehearse this set / \
+                     this song” on the Practice / Song tabs, to fill your set.",
                     TS_SM,
                 ),
             ))
@@ -3039,47 +3070,96 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .gap(SP_2),
         ))
     } else {
-        let cursor = state.set.cursor;
-        let mut rows: Vec<AnyFlexChild<AppState>> = Vec::new();
-        for (i, c) in state.set.cards.iter().enumerate() {
-            let is_cursor = i == cursor;
-            let name_color = if is_cursor { palette.tertiary } else { palette.text };
-            let marker = if is_cursor { "▶" } else { " " };
-            // Touch toggle, only where it means something (chord cards):
-            // flip Block ⇄ Arp. Other material plays as written.
-            let touch_ctl: OneOf2<_, _> = if matches!(c.material, Material::Chord { .. }) {
-                let t = match c.touch {
-                    Touch::Block => "Block",
-                    Touch::Arpeggiate { .. } => "Arp",
-                };
-                OneOf2::A(button_sm(t, move |s: &mut AppState| s.cycle_card_touch(i)))
-            } else {
-                OneOf2::B(sized_box(label("")).fixed_width(SP_0))
-            };
-            let row = card(
+        use masonry::layout::Length as MLen;
+        let cursor = state.set.cursor.min(len - 1);
+        let card_now = state.set.cards[cursor].clone();
+        let render = state.resolve_card_for_stage(&card_now);
+
+        // Caption: current card + an unresolved-material warning.
+        let warn: OneOf2<_, _> = match render.warning.clone() {
+            Some(w) => OneOf2::A(danger_label(palette, format!("⚠ {w}"), TS_XS)),
+            None => OneOf2::B(sized_box(label("")).fixed_height(SP_0)),
+        };
+        let caption = flex_col((
+            header_label(palette, card_now.label.clone(), TS_MD),
+            dim_label(
                 palette,
-                flex_row((
-                    label(marker).text_size(TS_SM).color(palette.tertiary),
-                    dim_label(palette, c.material.tag(), TS_XS),
-                    label(c.label.clone()).text_size(TS_SM).color(name_color).flex(1.0),
-                    touch_ctl,
-                    button_sm("▲", move |s: &mut AppState| s.set.move_card(i, -1)),
-                    button_sm("▼", move |s: &mut AppState| s.set.move_card(i, 1)),
-                    text_button("Load", move |s: &mut AppState| s.load_card(i)),
-                    button_sm("✕", move |s: &mut AppState| s.set.remove(i)),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_2),
+                format!("{} · card {}/{}", card_now.material.tag(), cursor + 1, len),
+                TS_XS,
+            ),
+            warn,
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .gap(SP_0);
+
+        // Stage: the neck, rendering the cursor card (uses the card's
+        // pinned window, else the live one).
+        let (start, span) = card_now
+            .setting
+            .fret_window
+            .map(|w| (w.start, w.span))
+            .unwrap_or((state.fret_start, state.fret_span));
+        let neck = thin_card(
+            palette,
+            fretboard_view(
+                state.fretboard.clone(),
+                render.positions,
+                render.labels,
+                state.diagram_colors(),
+                None,
+                (start, span),
+                Vec::new(),
+            ),
+        );
+
+        // Timeline lane: a horizontal stream of card chips; click to put
+        // one on the neck. The cursor card pops in tertiary with a ▶.
+        let mut chips: Vec<AnyFlexChild<AppState>> = Vec::new();
+        for (i, c) in state.set.cards.iter().enumerate() {
+            let is_cur = i == cursor;
+            let col = if is_cur { palette.tertiary } else { palette.text };
+            let prefix = if is_cur { "▶ " } else { "" };
+            chips.push(
+                button(
+                    label(format!("{prefix}{}", c.label)).text_size(TS_XS).color(col),
+                    move |s: &mut AppState| s.set_cursor(i),
+                )
+                .into_any_flex(),
             );
-            rows.push(row.into_any_flex());
         }
-        let list = flex_col(rows)
-            .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .main_axis_alignment(MainAxisAlignment::Start)
-            .gap(SP_2);
+        let lane = sized_box(
+            portal(
+                flex_row(chips)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(SP_1),
+            )
+            .constrain_vertical(true)
+            .prop(masonry::properties::AutoHideScrollBar(true)),
+        )
+        .fixed_height(MLen::px(44.0));
+
+        // Inspector + transport for the current card.
         let loop_on = state.set.loop_mode == LoopMode::All;
-        let clear = flex_row((
+        let touch_ctl: OneOf2<_, _> = if matches!(card_now.material, Material::Chord { .. }) {
+            let t = match card_now.touch {
+                Touch::Block => "Touch: block",
+                Touch::Arpeggiate { .. } => "Touch: arp",
+            };
+            OneOf2::A(button_sm(t, move |s: &mut AppState| s.cycle_card_touch(cursor)))
+        } else {
+            OneOf2::B(sized_box(label("")).fixed_width(SP_0))
+        };
+        let transport = flex_row((
+            button_sm("◀", |s: &mut AppState| s.cursor_step(-1)),
+            button_sm("▶", |s: &mut AppState| s.cursor_step(1)),
+            dim_label(palette, "·", TS_XS),
+            touch_ctl,
+            button_sm("◀ move", move |s: &mut AppState| s.set.move_card(cursor, -1)),
+            button_sm("move ▶", move |s: &mut AppState| s.set.move_card(cursor, 1)),
+            button_sm("Duplicate", move |s: &mut AppState| s.set.duplicate(cursor)),
+            text_button("Edit on lens", move |s: &mut AppState| s.load_card(cursor)),
+            button_sm("✕ Remove", move |s: &mut AppState| s.set.remove(cursor)),
+            FlexSpacer::Flex(1.0),
             text_button(if loop_on { "Loop: on" } else { "Loop: off" }, |s: &mut AppState| {
                 s.set.loop_mode = if s.set.loop_mode == LoopMode::All {
                     LoopMode::Off
@@ -3087,22 +3167,24 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     LoopMode::All
                 };
             }),
-            FlexSpacer::Flex(1.0),
             text_button("Clear all", |s: &mut AppState| {
                 s.set.cards.clear();
                 s.set.cursor = 0;
             }),
         ))
-        .main_axis_alignment(MainAxisAlignment::Start);
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2);
+
         OneOf2::B(
-            flex_col((list, clear))
+            flex_col((caption, neck.flex(1.0), lane, transport))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .main_axis_alignment(MainAxisAlignment::Start)
-                .gap(SP_3),
+                .gap(SP_2),
         )
     };
 
-    flex_col((title, body))
+    flex_col((title.flex(0.0), body.flex(1.0)))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .main_axis_alignment(MainAxisAlignment::Start)
         .gap(SP_3)
