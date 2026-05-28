@@ -1193,6 +1193,12 @@ struct AppState {
     /// The set (redesign U1): cards collected from the lenses for stepped
     /// practice. Persisted via `Settings.set`.
     set: Set,
+    /// True while the set is auto-advancing through its cards (U6d).
+    /// Transient.
+    set_playing: bool,
+    /// Wall-clock seconds elapsed on the current card during auto-advance.
+    /// Transient; drives the per-card `Hold` timer.
+    set_elapsed_secs: f32,
     /// Name of the active user theme, or `None` = use the built-in
     /// `theme_mode`.
     active_user: Option<String>,
@@ -1365,6 +1371,8 @@ impl AppState {
             user_progressions: Vec::new(),
             user_exercises: Vec::new(),
             set: Set::default(),
+            set_playing: false,
+            set_elapsed_secs: 0.0,
             active_user: None,
             default_properties: Arc::new(build_default_properties(&Palette::default())),
             window_id: WindowId::next(),
@@ -2460,6 +2468,43 @@ impl AppState {
         };
     }
 
+    fn start_set_playback(&mut self) {
+        if !self.set.cards.is_empty() {
+            self.set_playing = true;
+            self.set_elapsed_secs = 0.0;
+        }
+    }
+
+    fn stop_set_playback(&mut self) {
+        self.set_playing = false;
+    }
+
+    /// Advance the set-playback timer by `dt` seconds; step the cursor when
+    /// the current card's dwell elapses. Stops at the end when not looping
+    /// (U6d). Visual for now — the neck reframes per card; sounding each
+    /// card is a later pass.
+    fn tick_set_playback(&mut self, dt: f32) {
+        if !self.set_playing {
+            return;
+        }
+        let len = self.set.cards.len();
+        if len == 0 {
+            self.set_playing = false;
+            return;
+        }
+        let cursor = self.set.cursor.min(len - 1);
+        let dur = card_duration_secs(&self.set.cards[cursor]);
+        self.set_elapsed_secs += dt;
+        if self.set_elapsed_secs >= dur {
+            self.set_elapsed_secs = 0.0;
+            if cursor + 1 >= len && self.set.loop_mode == LoopMode::Off {
+                self.set_playing = false; // reached the end, not looping
+            } else {
+                self.cursor_step(1);
+            }
+        }
+    }
+
     /// Step the set cursor and load that card onto the stage. Wraps at the
     /// ends when the set is looping, otherwise clamps. No-op on an empty set.
     fn rehearse_step(&mut self, dir: i32) {
@@ -2723,7 +2768,26 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             |_s: &mut AppState, _: ()| {},
         )
     });
-    fork(body, beat_poll)
+    // Set auto-advance (U6d): while the set is playing, tick ~50ms and let
+    // `tick_set_playback` accumulate elapsed time, stepping the cursor when
+    // the current card's `Hold` dwell elapses. The neck reframes off the
+    // cursor change.
+    let set_poll = state.set_playing.then(|| {
+        task_raw(
+            move |proxy, _| async move {
+                let mut tick = time::interval(Duration::from_millis(50));
+                tick.tick().await; // skip the immediate first tick
+                loop {
+                    tick.tick().await;
+                    if proxy.message(()).is_err() {
+                        break;
+                    }
+                }
+            },
+            |s: &mut AppState, _: ()| s.tick_set_playback(0.05),
+        )
+    });
+    fork(fork(body, beat_poll), set_poll)
 }
 
 fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
@@ -3149,7 +3213,13 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         } else {
             OneOf2::B(sized_box(label("")).fixed_width(SP_0))
         };
+        let play_ctl: OneOf2<_, _> = if state.set_playing {
+            OneOf2::A(text_button("■ Stop", |s: &mut AppState| s.stop_set_playback()))
+        } else {
+            OneOf2::B(text_button("▶ Play", |s: &mut AppState| s.start_set_playback()))
+        };
         let transport = flex_row((
+            play_ctl,
             button_sm("◀", |s: &mut AppState| s.cursor_step(-1)),
             button_sm("▶", |s: &mut AppState| s.cursor_step(1)),
             dim_label(palette, "·", TS_XS),
@@ -5400,6 +5470,23 @@ fn apply_fret_window(positions: &mut Vec<Position>, window: Option<FretWindow>) 
     if let Some(w) = window {
         let end = w.start.saturating_add(w.span.saturating_sub(1));
         positions.retain(|p| p.fret == 0 || (p.fret >= w.start && p.fret <= end));
+    }
+}
+
+/// Default tempo for set auto-advance when a card pins no BPM.
+const REHEARSAL_DEFAULT_BPM: f32 = 90.0;
+
+/// How long to dwell on a card during auto-advance (U6d), from its `Hold`
+/// + tempo. A `Manual` card gets a sensible default (two bars) so playback
+/// still flows; meter isn't on the card yet, so a bar is four beats.
+fn card_duration_secs(card: &Card) -> f32 {
+    let bpm = card.timing.bpm.unwrap_or(REHEARSAL_DEFAULT_BPM).max(1.0);
+    let bar_secs = 4.0 * 60.0 / bpm;
+    match card.timing.hold {
+        Hold::Bars(n) => n.max(1) as f32 * bar_secs,
+        Hold::Reps(r) => r.max(1) as f32 * bar_secs, // a rep ≈ a bar for now
+        Hold::Seconds(s) => s.max(0.1),
+        Hold::Manual => 2.0 * bar_secs,
     }
 }
 
