@@ -59,11 +59,17 @@ use woodshedding::scale::{ScaleFormula, catalog as scale_catalog};
 use woodshedding::tuning::{Instrument, Tuning, catalog as tuning_catalog};
 
 mod combobox;
+// Vendored upstream split widget+view (full API kept intentionally).
+#[allow(dead_code)]
+mod pane_split;
+#[allow(dead_code)]
+mod pane_split_widget;
 mod settings;
 mod theme;
 mod widgets;
 
 use combobox::combobox;
+use pane_split::pane_split;
 use settings::Settings;
 use theme::{
     Palette, SP_0, SP_1, SP_2, SP_3, SP_4, TS_2XL, TS_LG, TS_MD, TS_SM, TS_XL, TS_XS,
@@ -3724,7 +3730,7 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let surface = surface_left(state, fretboard_card);
     let body = flex_row((
         sidebar,
-        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+        pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
@@ -3858,7 +3864,7 @@ fn surface_left(
     let mut running_tail = last_w;
     while let Some((idx, w, view)) = rendered.pop() {
         let point = (w / (w + running_tail)).clamp(0.05, 0.95);
-        acc = xilem::view::split(view, acc)
+        acc = pane_split(view, acc)
             .split_axis(Axis::Vertical)
             // Floors so a module can't be dragged so small it clips:
             // ~a chord-card-diagram tall for the top pane, enough for a
@@ -4087,7 +4093,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let surface = surface_left(state, fretboard_card);
     flex_row((
         sidebar,
-        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+        pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
@@ -4311,7 +4317,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let surface = surface_left(state, fretboard_card);
     flex_row((
         chord_sidebar,
-        xilem::view::split(surface, scroll_tab(card(state.palette, info_panel)))
+        pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
@@ -5239,7 +5245,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     .gap(SP_2);
 
     use masonry::layout::Length as MLen;
-    xilem::view::split(
+    pane_split(
         card(
             state.palette,
             sized_box(fretboard_view(
@@ -5921,7 +5927,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     let surface = surface_left(state, fretboard_card.boxed());
     flex_row((
         sidebar,
-        xilem::view::split(surface, right_pane)
+        pane_split(surface, right_pane)
             .split_point(state.split_ratio)
         .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
@@ -6648,7 +6654,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let surface = surface_left(state, fretboard_card);
     let visible = flex_row((
         exercise_sidebar,
-        xilem::view::split(surface, right_pane)
+        pane_split(surface, right_pane)
             .split_point(state.split_ratio)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))

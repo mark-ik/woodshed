@@ -23,6 +23,8 @@ xilem = { workspace = true }
 masonry = { workspace = true }
 masonry_winit = { workspace = true }
 winit = { workspace = true }
+# Used by the vendored split widget (`pane_split_widget`) for its trace span.
+tracing = "0.1"
 tokio = { version = "1.50", features = ["rt", "rt-multi-thread", "time", "sync"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
