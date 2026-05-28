@@ -562,4 +562,14 @@ yet touching the tab strip.
     dedup. So the resolver stays the card→neck path for the stage / non-lens
     projections; the lenses keep their own rendering. Convergence is "done where
     it has value."
-  - **Remaining:** set-card audio (sound each card as the set plays/steps).
+  - **Set-card audio** (`9c99e01`): `sound_current_card` plays a chord card's
+    tones as a block, a scale card's root (so you hear the key), riff silent;
+    one-shot voices via the song engine, gated by the `transport_sound`
+    (🔊/🔇) toggle on the rehearsal transport. Hooked into chip-click,
+    prev/next, auto-advance, and play-start; song-follow stays silent (engine
+    plays its own audio).
+  - **Backlog cleared.** The rehearsal redesign is shipped end to end and the
+    deferred items are all resolved: U7 (promotion) ✅, U4b (song clock) ✅,
+    lens-render convergence (declined as a non-goal) ✅, set-card audio ✅. What
+    remains is ordinary product polish (UI refinement on the new stage, more
+    material), not architecture.
