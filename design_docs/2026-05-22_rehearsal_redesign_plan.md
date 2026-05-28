@@ -508,3 +508,23 @@ yet touching the tab strip.
     resolver (first consumer; `positions_for_practice_item` removed). **Still
     owed:** converging the five lens render paths onto the resolver, which
     rides on U6's set-stage to avoid regressing the rich lens views in one pass.
+  - **U6** (`e7d7912` stage/timeline/inspector + `7559cbc` auto-advance): the
+    Rehearsal tab is now the **set stage**, not a vertical list. A neck renders
+    the cursor card via `resolve_card_for_stage` (the resolver's second
+    consumer, proving it; reframes per card with no lens switch; honors the
+    card's pinned window; shows a warning instead of a blank neck). Below it, a
+    **horizontal timeline lane** of card chips (`portal` + `constrain_vertical`,
+    scrolls sideways; click a chip to put it on the neck, cursor chip pops in
+    tertiary). An **inspector/transport** row: Play/Stop, scrub ◀/▶, Touch
+    block/arp, move/duplicate/remove, "Edit on lens" (jumps to authoring), Loop,
+    Clear all. **Auto-advance** (`tick_set_playback` + a ~50ms task in
+    `app_logic`): a card's dwell comes from `card_duration_secs` (Hold + tempo;
+    Manual → two bars so it flows), the cursor steps when it elapses, stops at
+    the end unless looping. New helpers: `set_cursor` / `cursor_step` (no lens
+    switch), `Set::duplicate`. Playback is **visual** (neck walks the set);
+    sounding each card + the U4b song-engine clock handoff are later.
+  - **Remaining in the U-series:** U7 (promote `Material`/`Setting`/`Touch`/
+    `Timing`/`Hold` + compile helpers into `woodshedding`), U8 (retire the old
+    Practice runner + redundant progression stepping). Deferred: U4b (song
+    engine owns the clock, cursor follows), full lens-render convergence onto
+    the resolver, and set-card audio.
