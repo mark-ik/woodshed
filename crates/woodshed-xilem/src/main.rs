@@ -4150,6 +4150,28 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             .unwrap_or_default()
     };
     let labels = compute_labels(state.chord_label_mode, &positions);
+
+    // Voicing mode frames the shape: anchor the visible window to the
+    // voicing's frets so it can never fall off-screen (the live
+    // `fret_start` slide and its ▼▲ arrows are for the "all chord tones"
+    // view). Mirrors `resolve_card_for_stage`, but keeps open strings
+    // visible — when the shape uses an open string or sits at the low
+    // frets we hold the window at the nut; otherwise we slide up to the
+    // shape and widen the span to reach its highest fretted note. "All
+    // chord tones" keeps the user's manual window unchanged.
+    let fret_window = if state.chord_show_voicing && !voicings.is_empty() {
+        let max_fret = positions.iter().map(|p| p.fret).max().unwrap_or(0);
+        let has_open = positions.iter().any(|p| p.fret == 0);
+        let min_fretted = positions.iter().map(|p| p.fret).filter(|&f| f > 0).min();
+        let start = match min_fretted {
+            Some(m) if !has_open && m > 1 => m - 1,
+            _ => 0,
+        };
+        let span = state.fret_span.max(max_fret.saturating_sub(start)).max(1);
+        (start, span)
+    } else {
+        (state.fret_start, state.fret_span)
+    };
     let board = state.fretboard.clone();
     let label_mode_text = state.chord_label_mode.label();
 
@@ -4309,7 +4331,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             labels,
             state.diagram_colors(),
             None,
-            (state.fret_start, state.fret_span),
+            fret_window,
             Vec::new(),
         ),
     )
