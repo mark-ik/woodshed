@@ -13,6 +13,11 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) — Scope for
+  a GitHub-Pages wasm demo. Native Xilem cannot compile to wasm on the current
+  fork (hard build failure); the web path is `xilem_web` (DOM/SVG, a second
+  view vocabulary) or shelving the demo. Tier-0 seams (AudioBackend, Storage,
+  timers, `Instant`) gate any path. Decision pending.
 - [2026-05-22_rehearsal_redesign_plan.md](2026-05-22_rehearsal_redesign_plan.md)
   — Prototype → designed UI. Card vocabulary (tagged-union `Card`), a rehearsal
   queue/projections spine, bulldoze-then-build the lens nav. Branch
