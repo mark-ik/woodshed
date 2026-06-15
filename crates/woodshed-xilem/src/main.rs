@@ -1585,7 +1585,7 @@ impl AppState {
 
     /// Cycle the active tuning through the catalog tunings for the
     /// current instrument followed by the user's custom ones (wrapping).
-    /// Driven by the header ◀/▶.
+    /// Driven by the header ◂/▸.
     fn cycle_tuning(&mut self, delta: i32) {
         let inst = self.active_instrument;
         let inst_str = settings::instrument_to_str(inst);
@@ -2697,7 +2697,7 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
 fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let instrument_name = format!("{}", state.active_instrument);
-    // Tuning picker as a ◀▶ cycle (a dropdown in a fixed header strip
+    // Tuning picker as a ◂▸ cycle (a dropdown in a fixed header strip
     // blows the layout open). Cycles catalog tunings for the current
     // instrument then the user's custom ones; the full browsable list
     // lives in Settings → Custom tunings.
@@ -2725,7 +2725,7 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 .fixed_width(SP_0),
         )
     };
-    // Instrument is changed via the ◀/▶ cycle arrows below (every
+    // Instrument is changed via the ◂/▸ cycle arrows below (every
     // fretboard re-renders against the new tuning's strings).
 
     // Fret-span scope dial — shorten the neck toward the chord-card
@@ -2795,13 +2795,13 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         flex_row((
             hamburger,
             header_label(state.palette, "Woodshed", TS_LG),
-            button_sm("◀", |s: &mut AppState| s.cycle_instrument(-1)),
+            button_sm("◂", |s: &mut AppState| s.cycle_instrument(-1)),
             label(instrument_name).text_size(TS_SM),
-            button_sm("▶", |s: &mut AppState| s.cycle_instrument(1)),
+            button_sm("▸", |s: &mut AppState| s.cycle_instrument(1)),
             dim_label(state.palette, "·", TS_SM),
-            button_sm("◀", |s: &mut AppState| s.cycle_tuning(-1)),
+            button_sm("◂", |s: &mut AppState| s.cycle_tuning(-1)),
             label(tuning_name).text_size(TS_SM),
-            button_sm("▶", |s: &mut AppState| s.cycle_tuning(1)),
+            button_sm("▸", |s: &mut AppState| s.cycle_tuning(1)),
             fret_ctl,
             right_group.flex(1.0),
         ))
@@ -2922,10 +2922,10 @@ fn lens_bar(
     let metro_shown = state.module_shown(ModuleKind::Metronome);
     // "Now rehearsing" strip — when the queue holds cards, the stage
     // shows which one the cursor is on and steps through them with
-    // ◀/▶, so the rehearsal queue drives the stage as a live practice
+    // ◂/▸, so the rehearsal queue drives the stage as a live practice
     // flow (not just a list you Load from). Right-aligned, only when
     // the queue is non-empty.
-    // Compact on purpose: just the cursor counter + ◀/▶. The card's
+    // Compact on purpose: just the cursor counter + ◂/▸. The card's
     // name/material is already shown prominently on the stage, so
     // repeating it here only makes this strip overflow narrow windows.
     let queue_len = state.set.cards.len();
@@ -2933,9 +2933,9 @@ fn lens_bar(
         let cursor = state.set.cursor;
         OneOf2::A(
             flex_row((
-                button_sm("◀", |s: &mut AppState| s.rehearse_step(-1)),
+                button_sm("◂", |s: &mut AppState| s.rehearse_step(-1)),
                 dim_label(palette, format!("♪ {}/{queue_len}", cursor + 1), TS_XS),
-                button_sm("▶", |s: &mut AppState| s.rehearse_step(1)),
+                button_sm("▸", |s: &mut AppState| s.rehearse_step(1)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(SP_1),
@@ -3019,7 +3019,7 @@ where
 
 /// The rehearsal queue projection (redesign R2). Lists the cards the user
 /// has collected from the lenses, in order, with a cursor marking the one
-/// last loaded onto the stage. Each row can be loaded (▶ — applies the
+/// last loaded onto the stage. Each row can be loaded (▸ — applies the
 /// card's selection and jumps to its lens), reordered (▲/▼), or removed
 /// (✕). This is the first non-lens projection of the card vocabulary; it
 /// will grow into the practice-flow backbone (queue → stage stepping).
@@ -3032,7 +3032,7 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         dim_label(
             palette,
             "Your set: cards played in sequence. Click a card in the lane to put \
-             it on the neck; ◀ ▶ scrub; the row below edits the current card.",
+             it on the neck; ◂ ▸ scrub; the row below edits the current card.",
             TS_XS,
         ),
     ))
@@ -3110,12 +3110,12 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         );
 
         // Timeline lane: a horizontal stream of card chips; click to put
-        // one on the neck. The cursor card pops in tertiary with a ▶.
+        // one on the neck. The cursor card pops in tertiary with a ▸.
         let mut chips: Vec<AnyFlexChild<AppState>> = Vec::new();
         for (i, c) in state.set.cards.iter().enumerate() {
             let is_cur = i == cursor;
             let col = if is_cur { palette.tertiary } else { palette.text };
-            let prefix = if is_cur { "▶ " } else { "" };
+            let prefix = if is_cur { "▸ " } else { "" };
             chips.push(
                 button(
                     label(format!("{prefix}{}", c.label)).text_size(TS_XS).color(col),
@@ -3149,20 +3149,20 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         let play_ctl: OneOf2<_, _> = if state.set_playing {
             OneOf2::A(text_button("■ Stop", |s: &mut AppState| s.stop_set_playback()))
         } else {
-            OneOf2::B(text_button("▶ Play", |s: &mut AppState| s.start_set_playback()))
+            OneOf2::B(text_button("▸ Play", |s: &mut AppState| s.start_set_playback()))
         };
         let sound_on = state.transport_sound;
         let transport = flex_row((
             play_ctl,
-            button_sm("◀", |s: &mut AppState| s.cursor_step(-1)),
-            button_sm("▶", |s: &mut AppState| s.cursor_step(1)),
+            button_sm("◂", |s: &mut AppState| s.cursor_step(-1)),
+            button_sm("▸", |s: &mut AppState| s.cursor_step(1)),
             button_sm(if sound_on { "🔊" } else { "🔇" }, |s: &mut AppState| {
                 s.transport_sound = !s.transport_sound;
             }),
             dim_label(palette, "·", TS_XS),
             touch_ctl,
-            button_sm("◀ move", move |s: &mut AppState| s.set.move_card(cursor, -1)),
-            button_sm("move ▶", move |s: &mut AppState| s.set.move_card(cursor, 1)),
+            button_sm("◂ move", move |s: &mut AppState| s.set.move_card(cursor, -1)),
+            button_sm("move ▸", move |s: &mut AppState| s.set.move_card(cursor, 1)),
             button_sm("Duplicate", move |s: &mut AppState| s.set.duplicate(cursor)),
             text_button("Edit on lens", move |s: &mut AppState| s.load_card(cursor)),
             button_sm("✕ Remove", move |s: &mut AppState| s.set.remove(cursor)),
@@ -3602,15 +3602,15 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.arpeggio_playing = false;
                 }))
             } else {
-                OneOf2::B(button_sm("▶ Play", |s: &mut AppState| {
+                OneOf2::B(button_sm("▸ Play", |s: &mut AppState| {
                     s.arpeggio_playing = true;
                 }))
             },
-            button_sm("◀ Step", |s: &mut AppState| {
+            button_sm("◂ Step", |s: &mut AppState| {
                 s.arpeggio_playing = false;
                 s.arpeggio_step_idx = s.arpeggio_step_idx.saturating_sub(1);
             }),
-            button_sm("Step ▶", |s: &mut AppState| {
+            button_sm("Step ▸", |s: &mut AppState| {
                 s.arpeggio_playing = false;
                 s.arpeggio_step_idx = s.arpeggio_step_idx.wrapping_add(1);
             }),
@@ -3664,11 +3664,11 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 open_combo,
                 |s: &mut AppState, i: usize| s.arpeggio_idx = i,
             ),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 let n = chord_catalog().len().max(1);
                 s.arpeggio_idx = (s.arpeggio_idx + n - 1) % n;
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 let n = chord_catalog().len().max(1);
                 s.arpeggio_idx = (s.arpeggio_idx + 1) % n;
             }),
@@ -3687,8 +3687,8 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.root = ChromaticPc::ALL[i];
                 },
             ),
-            button_sm("◀", |s: &mut AppState| s.root = s.root.cycle(-1)),
-            button_sm("▶", |s: &mut AppState| s.root = s.root.cycle(1)),
+            button_sm("◂", |s: &mut AppState| s.root = s.root.cycle(-1)),
+            button_sm("▸", |s: &mut AppState| s.root = s.root.cycle(1)),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -3991,7 +3991,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     // Right-hand info panel: title + intervals + control rows + a
     // bottom-aligned label-mode cycler. Each picker now pairs a
-    // combobox (jump to any) with ◀/▶ arrows (walk to adjacent).
+    // combobox (jump to any) with ◂/▸ arrows (walk to adjacent).
     let info_panel = flex_col((
         header_label(state.palette, scale_name, TS_LG),
         dim_prose(state.palette, format!("Intervals: {intervals}"), TS_SM),
@@ -4004,8 +4004,8 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 open_combo,
                 |s: &mut AppState, i: usize| s.scale_idx = i,
             ),
-            button_sm("◀", |s: &mut AppState| s.cycle_scale(-1)),
-            button_sm("▶", |s: &mut AppState| s.cycle_scale(1)),
+            button_sm("◂", |s: &mut AppState| s.cycle_scale(-1)),
+            button_sm("▸", |s: &mut AppState| s.cycle_scale(1)),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -4021,10 +4021,10 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.root = ChromaticPc::ALL[i];
                 },
             ),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 s.root = s.root.cycle(-1);
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 s.root = s.root.cycle(1);
             }),
         ))
@@ -4240,8 +4240,8 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 chord_open_combo,
                 |s: &mut AppState, i: usize| s.chord_idx = i,
             ),
-            button_sm("◀", |s: &mut AppState| s.cycle_chord(-1)),
-            button_sm("▶", |s: &mut AppState| s.cycle_chord(1)),
+            button_sm("◂", |s: &mut AppState| s.cycle_chord(-1)),
+            button_sm("▸", |s: &mut AppState| s.cycle_chord(1)),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -4257,10 +4257,10 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.root = ChromaticPc::ALL[i];
                 },
             ),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 s.root = s.root.cycle(-1);
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 s.root = s.root.cycle(1);
             }),
         ))
@@ -4272,7 +4272,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         // who just wants to flip through voicings doesn't have to
         // hit the toggle first.
         flex_row((
-            button_sm("◀", move |s: &mut AppState| {
+            button_sm("◂", move |s: &mut AppState| {
                 if voicing_count > 0 {
                     s.chord_show_voicing = true;
                     let cur = s.chord_voicing_idx.min(voicing_count - 1) as i32;
@@ -4283,7 +4283,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             text_button(voicing_mid_text, |s: &mut AppState| {
                 s.chord_show_voicing = !s.chord_show_voicing;
             }),
-            button_sm("▶", move |s: &mut AppState| {
+            button_sm("▸", move |s: &mut AppState| {
                 if voicing_count > 0 {
                     s.chord_show_voicing = true;
                     let cur = s.chord_voicing_idx.min(voicing_count - 1) as i32;
@@ -4498,7 +4498,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             s.song_arm_bar = None;
         }))
     } else {
-        OneOf2::B(text_button("▶ Play", |s: &mut AppState| {
+        OneOf2::B(text_button("▸ Play", |s: &mut AppState| {
             if let Some(h) = s.ensure_song_engine() {
                 h.play();
             }
@@ -4599,7 +4599,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             let active = i == selected;
             let is_cursor = song.playing && i == song.cursor.bar_idx;
             let is_armed = Some(i) == state.song_arm_bar;
-            let prefix = if is_cursor { "▶ " } else if active { "● " } else { "" };
+            let prefix = if is_cursor { "▸ " } else if active { "● " } else { "" };
             let chord_label = bar
                 .chord_ref
                 .as_ref()
@@ -4752,7 +4752,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 // denominator (beat unit) both adjustable.
                 flex_row((
                     label(format!("Time: {num}/{denom}")).text_size(TS_SM),
-                    button_sm("◀", |s: &mut AppState| {
+                    button_sm("◂", |s: &mut AppState| {
                         let target = s.song_selected_bar;
                         if let Some(h) = s.ensure_song_engine() {
                             h.with_song(|x| {
@@ -4764,7 +4764,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                         }
                         s.refresh_song_view();
                     }),
-                    button_sm("▶", |s: &mut AppState| {
+                    button_sm("▸", |s: &mut AppState| {
                         let target = s.song_selected_bar;
                         if let Some(h) = s.ensure_song_engine() {
                             h.with_song(|x| {
@@ -4777,7 +4777,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                         s.refresh_song_view();
                     }),
                     label("/").text_size(TS_SM),
-                    button_sm("◀", |s: &mut AppState| {
+                    button_sm("◂", |s: &mut AppState| {
                         let target = s.song_selected_bar;
                         if let Some(h) = s.ensure_song_engine() {
                             h.with_song(|x| {
@@ -4789,7 +4789,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                         }
                         s.refresh_song_view();
                     }),
-                    button_sm("▶", |s: &mut AppState| {
+                    button_sm("▸", |s: &mut AppState| {
                         let target = s.song_selected_bar;
                         if let Some(h) = s.ensure_song_engine() {
                             h.with_song(|x| {
@@ -5006,7 +5006,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 s.refresh_song_view();
             },
         ),
-        text_button("◀ Move left", |s: &mut AppState| {
+        text_button("◂ Move left", |s: &mut AppState| {
             let target = s.song_selected_bar;
             if target == 0 {
                 return;
@@ -5017,7 +5017,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             s.song_selected_bar = target - 1;
             s.refresh_song_view();
         }),
-        text_button("Move right ▶", |s: &mut AppState| {
+        text_button("Move right ▸", |s: &mut AppState| {
             let target = s.song_selected_bar;
             let len = s.song_view.len();
             if target + 1 >= len {
@@ -5194,14 +5194,14 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.practice_item_idx = 0;
                 },
             ),
-            button_sm("◀", move |s: &mut AppState| {
+            button_sm("◂", move |s: &mut AppState| {
                 if set_count > 0 {
                     let cur = s.practice_selected_set.min(set_count - 1) as i32;
                     s.practice_selected_set = ((cur - 1).rem_euclid(set_count as i32)) as usize;
                     s.practice_item_idx = 0;
                 }
             }),
-            button_sm("▶", move |s: &mut AppState| {
+            button_sm("▸", move |s: &mut AppState| {
                 if set_count > 0 {
                     let cur = s.practice_selected_set.min(set_count - 1) as i32;
                     s.practice_selected_set = ((cur + 1).rem_euclid(set_count as i32)) as usize;
@@ -5260,7 +5260,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .gap(SP_2),
         // Item browse (preview only — no transport/playback here).
         flex_row((
-            button_sm("◀◀ Prev", move |s: &mut AppState| {
+            button_sm("◂◂ Prev", move |s: &mut AppState| {
                 if item_count > 0 {
                     let cur = s.practice_item_idx.min(item_count - 1) as i32;
                     s.practice_item_idx = ((cur - 1).rem_euclid(item_count as i32)) as usize;
@@ -5275,7 +5275,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 },
                 TS_XS,
             ),
-            button_sm("Next ▶▶", move |s: &mut AppState| {
+            button_sm("Next ▸▸", move |s: &mut AppState| {
                 if item_count > 0 {
                     let cur = s.practice_item_idx.min(item_count - 1) as i32;
                     s.practice_item_idx = ((cur + 1).rem_euclid(item_count as i32)) as usize;
@@ -5382,8 +5382,8 @@ fn user_progression_editor(
                 button_sm("deg −", move |s: &mut AppState| s.nudge_prog_degree(&n1, ci, -1)),
                 button_sm("deg +", move |s: &mut AppState| s.nudge_prog_degree(&n2, ci, 1)),
                 button_sm("♯/♭", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
-                button_sm("◀", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
-                button_sm("▶", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
+                button_sm("◂", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
+                button_sm("▸", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
                 button_sm("✕", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -5603,7 +5603,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
             //   - chord symbol + role label + voicing N/M
             //   - the visual chord diagram (clickable: selects this
             //     chord as the "expanded" one on the main fretboard)
-            //   - ◀ / ▶ arrows to cycle this chord's voicing
+            //   - ◂ / ▸ arrows to cycle this chord's voicing
             let voicing_idx_vec = state.progression_voicing_idx.clone();
             let cards: Vec<_> = chords
                 .iter()
@@ -5688,7 +5688,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                     };
 
                     let arrows = flex_row((
-                        button_sm("◀", move |s: &mut AppState| {
+                        button_sm("◂", move |s: &mut AppState| {
                             if voicing_count > 0 {
                                 while s.progression_voicing_idx.len() <= i {
                                     s.progression_voicing_idx.push(0);
@@ -5701,7 +5701,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                             }
                         }),
                         dim_label(state.palette, counter_text, TS_XS),
-                        button_sm("▶", move |s: &mut AppState| {
+                        button_sm("▸", move |s: &mut AppState| {
                             if voicing_count > 0 {
                                 while s.progression_voicing_idx.len() <= i {
                                     s.progression_voicing_idx.push(0);
@@ -5838,7 +5838,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                     header_label(state.palette, prog_name, TS_LG),
                     prose(prog_desc).text_size(TS_SM),
                     // Combobox picker for the progression key — replaces
-                    // the old `◀ Key: C ▶` cycle row. The ▲/▼ arrows on
+                    // the old `◂ Key: C ▸` cycle row. The ▲/▼ arrows on
                     // the trigger toggle the inline option list; clicking
                     // an option commits + closes.
                     flex_row((
@@ -5852,13 +5852,13 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                                 s.root = ChromaticPc::ALL[i];
                             },
                         ),
-                        // Keep the ◀/▶ cycle as a fine-tune affordance
+                        // Keep the ◂/▸ cycle as a fine-tune affordance
                         // — chromatic neighbour walking is faster than
                         // re-opening the picker.
-                        button_sm("◀", |s: &mut AppState| {
+                        button_sm("◂", |s: &mut AppState| {
                             s.root = s.root.cycle(-1);
                         }),
-                        button_sm("▶", |s: &mut AppState| {
+                        button_sm("▸", |s: &mut AppState| {
                             s.root = s.root.cycle(1);
                         }),
                         FlexSpacer::Fixed(SP_2),
@@ -5905,10 +5905,10 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                 .text_size(TS_XS),
                 flex_row((
                     label(format!("Key: {display_key}")).text_size(TS_SM),
-                    button_sm("◀", |s: &mut AppState| {
+                    button_sm("◂", |s: &mut AppState| {
                         s.root = s.root.cycle(-1);
                     }),
-                    button_sm("▶", |s: &mut AppState| {
+                    button_sm("▸", |s: &mut AppState| {
                         s.root = s.root.cycle(1);
                     }),
                 ))
@@ -6212,7 +6212,7 @@ fn roman_numeral(degree: u8, lower: bool) -> &'static str {
 /// motion rather than a static rectangle of unique positions.
 ///
 /// Two ways to drive the sequence:
-/// - **Manual**: ◀ Step / Step ▶ buttons advance one position at a
+/// - **Manual**: ◂ Step / Step ▸ buttons advance one position at a
 ///   time. Best for learning the pattern note-by-note.
 /// - **Auto**: Play button starts a task that advances at the
 ///   chosen BPM. Best for practicing the exercise at tempo.
@@ -6441,11 +6441,11 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         OneOf3::B(disabled_label(state.palette, "No playable steps", TS_XS))
     } else {
         OneOf3::C(
-            text_button("▶ Play", |s: &mut AppState| s.exercise_playing = true),
+            text_button("▸ Play", |s: &mut AppState| s.exercise_playing = true),
         )
     };
 
-    // Exercise picker — combobox for jump + ◀/▶ for adjacent. Both
+    // Exercise picker — combobox for jump + ◂/▸ for adjacent. Both
     // arms reset the step index and pause playback so switching
     // exercises doesn't strand the trail highlight on a stale step.
     let mut exercise_options: Vec<ArcStr> = exercise_catalog()
@@ -6476,12 +6476,12 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.exercise_playing = false;
                 },
             ),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 s.cycle_exercise(-1);
                 s.exercise_step_idx = 0;
                 s.exercise_playing = false;
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 s.cycle_exercise(1);
                 s.exercise_step_idx = 0;
                 s.exercise_playing = false;
@@ -6492,12 +6492,12 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .gap(SP_2),
         flex_row((
             label(format!("Start fret: {starting_fret}")).text_size(TS_SM),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 s.exercise_starting_fret =
                     s.exercise_starting_fret.saturating_sub(1).max(1);
                 s.exercise_step_idx = 0;
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 let max = s.fretboard.fret_count.saturating_sub(4).max(1);
                 s.exercise_starting_fret = (s.exercise_starting_fret + 1).min(max);
                 s.exercise_step_idx = 0;
@@ -6510,7 +6510,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         label(step_label).text_size(TS_MD),
         // Manual step transport.
         flex_row((
-            text_button("◀ Step", move |s: &mut AppState| {
+            text_button("◂ Step", move |s: &mut AppState| {
                 if step_count > 0 {
                     let cur = s.exercise_step_idx.min(step_count - 1) as i32;
                     s.exercise_step_idx =
@@ -6519,7 +6519,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 }
             }),
             play_button,
-            text_button("Step ▶", move |s: &mut AppState| {
+            text_button("Step ▸", move |s: &mut AppState| {
                 if step_count > 0 {
                     let cur = s.exercise_step_idx.min(step_count - 1) as i32;
                     s.exercise_step_idx =
@@ -6774,7 +6774,7 @@ fn metronome_module(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     } else if playing {
         OneOf3::B(button_sm("■ Stop", |s: &mut AppState| s.stop_metronome()))
     } else {
-        OneOf3::C(button_sm("▶ Play", |s: &mut AppState| s.play_metronome()))
+        OneOf3::C(button_sm("▸ Play", |s: &mut AppState| s.play_metronome()))
     };
 
     let panel = flex_col((
@@ -6915,7 +6915,7 @@ fn tuner_module(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     } else if listening {
         OneOf3::B(button_sm("■ Stop", |s: &mut AppState| s.stop_tuner()))
     } else {
-        OneOf3::C(button_sm("▶ Tune", |s: &mut AppState| s.start_tuner()))
+        OneOf3::C(button_sm("▸ Tune", |s: &mut AppState| s.start_tuner()))
     };
 
     let mut string_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
@@ -7083,7 +7083,7 @@ fn metronome_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         )
     } else {
         OneOf3::C(
-            text_button("▶ Play", |s: &mut AppState| s.play_metronome()),
+            text_button("▸ Play", |s: &mut AppState| s.play_metronome()),
         )
     };
 
@@ -7159,12 +7159,12 @@ fn metronome_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         // Time signature picker.
         flex_row((
             label(time_sig_text).text_size(TS_SM).font(mono_family()),
-            button_sm("◀", |s: &mut AppState| {
+            button_sm("◂", |s: &mut AppState| {
                 s.metronome_time_sig_num =
                     (s.metronome_time_sig_num.saturating_sub(1)).max(1);
                 s.apply_metronome_pattern();
             }),
-            button_sm("▶", |s: &mut AppState| {
+            button_sm("▸", |s: &mut AppState| {
                 s.metronome_time_sig_num = (s.metronome_time_sig_num + 1).min(12);
                 s.apply_metronome_pattern();
             }),
@@ -7457,7 +7457,7 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .unwrap_or_else(|| "(unavailable on this platform)".to_string());
 
     // Custom-tunings editor — one card per user tuning: name, per-string
-    // ◀ note ▶ semitone nudges, and Apply / ± string / Delete.
+    // ◂ note ▸ semitone nudges, and Apply / ± string / Delete.
     let mut tuning_cards: Vec<_> = Vec::new();
     for t in &state.user_tunings {
         let name = t.name.clone();
@@ -7470,8 +7470,8 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             } else {
                 state.palette.text
             });
-        // One tight `◀ note ▶` group per string (content-sized label so
-        // there's no dead gap before the ▶), with the spacing *between*
+        // One tight `◂ note ▸` group per string (content-sized label so
+        // there's no dead gap before the ▸), with the spacing *between*
         // groups via the outer row's gap.
         let mut string_btns: Vec<AnyFlexChild<AppState>> = Vec::new();
         for (i, &m) in t.midi.iter().enumerate() {
@@ -7481,9 +7481,9 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             let nu = name.clone();
             string_btns.push(
                 flex_row((
-                    button_sm("◀", move |s: &mut AppState| s.nudge_user_string(&nd, i, -1)),
+                    button_sm("◂", move |s: &mut AppState| s.nudge_user_string(&nd, i, -1)),
                     label(note).text_size(TS_XS).font(mono_family()),
-                    button_sm("▶", move |s: &mut AppState| s.nudge_user_string(&nu, i, 1)),
+                    button_sm("▸", move |s: &mut AppState| s.nudge_user_string(&nu, i, 1)),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .main_axis_alignment(MainAxisAlignment::Start)
@@ -7529,7 +7529,7 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         dim_prose(
             state.palette,
             "New tunings clone the current one; nudge each string with \
-             ◀ ▶, then Apply. They show up in the header tuning picker \
+             ◂ ▸, then Apply. They show up in the header tuning picker \
              for the matching instrument.",
             TS_XS,
         ),
@@ -8237,7 +8237,7 @@ where
 ///
 /// Sized to the card's actual content — a 120px chord diagram in a
 /// button (≈32px padding + border) plus the chord-name / role labels
-/// and the ◀ counter ▶ arrows row, all left-aligned. The old 370px
+/// and the ◂ counter ▸ arrows row, all left-aligned. The old 370px
 /// value left ~200px of dead space inside every card (sparse,
 /// inefficient), so cards reflow to compact columns and
 /// `cards_per_row = floor((panel_w + gap) / (CHORD_CARD_W + gap))`
@@ -8361,7 +8361,7 @@ where
 // =================================================================
 // Sized button helpers — `text_button` builds a default-size button,
 // but the UI has cases where a smaller affordance reads better (the
-// `◀/▶` cycle arrows next to comboboxes) and cases where the primary
+// `◂/▸` cycle arrows next to comboboxes) and cases where the primary
 // action wants a heavier weight (transport controls). These wrap
 // `button(label(...), cb)` so we can scale the inner label's
 // `text_size` without touching every call site.
@@ -8371,7 +8371,7 @@ use xilem::view::button as button_view;
 
 /// Small button — `TS_XS` text. Use for cycle arrows, secondary
 /// micro-actions, and any control that's "in service of" a larger
-/// picker (the ◀/▶ flanking a combobox, for instance).
+/// picker (the ◂/▸ flanking a combobox, for instance).
 fn button_sm<F>(
     text: impl Into<masonry::core::ArcStr>,
     callback: F,
@@ -8382,7 +8382,7 @@ where
     button_view(label(text).text_size(TS_XS), move |s: &mut AppState| {
         callback(s);
     })
-    // Tight padding so single-glyph cycle arrows (◀/▶) read as
+    // Tight padding so single-glyph cycle arrows (◂/▸) read as
     // compact affordances rather than chunky buttons.
     .padding(masonry::properties::Padding::from_vh(SP_1, SP_2))
 }
@@ -8406,7 +8406,7 @@ where
 }
 
 /// Large button — `TS_MD` text. Use for primary transport actions
-/// ("▶ Play", "■ Stop", "Start tuner") that anchor a panel.
+/// ("▸ Play", "■ Stop", "Start tuner") that anchor a panel.
 #[allow(dead_code)]
 fn button_lg<F>(
     text: impl Into<masonry::core::ArcStr>,
