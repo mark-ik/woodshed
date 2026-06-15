@@ -180,12 +180,14 @@ impl ThemeMode {
                 danger: rgb(0xB8, 0x33, 0x33),
                 dark: false,
             },
-            // Warm dark — terracotta / gold / violet over warm-brown panels.
+            // Dusk — cool twilight: dusky mauve / periwinkle / violet over a
+            // cool indigo-violet panel ladder. The cool counterpart to Ember,
+            // so the two warm-vs-cool darks read clearly apart.
             Self::Dusk => Seeds {
-                primary: rgb(0xD0, 0x6A, 0x4E),
-                secondary: rgb(0xD9, 0xA4, 0x41),
-                tertiary: rgb(0x9B, 0x6F, 0xD0),
-                neutral: rgb(0x26, 0x18, 0x12),
+                primary: rgb(0xCC, 0x6F, 0x8C),
+                secondary: rgb(0x7C, 0x71, 0xC4),
+                tertiary: rgb(0xB2, 0x8A, 0xDC),
+                neutral: rgb(0x19, 0x16, 0x28),
                 text_header: None,
                 text_body: None,
                 success: rgb(0x6F, 0xB3, 0x6E),
@@ -216,13 +218,14 @@ impl ThemeMode {
                 danger: rgb(0xB8, 0x33, 0x33),
                 dark: false,
             },
-            // Ember — bold warm-dark (a Dusk sibling): terracotta notes
-            // (primary), gold roots (tertiary), woody warm-brown surfaces.
+            // Ember — warm fire: ember orange-red notes (primary), gold roots
+            // (tertiary), copper chrome, over warm charcoal-brown surfaces.
+            // Pushed warmer/redder than the old Dusk so it owns the warm end.
             Self::Ember => Seeds {
-                primary: rgb(0xD2, 0x6B, 0x4A),
-                secondary: rgb(0xA9, 0x73, 0x45),
-                tertiary: rgb(0xE6, 0xB2, 0x4E),
-                neutral: rgb(0x26, 0x19, 0x11),
+                primary: rgb(0xDA, 0x5E, 0x3A),
+                secondary: rgb(0xC2, 0x7A, 0x3C),
+                tertiary: rgb(0xEB, 0xB0, 0x46),
+                neutral: rgb(0x24, 0x17, 0x0F),
                 text_header: None,
                 text_body: None,
                 success: rgb(0x6F, 0xB3, 0x6E),
