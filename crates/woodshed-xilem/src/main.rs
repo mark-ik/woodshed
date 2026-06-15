@@ -67,6 +67,9 @@ mod pane_split_widget;
 mod settings;
 mod theme;
 mod widgets;
+mod window_chrome;
+
+use window_chrome::{window_chrome, ChromeRole};
 
 use combobox::combobox;
 use pane_split::pane_split;
@@ -2758,6 +2761,24 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     } else {
         OneOf2::B(sized_box(label("")).fixed_width(SP_0))
     };
+    // Client-side window chrome (native decorations are off — see `run`).
+    // Right cluster of the header: a transparent draggable filler that
+    // moves the window, then the Rehearse control, then the
+    // minimize / maximize / close glyphs. Grouped into one flex child so
+    // the outer header tuple stays small. Glyphs use `palette.text` so they
+    // retheme with everything else; close flips `running` to quit.
+    let chrome_fg = state.palette.text;
+    let right_group = flex_row((
+        window_chrome(ChromeRole::Drag, chrome_fg).flex(1.0),
+        rehearse_ctl,
+        window_chrome(ChromeRole::Minimize, chrome_fg),
+        window_chrome(ChromeRole::Maximize, chrome_fg),
+        window_chrome(ChromeRole::Close, chrome_fg)
+            .on_close(|s: &mut AppState| s.running = false),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(SP_1);
+
     // Wrap the header in a sized_box with a palette-tracked surface
     // so the toolbar strip respects the active theme. Without this
     // the header sits directly on the unthemed window background
@@ -2776,8 +2797,7 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             label(tuning_name).text_size(TS_SM),
             button_sm("▶", |s: &mut AppState| s.cycle_tuning(1)),
             fret_ctl,
-            FlexSpacer::Flex(1.0),
-            rehearse_ctl,
+            right_group.flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -8605,7 +8625,10 @@ pub fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
                 .with_base_color(base_color)
                 .with_default_properties(default_properties)
                 .with_options(|o| {
-                    o.with_min_inner_size(LogicalSize::new(640.0, 480.0))
+                    // Native decorations off: we draw our own chrome (drag
+                    // region + min/max/close in the header). See `window_chrome`.
+                    o.with_decorations(false)
+                        .with_min_inner_size(LogicalSize::new(640.0, 480.0))
                         .with_initial_inner_size(LogicalSize::new(960.0, 720.0))
                         .on_close(|s: &mut AppState| s.running = false)
                 }),
