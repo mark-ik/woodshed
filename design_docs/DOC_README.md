@@ -13,6 +13,12 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-06-15_redesign_plan.md](2026-06-15_redesign_plan.md) — UI redesign from
+  the Redesign Explorations board: GPUI-quiet chrome (hairline borders, calmer
+  density, steppers→dropdowns), Slate + Ember palettes as built-ins, segmented-
+  pill nav (left rail held for mobile), fretboard-layout setting, Rehearsal
+  filmstrip + transport deck, Practice recipe tiles. Decisions locked
+  2026-06-15; cheap layer first.
 - [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) — Scope for
   a GitHub-Pages wasm demo. Native Xilem cannot compile to wasm on the current
   fork (hard build failure); the web path is `xilem_web` (DOM/SVG, a second
