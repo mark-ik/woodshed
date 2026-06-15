@@ -34,20 +34,25 @@ xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # (pitch-detection is declared further down under "Audio".)
 
 # UI — Xilem (decision locked 2026-05-18; iced retired).
-# Xilem path-deps: Woodshed rides its own lean worktree at
-# `crates/xilem-woodshed` (branch `woodshed-theme` = `upstream/main` + the
-# single PR #1822 commit `WindowView::with_default_properties`, for
-# no-restart retheme). Masonry's `set_default_properties` (PR #1821) is
-# already upstream, so no masonry patch is carried. This decouples Woodshed
-# from the shared `mere-wgpu-29-vello-0-9` fork — the external-compositor
-# work and the wgpu-29/vello-0.9 pins are mere/serval's, not Woodshed's, so
-# we ride upstream's wgpu-28/vello-0.8 here. Switch to crates.io once #1822
-# lands and a masonry release ships. Keep default features (incl.
-# `imaging_vello`); disabling them panics the Masonry imaging layer with
+# Woodshed rides its own lean fork branch: `woodshed-theme` on
+# github.com/mark-ik/xilem = `upstream/main` + the single PR #1822 commit
+# `WindowView::with_default_properties` (no-restart retheme). Masonry's
+# `set_default_properties` (PR #1821) is already upstream, so no masonry patch
+# is carried; this also rides upstream's wgpu-28/vello-0.8 rather than the
+# mere/serval `mere-wgpu-29-vello-0-9` fork.
+#
+# GIT deps (not path) so woodshed-xilem builds on any machine (Win/macOS/Linux)
+# without the local `crates/xilem-woodshed` worktree. Cargo.lock pins the exact
+# commit, so builds stay reproducible; `cargo update -p xilem` re-locks to the
+# branch tip. To iterate on the fork locally, override these with the worktree
+# via a machine-local `paths = [...]` in a parent `.cargo/config.toml` (e.g.
+# `crates/../.cargo/config.toml`) — don't edit this file for that. Switch to
+# crates.io once #1822 lands and a masonry release ships. Keep default features
+# (incl. `imaging_vello`); disabling them panics the Masonry imaging layer with
 # "a renderer backend feature is required" at first paint.
-xilem = { path = "../../crates/xilem-woodshed/xilem", version = "0.4.0" }
-masonry = { path = "../../crates/xilem-woodshed/masonry", version = "0.4.0" }
-masonry_winit = { path = "../../crates/xilem-woodshed/masonry_winit", version = "0.4.0" }
+xilem = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
+masonry = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
+masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
 winit = "0.30"
 
 # Audio
