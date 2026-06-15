@@ -1,10 +1,36 @@
 # Carried xilem fork patches
 
-Living ledger of the **meaningful** local edits we rely on in the shared
-`../xilem` checkout (path-dep'd by both Woodshed and Strophe). The fork's
-working tree also carries a lot of CRLF/format churn — ignore that; this
-tracks only edits with semantic intent, so a future rebase-on-upstream knows
-what to re-apply.
+## Current footing (2026-06-15): Woodshed rides its own lean worktree
+
+Woodshed no longer depends on the shared `mere-wgpu-29-vello-0-9` fork. It
+path-deps a dedicated worktree at `crates/xilem-woodshed` on branch
+`woodshed-theme`, which is **`upstream/main` plus exactly one commit**: the
+PR #1822 patch `WindowView::with_default_properties` (the no-restart retheme
+hook).
+
+- **Masonry: resolved upstream.** `RenderRoot::set_default_properties` (PR
+  #1821) merged to `linebender/xilem` main on 2026-05-31, so Woodshed carries
+  no masonry patch.
+- **Xilem: one carried commit.** PR #1822 is still open, and it cannot be
+  replicated from Woodshed's own code, because Xilem's `MasonryDriver` is
+  monomorphic on the concrete `WindowView` type (a vendored view will not
+  satisfy the trait bound on stock xilem). When #1822 merges and a masonry
+  release ships with #1821, Woodshed drops to crates.io with zero patches.
+- **Renderer:** rides upstream's `wgpu-28 / vello-0.8 / parley-0.8`. The newer
+  `wgpu-29 / vello-0.9` pins were mere/serval's; Woodshed never used them.
+  Adapting to upstream cost two API renames: `content_box_size()` became
+  `content_box().size()`, and parley `Layout::align` regained its leading
+  `container_width` argument (passed `None`).
+
+The sections below are **historical**. They describe the shared
+`mere-wgpu-29-vello-0-9` fork (still Strophe's footing) and the original
+two-PR plan, kept for reference and for the shared fork's maintenance.
+
+Living ledger of the **meaningful** local edits in the shared `../xilem`
+checkout (path-dep'd by Strophe; formerly by Woodshed too). The fork's working
+tree also carries a lot of CRLF/format churn — ignore that; this tracks only
+edits with semantic intent, so a future rebase-on-upstream knows what to
+re-apply.
 
 Base: forked at `785ab8a9 masonry_winit: port to wgpu 29 API` (plus the
 wgpu29 / vello 0.9 / parley 0.9 pin work and the scrollbar auto-hide cherry
