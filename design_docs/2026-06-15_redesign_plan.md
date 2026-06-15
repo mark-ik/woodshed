@@ -127,3 +127,10 @@ the per-screen reworks. Mobile is a separate downstream track.
   locked (both palettes; pills nav, rail held for mobile; fretboard-layout
   setting). Sequencing: cheap layer (P1–P2) → nav (P3) → screens (P4–P6);
   mobile downstream.
+- 2026-06-15: **P1 shipped** (`7f15d5d`; builds + `audio-widgets` tests green).
+  Folded `Dark` into `Slate` (serde `alias = "Dark"` keeps old configs; cool-dark
+  seeds carried forward unchanged) and added `Ember` (warm-dark Dusk sibling:
+  terracotta notes = `primary`, gold roots = `tertiary`, woody warm-brown
+  surfaces). Picker now lists Slate · Ember · Light · Dusk · Meadow · Parchment;
+  default Slate. Pending Mark's visual check (Ember warmth, live re-skin). The
+  GPUI-quiet *cleanup* of Slate is P2, not P1 (P1 is palette only).
