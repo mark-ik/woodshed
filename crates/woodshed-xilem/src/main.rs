@@ -69,7 +69,7 @@ mod theme;
 mod widgets;
 mod window_chrome;
 
-use window_chrome::{window_chrome, ChromeRole};
+use window_chrome::{window_chrome, window_frame, ChromeRole, RESIZE_MARGIN};
 
 use combobox::combobox;
 use pane_split::pane_split;
@@ -2617,15 +2617,21 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // page that scrolls. Each tab now owns its own internal scrolling
     // (tall tabs wrap their body in a portal inside `tab_content`); the
     // fretboard surface fills the height and scrolls per-module.
-    let body = flex_col((
-        header(state).flex(0.0),
-        tab_bar(state).flex(0.0),
-        lens_bar(state).flex(0.0),
-        tab_content(state).flex(1.0),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-    .main_axis_alignment(MainAxisAlignment::Start)
-    .gap(SP_2);
+    // Wrap the whole UI in a resize frame: native decorations are off, so its
+    // outer margin band is what makes the borderless window resizable (with a
+    // directional resize cursor). The content is inset by that margin.
+    let body = window_frame(
+        flex_col((
+            header(state).flex(0.0),
+            tab_bar(state).flex(0.0),
+            lens_bar(state).flex(0.0),
+            tab_content(state).flex(1.0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(SP_2),
+        RESIZE_MARGIN,
+    );
 
     // Shared-clock heartbeat (3d): while the metronome runs, tick ~30ms
     // so views that derive a cursor from elapsed time (the arpeggio /
