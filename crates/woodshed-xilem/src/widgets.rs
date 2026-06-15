@@ -328,7 +328,7 @@ fn draw_fretboard(
         builder.push_default(StyleProperty::FontSize(11.0));
         let mut layout = builder.build(&text);
         layout.break_all_lines(None);
-        layout.align(Alignment::Start, AlignmentOptions::default());
+        layout.align(None, Alignment::Start, AlignmentOptions::default());
         let transform = Affine::translate((board_left, board_bottom + 4.0));
         render_text(painter, transform, &layout, &[colors.label_text.into()], true);
     }
@@ -354,7 +354,7 @@ fn draw_position_label(
     builder.push_default(StyleProperty::FontSize(13.0));
     let mut layout = builder.build(text);
     layout.break_all_lines(None);
-    layout.align(Alignment::Center, AlignmentOptions::default());
+    layout.align(None, Alignment::Center, AlignmentOptions::default());
 
     let w = layout.width() as f64;
     let h = layout.height() as f64;
