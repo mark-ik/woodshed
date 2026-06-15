@@ -127,18 +127,25 @@ impl Default for Palette {
 /// the theme-system design doc.)
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ThemeMode {
+    /// Faithful cool-dark — the former `Dark`, carried forward (the "GPUI-quiet"
+    /// cleanup is chrome, not palette). `serde(alias = "Dark")` keeps configs
+    /// that stored the old name round-tripping onto Slate.
     #[default]
-    Dark,
+    #[serde(alias = "Dark")]
+    Slate,
     Light,
     Dusk,
     Meadow,
     Parchment,
+    /// Bold warm-dark: terracotta notes, gold roots, woody surfaces.
+    Ember,
 }
 
 impl ThemeMode {
     /// All built-ins, in picker order.
-    pub const ALL: [Self; 5] = [
-        Self::Dark,
+    pub const ALL: [Self; 6] = [
+        Self::Slate,
+        Self::Ember,
         Self::Light,
         Self::Dusk,
         Self::Meadow,
@@ -149,8 +156,9 @@ impl ThemeMode {
     pub fn seeds(self) -> Seeds {
         let rgb = Color::from_rgb8;
         match self {
-            // Cool blue / teal / amber over a faintly blue-cool ladder.
-            Self::Dark => Seeds {
+            // Slate — faithful cool-dark: blue / teal / amber over a faintly
+            // blue-cool ladder (the former Dark, carried forward unchanged).
+            Self::Slate => Seeds {
                 primary: rgb(0x33, 0x66, 0xC8),
                 secondary: rgb(0x2E, 0x9D, 0xA6),
                 tertiary: rgb(0xE0, 0xA8, 0x46),
@@ -208,6 +216,19 @@ impl ThemeMode {
                 danger: rgb(0xB8, 0x33, 0x33),
                 dark: false,
             },
+            // Ember — bold warm-dark (a Dusk sibling): terracotta notes
+            // (primary), gold roots (tertiary), woody warm-brown surfaces.
+            Self::Ember => Seeds {
+                primary: rgb(0xD2, 0x6B, 0x4A),
+                secondary: rgb(0xA9, 0x73, 0x45),
+                tertiary: rgb(0xE6, 0xB2, 0x4E),
+                neutral: rgb(0x26, 0x19, 0x11),
+                text_header: None,
+                text_body: None,
+                success: rgb(0x6F, 0xB3, 0x6E),
+                danger: rgb(0xD5, 0x55, 0x4E),
+                dark: true,
+            },
         }
     }
 
@@ -218,11 +239,12 @@ impl ThemeMode {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Dark => "Dark",
+            Self::Slate => "Slate",
             Self::Light => "Light",
             Self::Dusk => "Dusk",
             Self::Meadow => "Meadow",
             Self::Parchment => "Parchment",
+            Self::Ember => "Ember",
         }
     }
 }
