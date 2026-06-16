@@ -57,6 +57,9 @@ where
     bar_thickness: Length,
     min_bar_area: Length,
     solid: bool,
+    /// Optional palette colour for the divider. `None` falls back to the
+    /// built-in zinc shades; hosts set it to theme the bar as a hairline.
+    bar_color: Option<Color>,
     draggable: bool,
     /// Offset from the bar center to the actual position where the bar was clicked.
     /// This is used to ensure a click without moving is a no-op,
@@ -81,6 +84,7 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Split<ChildA, ChildB> {
             bar_thickness: 6.px(),
             min_bar_area: 6.px(),
             solid: false,
+            bar_color: None,
             draggable: true,
             click_offset: 0.0,
             dragging: false,
@@ -180,6 +184,13 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Split<ChildA, ChildB> {
     /// If this is `false` (the default), the bar will be drawn as two parallel lines.
     pub fn solid_bar(mut self, solid: bool) -> Self {
         self.solid = solid;
+        self
+    }
+
+    /// Builder-style method to set a palette colour for the divider.
+    /// `None` keeps the built-in zinc shades.
+    pub fn with_bar_color(mut self, color: Option<Color>) -> Self {
+        self.bar_color = color;
         self
     }
 }
@@ -289,6 +300,11 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Split<ChildA, ChildB> {
 
     /// Returns the color of the splitter bar.
     fn bar_color(&self, ctx: &PaintCtx<'_>) -> Color {
+        // A host-supplied palette colour wins (themed hairline divider);
+        // otherwise fall back to the built-in zinc shades.
+        if let Some(c) = self.bar_color {
+            return c;
+        }
         if !self.draggable || ctx.is_disabled() {
             return theme::ZYNC_700;
         }
@@ -441,6 +457,12 @@ where
     pub fn set_bar_solid(this: &mut WidgetMut<'_, Self>, solid: bool) {
         this.widget.solid = solid;
         // Bar solidity impacts appearance, but not accessibility node
+        this.ctx.request_paint_only();
+    }
+
+    /// Sets the palette colour for the divider (`None` = built-in zinc).
+    pub fn set_bar_color(this: &mut WidgetMut<'_, Self>, color: Option<Color>) {
+        this.widget.bar_color = color;
         this.ctx.request_paint_only();
     }
 }

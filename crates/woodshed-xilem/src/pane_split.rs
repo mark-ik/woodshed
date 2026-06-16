@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 // `widgets` module aliased to our vendored widget; `split` fn → `pane_split`.
 use masonry::kurbo::Axis;
 use masonry::layout::{AsUnit, Length};
+use masonry::peniko::Color;
 use crate::pane_split_widget as widgets;
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker};
@@ -57,9 +58,10 @@ where
         split_axis: Axis::Horizontal,
         split_point: widgets::SplitPoint::Fraction(0.5),
         min_lengths: (Length::ZERO, Length::ZERO),
-        bar_thickness: 6.px(),
+        bar_thickness: 1.px(),
         min_bar_area: 6.px(),
-        solid_bar: false,
+        solid_bar: true,
+        bar_color: None,
         draggable: true,
         on_split_changed: None,
         child1,
@@ -82,6 +84,7 @@ pub struct Split<ChildA, ChildB, State, Action = ()> {
     bar_thickness: Length,
     min_bar_area: Length,
     solid_bar: bool,
+    bar_color: Option<Color>,
     draggable: bool,
     on_split_changed: Option<SplitChanged<State, Action>>,
     child1: ChildA,
@@ -180,6 +183,12 @@ impl<ChildA, ChildB, State, Action> Split<ChildA, ChildB, State, Action> {
         self
     }
 
+    /// Set a palette colour for the divider (rendered as a hairline).
+    pub fn bar_color(mut self, color: Color) -> Self {
+        self.bar_color = Some(color);
+        self
+    }
+
     /// Set a callback fired when the user finishes dragging the splitter
     /// bar, with the new position as an effective fraction (`0.0..=1.0`).
     /// Lets a host persist the split (e.g. across views / restarts).
@@ -230,7 +239,8 @@ where
                     .bar_thickness(self.bar_thickness)
                     .min_bar_area(self.min_bar_area)
                     .draggable(self.draggable)
-                    .solid_bar(self.solid_bar),
+                    .solid_bar(self.solid_bar)
+                    .with_bar_color(self.bar_color),
             )
         });
 
@@ -271,6 +281,10 @@ where
 
         if prev.solid_bar != self.solid_bar {
             widgets::Split::set_bar_solid(&mut element, self.solid_bar);
+        }
+
+        if prev.bar_color != self.bar_color {
+            widgets::Split::set_bar_color(&mut element, self.bar_color);
         }
 
         ctx.with_id(CHILD1_VIEW_ID, |ctx| {
