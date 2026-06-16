@@ -123,6 +123,26 @@ the per-screen reworks. Mobile is a separate downstream track.
 
 ## Progress
 
+- 2026-06-16: **P2c done (auto-hide scrollbars) + P2d found already-applied; P2
+  is complete.**
+  - **P2c:** masonry's `Portal` carries an `AutoHideScrollBar(bool)` property
+    (rest opacity 0, fade-in on pointer move, fade-out after a 400ms timeout);
+    the default is always-on (`false`). Two portals already opted in (rehearsal
+    queue, lens); added `.prop(AutoHideScrollBar(true))` to the remaining six
+    catalog sidebars (Scales / Chords / Arpeggios / Progressions / Exercises /
+    Tunings). A global `DefaultProperties` insert can't do this: the xilem
+    `portal` view builds `Portal<Child::Widget>` (concrete child type), so every
+    site is a distinct `TypeId` — the property has to be set per-portal. Now no
+    always-on scrollbar remains; they overlay and stay hidden at rest, so
+    content keeps full width (the "breathing room" effect).
+  - **P2d:** the type scale and density rhythm are already applied uniformly —
+    a sweep found zero magic-number `text_size`s (all go through `TS_*`) and
+    only one off-grid spacing value (the Button default `Padding::from_vh(6, 16)`
+    in `build_default_properties`, a deliberate button choice). So there is no
+    scale/spacing normalization left to do. The remaining density win is the
+    cramped triple header strip (header / nav / material), which **P3's nav
+    reskin collapses** — folding breathing-room there avoids churn P3 would
+    redo, rather than a speculative pass now.
 - 2026-06-16: **UI font → `SansSerif` (Segoe UI on Windows); root-cause fix
   for the glyph tofu.** Added a shared `ui_family()` beside `mono_family()` in
   `audio-widgets::theme` (`SansSerif`), re-exported through Woodshed's `theme`,

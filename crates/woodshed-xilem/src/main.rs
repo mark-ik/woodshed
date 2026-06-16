@@ -3760,6 +3760,7 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -4111,6 +4112,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -4366,6 +4368,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -5515,6 +5518,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
             // Author a new custom progression right where you pick one
             // (redesign R4) — selected immediately, editor opens in the
@@ -6686,6 +6690,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
             // Author a new custom exercise right where you pick one
             // (redesign R4) — editor opens in the right pane.
@@ -7817,6 +7822,7 @@ fn tuner_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     .gap(SP_1),
             )
             .constrain_horizontal(true)
+            .prop(masonry::properties::AutoHideScrollBar(true))
             .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
