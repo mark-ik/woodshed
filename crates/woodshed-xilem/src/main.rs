@@ -25,9 +25,9 @@ use xilem::core::fork;
 use xilem::core::one_of::{OneOf2, OneOf3};
 use xilem::style::Style;
 use xilem::view::{
-    AnyFlexChild, FlexExt, FlexSpacer, button, flex_col, flex_row, label, portal,
-    prose, resize_observer, sized_box, slider, task_raw, text_button,
-    text_input,
+    AnyFlexChild, FlexExt, FlexSpacer, Label, button, flex_col, flex_row,
+    label as xilem_label, portal, prose, resize_observer, sized_box, slider,
+    task_raw, text_input,
 };
 use xilem::{AnyWidgetView, AppState as XilemAppState, WidgetView, WindowId, Xilem, window};
 
@@ -76,13 +76,48 @@ use pane_split::pane_split;
 use settings::Settings;
 use theme::{
     Palette, SP_0, SP_1, SP_2, SP_3, SP_4, TS_2XL, TS_LG, TS_MD, TS_SM, TS_XL, TS_XS,
-    mono_family,
+    mono_family, ui_family,
 };
 use audio_widgets::waveform_view;
 use widgets::{
     SectionBand, SectionColors, StringMark, chord_lane_view,
     fretboard_view, section_lane_view,
 };
+
+// =================================================================
+// Themed view wrappers: `label` / `text_button`.
+//
+// The framework default text family is `GenericFamily::SystemUi`
+// (masonry's `default_text_styles`, and xilem's `label` view hardcodes
+// it too). On this stack `SystemUi` lacks the Dingbats / Misc-Symbols
+// / geometric-arrow blocks, so symbol glyphs (× ‹ › ★ ♯ ♭ ☰ …) render
+// as tofu boxes. We route every label and text button through
+// `ui_family()` (`SansSerif` → the platform's glyph-complete system
+// sans, Segoe UI on Windows) instead. Font choice is an application
+// decision, so it lives here rather than in the lean xilem fork.
+//
+// These shadow the `xilem::view` originals (imported as `xilem_label`
+// / `button`): every helper below (`button_sm`, `dim_label`, the
+// `*_prose` wrappers, …) and every bare call site picks up the UI font
+// for free. Call sites that want a different family still chain
+// `.font(mono_family())` afterwards, which overrides the default set
+// here.
+// =================================================================
+
+/// A label in the UI font. Drop-in for `xilem::view::label`.
+fn label(text: impl Into<ArcStr>) -> Label {
+    xilem_label(text).font(ui_family())
+}
+
+/// A text button in the UI font. Equivalent to
+/// `xilem::view::text_button` (`button(label(text), callback)`) but
+/// built on our themed [`label`].
+fn text_button<State: 'static, Action: 'static>(
+    text: impl Into<ArcStr>,
+    callback: impl Fn(&mut State) -> Action + Send + Sync + 'static,
+) -> impl WidgetView<State, Action> {
+    button(label(text), callback)
+}
 
 /// The active tab. Matches the iced build's `Tab` shape so the
 /// migration is a one-tab-at-a-time port, not a redesign.

@@ -123,6 +123,25 @@ the per-screen reworks. Mobile is a separate downstream track.
 
 ## Progress
 
+- 2026-06-16: **UI font → `SansSerif` (Segoe UI on Windows); root-cause fix
+  for the glyph tofu.** Added a shared `ui_family()` beside `mono_family()` in
+  `audio-widgets::theme` (`SansSerif`), re-exported through Woodshed's `theme`,
+  and routed every label + text button through it by shadowing `xilem::view`'s
+  `label`/`text_button` in `main.rs` (the framework default `SystemUi` lacks the
+  Dingbats / Misc-Symbols / geometric-arrow blocks, which is why those glyphs
+  tofu'd). The wrappers are drop-in: every helper (`button_sm`, `dim_label`,
+  the `*_prose` color wrappers) and bare call site inherits the font; the
+  monospace readouts keep their `.font(mono_family())` override. Done in the
+  **app crate**, not the lean xilem fork (font is an app decision, and the build
+  rides the `mark-ik/xilem` git dep with no path override). Verified
+  cross-screen via the screenshot harness (`scry-shots/shoot-woodshed.ps1`):
+  `screenshots/font-fix-sansserif.png` shows clean, consistent type with no
+  tofu — the combobox `▼`, `‹ › ‹‹`, `− +` all render. This closes the P2a
+  "glyph-complete UI font" follow-up. Themed-glyph *restoration* (filled
+  triangles, ♯/♭, ★, ☰) is now unblocked but optional — the current ASCII /
+  guillemet glyphs read cleanly and intentionally; accidentals in note names
+  live in the `woodshedding` theory crate, so any ♯/♭ pass is a separate,
+  larger change there, not a `main.rs` reskin.
 - 2026-06-15: Plan created from the Redesign Explorations board. Decisions
   locked (both palettes; pills nav, rail held for mobile; fretboard-layout
   setting). Sequencing: cheap layer (P1–P2) → nav (P3) → screens (P4–P6);

@@ -66,6 +66,20 @@ pub fn mono_family() -> FontFamily<'static> {
 }
 
 // =================================================================
+// UI font helper. The default text family for all UI chrome (labels,
+// buttons). `SansSerif` resolves to the platform's glyph-complete
+// system sans — Segoe UI on Windows, the configured sans on
+// macOS/Linux — which covers the symbol blocks (Dingbats,
+// Miscellaneous Symbols, geometric arrows) that the framework default
+// `SystemUi` family renders as tofu boxes on this stack. Apply via
+// `.font(ui_family())`, or route labels/buttons through it wholesale.
+// =================================================================
+
+pub fn ui_family() -> FontFamily<'static> {
+    FontFamily::Single(FontFamilyName::Generic(GenericFamily::SansSerif))
+}
+
+// =================================================================
 // Palette — shared semantic color tokens.
 //
 // View code reads through these names, never raw `Color::...`. A

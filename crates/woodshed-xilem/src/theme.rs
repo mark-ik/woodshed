@@ -17,7 +17,7 @@
 
 pub use audio_widgets::theme::{
     SP_0, SP_1, SP_2, SP_3, SP_4, TS_2XL, TS_LG, TS_MD, TS_SM, TS_XL, TS_XS,
-    ThemeMode, mono_family,
+    ThemeMode, mono_family, ui_family,
 };
 
 use audio_widgets::theme::Palette as BasePalette;
