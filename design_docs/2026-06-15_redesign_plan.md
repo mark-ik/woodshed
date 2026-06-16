@@ -127,6 +127,16 @@ the per-screen reworks. Mobile is a separate downstream track.
   locked (both palettes; pills nav, rail held for mobile; fretboard-layout
   setting). Sequencing: cheap layer (P1–P2) → nav (P3) → screens (P4–P6);
   mobile downstream.
+- 2026-06-16: **P2a shipped** (`9c18ca1` arrows; `64f9fe1` plus/speaker). Every
+  theme-immune glyph now re-skins: the emoji arrows U+25C0/25B6 became the
+  text triangles `◂`/`▸` (U+25C2/25B8, palette-coloured) app-wide; the heavy-plus
+  emoji became `+`; the speaker emoji became text `Sound`/`Muted`. **Header
+  instrument/tuning dropdowns deferred to P3.** The `xilem-components` combobox
+  is inline-only (expands beneath the trigger), and the header already carries a
+  note that a dropdown in the fixed-height strip "blows the layout open." They
+  need an overlay-popup combobox, which belongs with the P3 header/nav redesign
+  (the board's header dropdowns assume a popup). Palette-arrow cyclers stay
+  meanwhile. So P3 gains a prerequisite: build the overlay-popup combobox.
 - 2026-06-15: **P1 shipped** (`7f15d5d`; builds + `audio-widgets` tests green).
   Folded `Dark` into `Slate` (serde `alias = "Dark"` keeps old configs; cool-dark
   seeds carried forward unchanged) and added `Ember` (warm-dark Dusk sibling:
