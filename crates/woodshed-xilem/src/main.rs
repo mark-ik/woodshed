@@ -2296,7 +2296,7 @@ impl AppState {
     /// Sound the card under the cursor (set-card audio): a chord card plays
     /// its tones as a block, a scale card plays its root so you hear the
     /// key, a riff is silent for now. Respects the `transport_sound`
-    /// (🔊/🔇) toggle. One-shot voices via the song engine, mixed even when
+    /// (Sound/Muted) toggle. One-shot voices via the song engine, mixed even when
     /// the song isn't playing.
     fn sound_current_card(&mut self) {
         if !self.transport_sound {
@@ -2757,9 +2757,9 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let queue_len = state.set.cards.len();
     let rehearse_ctl: OneOf2<_, _> = if tab_has_fretboard(current_tab) {
         let rehearse_label = if queue_len > 0 {
-            format!("➕ Rehearse ({queue_len})")
+            format!("+ Rehearse ({queue_len})")
         } else {
-            "➕ Rehearse".to_string()
+            "+ Rehearse".to_string()
         };
         OneOf2::A(text_button(rehearse_label, |s: &mut AppState| {
             s.rehearse_current()
@@ -3047,7 +3047,7 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 label("No cards yet.").text_size(TS_MD).color(palette.text),
                 dim_label(
                     palette,
-                    "Press “➕ Rehearse” on any lens, or “Rehearse this set / \
+                    "Press “+ Rehearse” on any lens, or “Rehearse this set / \
                      this song” on the Practice / Song tabs, to fill your set.",
                     TS_SM,
                 ),
@@ -3156,7 +3156,7 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             play_ctl,
             button_sm("◂", |s: &mut AppState| s.cursor_step(-1)),
             button_sm("▸", |s: &mut AppState| s.cursor_step(1)),
-            button_sm(if sound_on { "🔊" } else { "🔇" }, |s: &mut AppState| {
+            button_sm(if sound_on { "Sound" } else { "Muted" }, |s: &mut AppState| {
                 s.transport_sound = !s.transport_sound;
             }),
             dim_label(palette, "·", TS_XS),
@@ -3639,7 +3639,7 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 s.arpeggio_label = s.arpeggio_label.next();
             }),
             button_sm(
-                if state.transport_sound { "🔊" } else { "🔇" },
+                if state.transport_sound { "Sound" } else { "Muted" },
                 |s: &mut AppState| s.transport_sound = !s.transport_sound,
             ),
         ))
@@ -4570,7 +4570,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 
     // Recipe action (U4a): project the song's chord bars into cards on
     // the set, then jump to the Rehearsal tab.
-    let rehearse_song_btn = text_button("➕ Rehearse this song", |s: &mut AppState| {
+    let rehearse_song_btn = text_button("+ Rehearse this song", |s: &mut AppState| {
         s.fill_set_from_song();
         s.tab = Tab::Rehearsal;
     });
@@ -5215,7 +5215,7 @@ fn practice_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .gap(SP_2),
         // Recipe action (U2): fill the set from this practice set, then jump
         // to the Rehearsal tab to play it.
-        text_button("➕ Rehearse this set", |s: &mut AppState| {
+        text_button("+ Rehearse this set", |s: &mut AppState| {
             s.fill_set_from_practice();
             s.tab = Tab::Rehearsal;
         }),
@@ -6531,7 +6531,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 s.exercise_step_idx = 0;
             }),
             button_sm(
-                if state.transport_sound { "🔊" } else { "🔇" },
+                if state.transport_sound { "Sound" } else { "Muted" },
                 |s: &mut AppState| s.transport_sound = !s.transport_sound,
             ),
         ))
