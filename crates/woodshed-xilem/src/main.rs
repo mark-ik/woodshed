@@ -3614,7 +3614,7 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 s.arpeggio_playing = false;
                 s.arpeggio_step_idx = s.arpeggio_step_idx.wrapping_add(1);
             }),
-            button_sm("⏮", |s: &mut AppState| s.arpeggio_step_idx = 0),
+            button_sm("‹‹", |s: &mut AppState| s.arpeggio_step_idx = 0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .main_axis_alignment(MainAxisAlignment::Start)
@@ -4483,7 +4483,7 @@ fn song_view_render(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     .fixed_height(masonry::layout::Length::px(30.0));
 
     // === Transport row ===
-    let rewind_btn = text_button("⏮ Rewind", |s: &mut AppState| {
+    let rewind_btn = text_button("‹‹ Rewind", |s: &mut AppState| {
         if let Some(h) = s.ensure_song_engine() {
             h.rewind();
         }
@@ -6527,7 +6527,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     s.exercise_playing = false;
                 }
             }),
-            text_button("⏮ Reset", |s: &mut AppState| {
+            text_button("‹‹ Reset", |s: &mut AppState| {
                 s.exercise_step_idx = 0;
             }),
             button_sm(
