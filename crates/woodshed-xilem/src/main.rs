@@ -2861,16 +2861,10 @@ fn tab_bar(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // for a list of same-shape buttons.
     let active = state.tab;
     let palette = state.palette;
-    // Active tab: tertiary "you-are-here" color + a bracket cue (so it
-    // reads without relying on color alone); inactive tabs take the
-    // header text color. Built with `button` so the label color is ours.
+    // Segmented pills (P3): active = quiet `surface_2` fill + `tertiary`
+    // label; inactive = flat. See [`pill`].
     let tab_button = move |text: String, is_active: bool, on_click: fn(&mut AppState)| {
-        let (txt, color) = if is_active {
-            (format!("[{text}]"), palette.tertiary)
-        } else {
-            (text, palette.text_header)
-        };
-        button(label(txt).text_size(TS_SM).color(color), on_click).into_any_flex()
+        pill(palette, text, is_active, TS_SM, on_click).into_any_flex()
     };
 
     let mut buttons: Vec<AnyFlexChild<AppState>> = Vec::new();
@@ -2927,14 +2921,9 @@ fn lens_bar(
     // card selection (which kind of card is on the stage), not a page
     // switch — the surface, root, and tuning carry across unchanged.
     let lens = move |text: &str, tab: Tab| {
-        // Active kind pops in tertiary with a ● cue; inactive kinds
-        // take body `text` (legible — not the disabled-looking dim).
-        let (txt, color) = if tab == active {
-            (format!("● {text}"), palette.tertiary)
-        } else {
-            (format!("  {text}"), palette.text)
-        };
-        button(label(txt).text_size(TS_XS).color(color), move |s: &mut AppState| {
+        // Material-kind selection as a segmented pill (P3): the active
+        // kind carries the quiet fill + tertiary label.
+        pill(palette, text, tab == active, TS_XS, move |s: &mut AppState| {
             s.tab = tab;
             s.last_lens = tab;
         })
@@ -2943,12 +2932,8 @@ fn lens_bar(
     // Companion-module mount toggles. Filled (●) when shown, hollow (○)
     // when not; clicking mounts/unmounts the module in the surface stack.
     let module_toggle = move |text: &str, kind: ModuleKind, shown: bool| {
-        let (txt, color) = if shown {
-            (format!("● {text}"), palette.tertiary)
-        } else {
-            (format!("○ {text}"), palette.text)
-        };
-        button(label(txt).text_size(TS_XS).color(color), move |s: &mut AppState| {
+        // Module mount toggle as a pill: filled (active) when mounted.
+        pill(palette, text, shown, TS_XS, move |s: &mut AppState| {
             s.toggle_module(kind);
         })
         .into_any_flex()
@@ -8465,6 +8450,30 @@ where
     button_view(label(text).text_size(TS_MD), move |s: &mut AppState| {
         callback(s);
     })
+}
+
+/// A segmented-control pill (redesign P3). The active item carries a
+/// quiet `surface_2` fill + a `tertiary` label — the "you are here"
+/// indicator; inactive items are flat (transparent fill, `text_header`
+/// label). Both neutralize the default 1px button border so a row of
+/// pills reads as one segmented strip rather than a row of plates. Used
+/// by the tab and lens strips.
+fn pill(
+    palette: Palette,
+    text: impl Into<masonry::core::ArcStr>,
+    is_active: bool,
+    size: f32,
+    on_click: impl Fn(&mut AppState) + Send + Sync + 'static,
+) -> impl WidgetView<AppState> {
+    use masonry::layout::Length;
+    use masonry::properties::Padding;
+    let fg = if is_active { palette.tertiary } else { palette.text_header };
+    let bg = if is_active { palette.surface_2 } else { Color::TRANSPARENT };
+    button(label(text).text_size(size).color(fg), on_click)
+        .background_color(bg)
+        .border(Color::TRANSPARENT, Length::px(1.0))
+        .corner_radius(Length::px(7.0))
+        .padding(Padding::from_vh(SP_1, SP_2))
 }
 
 // =================================================================

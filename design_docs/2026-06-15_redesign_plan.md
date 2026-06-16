@@ -123,6 +123,27 @@ the per-screen reworks. Mobile is a separate downstream track.
 
 ## Progress
 
+- 2026-06-16: **P3 started. Feasibility resolved + P3a (segmented pills) shipped.**
+  - **Combobox prerequisite (resolved):** masonry already ships the overlay
+    machinery — a `layers/` system (`selector_menu`, `tooltip`) and a built-in
+    `Selector` widget ("a combo box in some frameworks") whose menu pops as a
+    floating layer, not inline. `ZStack` is exposed as a xilem view; `Selector`
+    is not. **Decision (Mark): adopt `Selector`** (Path A) — add a xilem
+    `selector` view wrapper in the `woodshed-theme` fork and theme its menu,
+    rather than hand-rolling an app-side `zstack` overlay. The current inline
+    combobox lives in `xilem-components` (editable), but Path A reuses the
+    mature widget (native anchoring / keyboard / a11y). P3b.
+  - **P3a — segmented pills (done):** added a reusable `pill` helper (active =
+    quiet `surface_2` fill + `tertiary` label, the "you are here" indicator;
+    inactive = flat, default button border neutralized) and routed both the tab
+    strip (Stage / Practice / Song / Rehearsal / Settings) and the lens strip
+    (Scale / Chord / Arpeggio / Progression / Exercise + the Tuner/Metronome
+    mount toggles) through it. Retires the `[Stage]` bracket cue and the
+    `●`/`○`/`  ` glyph prefixes — the fill is the indicator now. Verified
+    (`screenshots/p3a-pills.png`).
+  - **P3b — next:** header instrument/tuning/scale dropdowns via `Selector`
+    (fork view wrapper + DefaultProperties theming for the menu), replacing the
+    `‹ ›` cyclers with labelled dropdowns per the board.
 - 2026-06-16: **P2c done (auto-hide scrollbars) + P2d found already-applied; P2
   is complete.**
   - **P2c:** masonry's `Portal` carries an `AutoHideScrollBar(bool)` property
