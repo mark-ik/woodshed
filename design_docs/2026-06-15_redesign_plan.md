@@ -127,6 +127,22 @@ the per-screen reworks. Mobile is a separate downstream track.
   locked (both palettes; pills nav, rail held for mobile; fretboard-layout
   setting). Sequencing: cheap layer (P1–P2) → nav (P3) → screens (P4–P6);
   mobile downstream.
+- 2026-06-16: **P2a completed + P2b shipped; screenshot self-verify established.**
+  - **Screenshot pipeline:** launch the built binary → maximize via Win32 →
+    capture the screen → read the PNG. The app reopens on the last tab, so lens
+    tabs self-verify too (not just Settings). This caught regressions live.
+  - **P2a tofu cleanup** (`1691a3b`, `353238e`): the de-emoji exposed that the
+    UI font lacks the Dingbats / Misc-Symbols / filled-triangle blocks, so the
+    text triangles, `✕`, `♯`/`♭`, `★`, `☰`, `⏮` all rendered as tofu boxes. Fixed
+    with font-independent glyphs: cyclers/transports use `‹`/`›` + `‹‹`, `×` for
+    remove/close, `#`/`b` accidentals, `*` markers; dropped decorative
+    `☰`/`✓`/`♪`. **Deeper finding:** a glyph-complete UI font (Segoe UI) would
+    let nicer icons return as *themed* glyphs — flagged as P2 polish.
+  - **P2b split dividers** (`fe0acae`, `13d1bae`): the divider was painted with
+    hardcoded `theme::ZYNC` (heavy two-line bar, theme-immune). Threaded a
+    palette `bar_color` through the vendored split widget + view; the default is
+    now a 1px solid `surface_hover` hairline that re-skins. Cards were already
+    1px hairlines, so P2b's borders are done.
 - 2026-06-16: **P2a shipped** (`9c18ca1` arrows; `64f9fe1` plus/speaker). Every
   theme-immune glyph now re-skins: the emoji arrows U+25C0/25B6 became the
   text triangles `◂`/`▸` (U+25C2/25B8, palette-coloured) app-wide; the heavy-plus
