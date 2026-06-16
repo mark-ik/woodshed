@@ -2711,9 +2711,9 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     // Scales sidebar doesn't also flip Progressions'.
     let current_tab = state.tab;
     let hamburger_label = if state.sidebars.is_collapsed(current_tab) {
-        "☰ Show list"
+        "Show list"
     } else {
-        "☰ Hide list"
+        "Hide list"
     };
     let hamburger: OneOf2<_, _> = if tab_has_list(current_tab) {
         OneOf2::A(text_button(hamburger_label, move |s: &mut AppState| {
@@ -2934,7 +2934,7 @@ fn lens_bar(
         OneOf2::A(
             flex_row((
                 button_sm("‹", |s: &mut AppState| s.rehearse_step(-1)),
-                dim_label(palette, format!("♪ {}/{queue_len}", cursor + 1), TS_XS),
+                dim_label(palette, format!("{}/{queue_len}", cursor + 1), TS_XS),
                 button_sm("›", |s: &mut AppState| s.rehearse_step(1)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -3021,7 +3021,7 @@ where
 /// has collected from the lenses, in order, with a cursor marking the one
 /// last loaded onto the stage. Each row can be loaded (› — applies the
 /// card's selection and jumps to its lens), reordered (▲/▼), or removed
-/// (✕). This is the first non-lens projection of the card vocabulary; it
+/// (×). This is the first non-lens projection of the card vocabulary; it
 /// will grow into the practice-flow backbone (queue → stage stepping).
 fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     let palette = state.palette;
@@ -3165,7 +3165,7 @@ fn rehearsal_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             button_sm("move ›", move |s: &mut AppState| s.set.move_card(cursor, 1)),
             button_sm("Duplicate", move |s: &mut AppState| s.set.duplicate(cursor)),
             text_button("Edit on lens", move |s: &mut AppState| s.load_card(cursor)),
-            button_sm("✕ Remove", move |s: &mut AppState| s.set.remove(cursor)),
+            button_sm("× Remove", move |s: &mut AppState| s.set.remove(cursor)),
             FlexSpacer::Flex(1.0),
             text_button(if loop_on { "Loop: on" } else { "Loop: off" }, |s: &mut AppState| {
                 s.set.loop_mode = if s.set.loop_mode == LoopMode::All {
@@ -5352,7 +5352,7 @@ fn card_duration_secs(card: &Card) -> f32 {
 /// now — a key-mode picker is a follow-up if needed.
 /// Inline editor for a user-authored progression (redesign R4) — lives
 /// on the Progression lens (where you pick the card) rather than in
-/// Settings. One row per degree-based chord (degree ± / ♯♭ / quality
+/// Settings. One row per degree-based chord (degree ± / #b / quality
 /// cycle / remove) plus + chord / Delete. The progression is already the
 /// selected one on the lens, so there's no "Apply" here. Fully owns its
 /// data (clones the name into each closure), so it doesn't hold a borrow
@@ -5381,10 +5381,10 @@ fn user_progression_editor(
                     .fixed_width(masonry::layout::Length::px(150.0)),
                 button_sm("deg −", move |s: &mut AppState| s.nudge_prog_degree(&n1, ci, -1)),
                 button_sm("deg +", move |s: &mut AppState| s.nudge_prog_degree(&n2, ci, 1)),
-                button_sm("♯/♭", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
+                button_sm("#/b", move |s: &mut AppState| s.cycle_prog_alteration(&n3, ci)),
                 button_sm("‹", move |s: &mut AppState| s.cycle_prog_quality(&n4, ci, -1)),
                 button_sm("›", move |s: &mut AppState| s.cycle_prog_quality(&n5, ci, 1)),
-                button_sm("✕", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
+                button_sm("×", move |s: &mut AppState| s.remove_prog_chord(&n6, ci)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .main_axis_alignment(MainAxisAlignment::Start)
@@ -5397,12 +5397,12 @@ fn user_progression_editor(
         palette,
         flex_col((
             flex_row((
-                label(format!("★ Editing: {name}"))
+                label(format!("* Editing: {name}"))
                     .text_size(TS_SM)
                     .color(palette.tertiary),
                 FlexSpacer::Flex(1.0),
                 button_sm("+ chord", move |s: &mut AppState| s.add_prog_chord(&nadd)),
-                button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_progression(&ndel)),
+                button_sm("× Delete", move |s: &mut AppState| s.remove_user_progression(&ndel)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .main_axis_alignment(MainAxisAlignment::Start)
@@ -5454,7 +5454,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
             list_item_button(
                 state.palette,
                 active,
-                format!("★ {}", def.name),
+                format!("* {}", def.name),
                 move |s: &mut AppState| {
                     s.progression_idx = Some(combined);
                     s.progression_expanded_chord = Some(0);
@@ -5953,7 +5953,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
     // without resizing the window).
     use masonry::layout::Length as MLen;
     // Custom-progression editor (redesign R4): when the selected
-    // progression is a user one (★), its editor opens in the right pane
+    // progression is a user one (*), its editor opens in the right pane
     // below the chord grid — authoring lives where you pick the card,
     // not in Settings. Owns its data, so it doesn't hold a borrow of
     // `state` across the surface_left `&mut`.
@@ -6252,7 +6252,7 @@ fn user_exercise_editor(
                 button_sm("fr +", move |s: &mut AppState| s.nudge_ex_step(&d, si, 1, 1)),
                 button_sm("f −", move |s: &mut AppState| s.nudge_ex_step(&ee, si, 2, -1)),
                 button_sm("f +", move |s: &mut AppState| s.nudge_ex_step(&ff, si, 2, 1)),
-                button_sm("✕", move |s: &mut AppState| s.remove_ex_step(&g, si)),
+                button_sm("×", move |s: &mut AppState| s.remove_ex_step(&g, si)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .main_axis_alignment(MainAxisAlignment::Start)
@@ -6265,12 +6265,12 @@ fn user_exercise_editor(
         palette,
         flex_col((
             flex_row((
-                label(format!("★ Editing: {name}"))
+                label(format!("* Editing: {name}"))
                     .text_size(TS_SM)
                     .color(palette.tertiary),
                 FlexSpacer::Flex(1.0),
                 button_sm("+ step", move |s: &mut AppState| s.add_ex_step(&nadd)),
-                button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_exercise(&ndel)),
+                button_sm("× Delete", move |s: &mut AppState| s.remove_user_exercise(&ndel)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .main_axis_alignment(MainAxisAlignment::Start)
@@ -6453,7 +6453,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         .map(|e| ArcStr::from(e.name))
         .collect();
     for e in &state.user_exercises {
-        exercise_options.push(ArcStr::from(format!("★ {}", e.name)));
+        exercise_options.push(ArcStr::from(format!("* {}", e.name)));
     }
     let exercise_selected = state
         .exercise_idx
@@ -6625,7 +6625,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             list_item_button(
                 state.palette,
                 active,
-                format!("★ {}", def.name),
+                format!("* {}", def.name),
                 move |s: &mut AppState| {
                     s.exercise_idx = combined;
                     s.exercise_step_idx = 0;
@@ -6681,7 +6681,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     )
     .boxed();
     // Custom-exercise editor (redesign R4): when the selected exercise is
-    // a user one (★), its editor opens in the right pane below the info
+    // a user one (*), its editor opens in the right pane below the info
     // panel — authoring lives where you pick the card, not in Settings.
     let palette = state.palette;
     let ex_editor: OneOf2<_, _> = if state.exercise_idx >= ex_cat_count {
@@ -6840,7 +6840,7 @@ fn metronome_module(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                 };
                 s.apply_metronome_pattern();
             }),
-            button_sm(format!("♪ {sub_text}"), |s: &mut AppState| {
+            button_sm(format!("{sub_text}"), |s: &mut AppState| {
                 s.metronome_subdivision = cycle_subdivision(s.metronome_subdivision);
                 s.apply_metronome_pattern();
             }),
@@ -7277,7 +7277,7 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         );
         let rm_name = name.clone();
         user_btns.push(
-            button_sm("✕", move |s: &mut AppState| {
+            button_sm("×", move |s: &mut AppState| {
                 s.remove_user_theme(&rm_name);
             })
             .into_any_flex(),
@@ -7507,7 +7507,7 @@ fn settings_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
                     button_sm("Apply", move |s: &mut AppState| s.apply_user_tuning(&na)),
                     button_sm("+ string", move |s: &mut AppState| s.add_user_string(&nadd)),
                     button_sm("− string", move |s: &mut AppState| s.remove_user_string(&nrem)),
-                    button_sm("✕ Delete", move |s: &mut AppState| s.remove_user_tuning(&ndel)),
+                    button_sm("× Delete", move |s: &mut AppState| s.remove_user_tuning(&ndel)),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .main_axis_alignment(MainAxisAlignment::Start)
@@ -7800,7 +7800,7 @@ fn tuner_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             transport,
             // Mono on the big display readouts so digits / note
             // characters don't reshuffle horizontally as the detector
-            // updates frame-to-frame. Without this the "A♭4" / "E2"
+            // updates frame-to-frame. Without this the "Ab4" / "E2"
             // jump visibly when the variable-width glyphs swap.
             label(note_text)
                 .text_size(TS_2XL)
@@ -7824,7 +7824,7 @@ fn tuner_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
             // grey otherwise so it doesn't compete with the big note
             // readout above.
             if in_tune {
-                OneOf2::A(success_label(state.palette, "✓ in tune", TS_XS))
+                OneOf2::A(success_label(state.palette, "in tune", TS_XS))
             } else {
                 OneOf2::B(disabled_label(state.palette, "(adjust until cents is centered)", TS_XS))
             },
@@ -8292,7 +8292,7 @@ fn handle_numeric_click(
 /// font, so the value stays visually anchored while you type —
 /// no jarring shrink to a default-size input box. Enter / ✓ commit
 /// (through `setter`, which owns the field-specific clamp + side
-/// effects); ✕ cancels.
+/// effects); × cancels.
 ///
 /// `field_id` matches `AppState::editing_field`; `display_text` is
 /// the full readout ("90 BPM"); `edit_init` is what seeds the edit
