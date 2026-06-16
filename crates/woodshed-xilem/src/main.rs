@@ -3758,7 +3758,7 @@ fn arpeggios_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         sidebar,
         pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
@@ -3893,7 +3893,7 @@ fn surface_left(
         let point = (w / (w + running_tail)).clamp(0.05, 0.95);
         acc = pane_split(view, acc)
             .split_axis(Axis::Vertical)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
             // Floors so a module can't be dragged so small it clips:
             // ~a chord-card-diagram tall for the top pane, enough for a
             // compact widget's rows below.
@@ -4123,7 +4123,7 @@ fn scales_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         sidebar,
         pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
@@ -4370,7 +4370,7 @@ fn chords_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         chord_sidebar,
         pane_split(surface, scroll_tab(card(state.palette, info_panel)))
             .split_point(state.split_ratio)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
@@ -5981,7 +5981,7 @@ fn progressions_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> 
         sidebar,
         pane_split(surface, right_pane)
             .split_point(state.split_ratio)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
         .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(280.0))
             .flex(1.0),
@@ -6709,7 +6709,7 @@ fn exercises_view(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         exercise_sidebar,
         pane_split(surface, right_pane)
             .split_point(state.split_ratio)
-            .bar_color(state.palette.surface_2)
+            .bar_color(state.palette.surface_hover)
             .on_split_changed(|s: &mut AppState, f: f64| s.split_ratio = f)
             .min_lengths(MLen::const_px(240.0), MLen::const_px(240.0))
             .flex(1.0),
