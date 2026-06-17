@@ -123,6 +123,35 @@ the per-screen reworks. Mobile is a separate downstream track.
 
 ## Progress
 
+- 2026-06-17: **P3b shipped — header instrument + tuning are overlay-popup
+  dropdowns; P3 is functionally complete.**
+  - **Masonry already had the machinery:** a built-in `Selector` widget whose
+    menu renders through a `SelectorMenu` *layer* (floats over content, not
+    inline). Wrote a xilem `selector` view (modeled on `checkbox`; routes the
+    widget's `SelectionChanged` action to a callback) and pushed it to the
+    `woodshed-theme` fork branch (`e3f0ed2a`). The menu is themed purely through
+    `DefaultProperties` (`Background`/border/radius on `Selector` / `SelectorItem`
+    / `SelectorMenu`): masonry's default `pre_paint` renders those, so no widget
+    paint code was needed.
+  - **Header:** the `‹ Guitar ›` and `‹ Standard ›` cyclers became labelled
+    dropdowns (`set_instrument` / `set_tuning` + `tuning_names`). Verified: the
+    menu pops over the content as an overlay (`screenshots/p3b-popup.png`,
+    `p3b-header-dropdowns.png`). `cycle_instrument`/`cycle_tuning` kept behind
+    `#[allow(dead_code)]` for a possible keyboard binding.
+  - **Root / scale need no change:** they are already inline `xilem-components`
+    comboboxes in the lens content (`scales.root`, `chords.root`, …), which is
+    exactly how the board draws them ("Scale: Major Blues ▼", "Root: C ▼") —
+    inline expansion is fine there; only the fixed header strip needed the
+    overlay popup. So P3b's "instrument / tuning / root use dropdowns" bar is met.
+  - **Fast-iteration loop:** the fork is iterated via the local
+    `crates/xilem-woodshed` worktree, wired through a gitignored `paths` override
+    in `Code/.cargo/config.toml` (serval temporarily disabled there — it vendors
+    a wgpu-29 `vello`/`xilem_core` that collided with woodshed's wgpu-28 build).
+  - **Deferred polish:** a `▼` caret on the header triggers (needs a small
+    Selector-widget change so only the trigger, not the menu items, carries it),
+    tightening the `SELECTOR_MIN_WIDTH` trigger width, and an item hover
+    highlight. Optional; the triggers already read as controls and pop working
+    menus.
 - 2026-06-16: **P3 started. Feasibility resolved + P3a (segmented pills) shipped.**
   - **Combobox prerequisite (resolved):** masonry already ships the overlay
     machinery — a `layers/` system (`selector_menu`, `tooltip`) and a built-in

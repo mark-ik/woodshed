@@ -26,8 +26,8 @@ use xilem::core::one_of::{OneOf2, OneOf3};
 use xilem::style::Style;
 use xilem::view::{
     AnyFlexChild, FlexExt, FlexSpacer, Label, button, flex_col, flex_row,
-    label as xilem_label, portal, prose, resize_observer, sized_box, slider,
-    task_raw, text_input,
+    label as xilem_label, portal, prose, resize_observer, selector, sized_box,
+    slider, task_raw, text_input,
 };
 use xilem::{AnyWidgetView, AppState as XilemAppState, WidgetView, WindowId, Xilem, window};
 
@@ -1620,7 +1620,9 @@ impl AppState {
 
     /// Cycle the active tuning through the catalog tunings for the
     /// current instrument followed by the user's custom ones (wrapping).
-    /// Driven by the header ‹/›.
+    /// Superseded by the header dropdown ([`set_tuning`]); kept for a
+    /// possible keyboard-cycling binding.
+    #[allow(dead_code)]
     fn cycle_tuning(&mut self, delta: i32) {
         let inst = self.active_instrument;
         let inst_str = settings::instrument_to_str(inst);
@@ -1651,6 +1653,47 @@ impl AppState {
             }
         } else {
             let name = names[next].clone();
+            self.apply_user_tuning(&name);
+        }
+    }
+
+    /// Tuning options for the current instrument: catalog tunings first, then
+    /// the user's custom ones. Returns the names and the index where the user
+    /// tunings begin (`cat_count`). Shared by the header dropdown's option
+    /// list and [`set_tuning`].
+    fn tuning_names(&self) -> (Vec<String>, usize) {
+        let inst = self.active_instrument;
+        let inst_str = settings::instrument_to_str(inst);
+        let mut names: Vec<String> = tuning_catalog()
+            .iter()
+            .filter(|t| t.instrument == inst)
+            .map(|t| t.name.to_string())
+            .collect();
+        let cat_count = names.len();
+        for t in self.user_tunings.iter().filter(|t| t.instrument == inst_str) {
+            names.push(t.name.clone());
+        }
+        (names, cat_count)
+    }
+
+    /// Apply a tuning by index into [`tuning_names`] (the header dropdown).
+    /// Indices below `cat_count` are catalog tunings; the rest are the user's.
+    fn set_tuning(&mut self, idx: usize) {
+        let inst = self.active_instrument;
+        let (names, cat_count) = self.tuning_names();
+        if idx >= names.len() {
+            return;
+        }
+        if idx < cat_count {
+            if let Some(spec) = tuning_catalog()
+                .iter()
+                .filter(|t| t.instrument == inst)
+                .nth(idx)
+            {
+                self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
+            }
+        } else {
+            let name = names[idx].clone();
             self.apply_user_tuning(&name);
         }
     }
@@ -2547,6 +2590,9 @@ impl AppState {
 
     /// Cycle the active instrument. Picks the first tuning spec
     /// matching the new instrument and rebuilds the fretboard.
+    /// Superseded by the header dropdown ([`set_instrument`]); kept for a
+    /// possible keyboard-cycling binding.
+    #[allow(dead_code)]
     fn cycle_instrument(&mut self, direction: i32) {
         let order = Instrument::ALL;
         let cur = order
@@ -2555,6 +2601,18 @@ impl AppState {
             .unwrap_or(0) as i32;
         let next_idx = (cur + direction).rem_euclid(order.len() as i32) as usize;
         let next = order[next_idx];
+        if let Some(spec) = tuning_catalog().iter().find(|s| s.instrument == next) {
+            self.active_instrument = next;
+            self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
+        }
+    }
+
+    /// Set the active instrument by index into [`Instrument::ALL`] (the header
+    /// dropdown). Picks the first catalog tuning for it and rebuilds the
+    /// fretboard — same effect as landing on it via [`cycle_instrument`].
+    fn set_instrument(&mut self, idx: usize) {
+        let order = Instrument::ALL;
+        let Some(&next) = order.get(idx) else { return };
         if let Some(spec) = tuning_catalog().iter().find(|s| s.instrument == next) {
             self.active_instrument = next;
             self.fretboard = Fretboard::new(Tuning::from_spec(spec), 24);
@@ -2731,12 +2789,23 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 }
 
 fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    let instrument_name = format!("{}", state.active_instrument);
-    // Tuning picker as a ‹› cycle (a dropdown in a fixed header strip
-    // blows the layout open). Cycles catalog tunings for the current
-    // instrument then the user's custom ones; the full browsable list
-    // lives in Settings → Custom tunings.
-    let tuning_name = state.fretboard.tuning.name.clone();
+    // Instrument picker as an overlay-popup dropdown (P3b): the full list
+    // of instruments, with the active one shown on the trigger. Replaces the
+    // ‹ › cycler — the menu pops as a layer, so it doesn't grow the strip.
+    let instrument_options: Vec<String> =
+        Instrument::ALL.iter().map(|i| format!("{i}")).collect();
+    let instrument_idx = Instrument::ALL
+        .iter()
+        .position(|i| *i == state.active_instrument)
+        .unwrap_or(0);
+    // Tuning picker as an overlay-popup dropdown (P3b): catalog tunings for
+    // the current instrument then the user's custom ones. The full browsable
+    // list still lives in Settings → Custom tunings.
+    let tuning_options = state.tuning_names().0;
+    let tuning_idx = tuning_options
+        .iter()
+        .position(|n| *n == state.fretboard.tuning.name)
+        .unwrap_or(0);
     // Hamburger reads as "expanded" when sidebar is open, "collapsed"
     // when closed — text label keeps it accessible without an icon
     // font. Only rendered on tabs that actually have a list to hide;
@@ -2830,13 +2899,13 @@ fn header(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
         flex_row((
             hamburger,
             header_label(state.palette, "Woodshed", TS_LG),
-            button_sm("‹", |s: &mut AppState| s.cycle_instrument(-1)),
-            label(instrument_name).text_size(TS_SM),
-            button_sm("›", |s: &mut AppState| s.cycle_instrument(1)),
+            selector(instrument_options, instrument_idx, |s: &mut AppState, idx| {
+                s.set_instrument(idx);
+            }),
             dim_label(state.palette, "·", TS_SM),
-            button_sm("‹", |s: &mut AppState| s.cycle_tuning(-1)),
-            label(tuning_name).text_size(TS_SM),
-            button_sm("›", |s: &mut AppState| s.cycle_tuning(1)),
+            selector(tuning_options, tuning_idx, |s: &mut AppState, idx| {
+                s.set_tuning(idx);
+            }),
             fret_ctl,
             right_group.flex(1.0),
         ))
@@ -8717,10 +8786,11 @@ pub fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
 fn build_default_properties(palette: &Palette) -> masonry::core::DefaultProperties {
     use masonry::core::DefaultProperties;
     use masonry::layout::AsUnit;
+    use masonry::layers::SelectorMenu;
     use masonry::properties::{
         Background, BorderColor, BorderWidth, ContentColor, CornerRadius, Padding,
     };
-    use masonry::widgets::{Button, Label, TextArea, TextInput};
+    use masonry::widgets::{Button, Label, Selector, SelectorItem, TextArea, TextInput};
 
     // Start from masonry's full default set so we pick up everything
     // we don't override (padding values, corner radii, less-visible
@@ -8752,6 +8822,25 @@ fn build_default_properties(palette: &Palette) -> masonry::core::DefaultProperti
     // in light mode).
     properties.insert::<TextArea<false>, _>(ContentColor::new(palette.text));
     properties.insert::<TextArea<true>, _>(ContentColor::new(palette.text));
+
+    // Selector (combo box, P3b) — the trigger reads like a button, and its
+    // popup `SelectorMenu` (a layer of `SelectorItem`s) gets a themed surface
+    // + border so it's legible floating over content. The widgets paint
+    // nothing themselves; masonry's default `pre_paint` renders these
+    // properties, so theming is pure DefaultProperties.
+    properties.insert::<Selector, _>(Background::Color(palette.surface_2));
+    properties.insert::<Selector, _>(BorderColor { color: palette.surface_hover });
+    properties.insert::<Selector, _>(BorderWidth { width: 1.px() });
+    properties.insert::<Selector, _>(CornerRadius { radius: 6.px() });
+    properties.insert::<Selector, _>(Padding::from_vh(6.px(), 12.px()));
+
+    properties.insert::<SelectorMenu, _>(Background::Color(palette.surface_2));
+    properties.insert::<SelectorMenu, _>(BorderColor { color: palette.surface_hover });
+    properties.insert::<SelectorMenu, _>(BorderWidth { width: 1.px() });
+    properties.insert::<SelectorMenu, _>(CornerRadius { radius: 6.px() });
+
+    properties.insert::<SelectorItem, _>(ContentColor::new(palette.text));
+    properties.insert::<SelectorItem, _>(Padding::from_vh(6.px(), 12.px()));
 
     properties
 }

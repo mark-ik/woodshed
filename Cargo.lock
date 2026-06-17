@@ -1981,7 +1981,7 @@ dependencies = [
 [[package]]
 name = "linebender_include_doc_path"
 version = "0.1.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2053,7 +2053,7 @@ dependencies = [
 [[package]]
 name = "masonry"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "accesskit",
  "linebender_include_doc_path",
@@ -2066,7 +2066,7 @@ dependencies = [
 [[package]]
 name = "masonry_core"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "accesskit",
  "anymap3",
@@ -2093,7 +2093,7 @@ dependencies = [
 [[package]]
 name = "masonry_imaging"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "imaging",
  "imaging_vello",
@@ -2106,7 +2106,7 @@ dependencies = [
 [[package]]
 name = "masonry_winit"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "accesskit_winit",
  "copypasta",
@@ -4037,7 +4037,7 @@ dependencies = [
 [[package]]
 name = "tree_arena"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "hashbrown 0.17.1",
 ]
@@ -5325,7 +5325,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xilem"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "masonry",
  "masonry_winit",
@@ -5347,7 +5347,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "anymore",
  "hashbrown 0.17.1",
@@ -5357,7 +5357,7 @@ dependencies = [
 [[package]]
 name = "xilem_masonry"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#914c70c7003f8a1c3e37a17dd15eb8341cfe28c8"
+source = "git+https://github.com/mark-ik/xilem.git?branch=woodshed-theme#e3f0ed2a7d33c4e692c20a8a43746a5ab35bc30a"
 dependencies = [
  "masonry",
  "smallvec",
