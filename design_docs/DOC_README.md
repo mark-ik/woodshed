@@ -13,17 +13,23 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-07-04_serval_host_cross_platform_plan.md](2026-07-04_serval_host_cross_platform_plan.md)
+  — **The delivery architecture.** Woodshed moves to a serval host
+  (xilem_serval): one DOM-shaped view tree rendered by serval on desktop and
+  in the browser (receipt: serval `examples/serval_web_smoke`, PASS
+  2026-07-04). Phases S0-S5 (desktop parity, absorbs redesign P4-P6),
+  W1-W3 (web shell, web audio, deploy/PWA), mobile downstream. Retires the
+  mark-ik/xilem fork at the parity cut.
 - [2026-06-15_redesign_plan.md](2026-06-15_redesign_plan.md) — UI redesign from
   the Redesign Explorations board: GPUI-quiet chrome (hairline borders, calmer
   density, steppers→dropdowns), Slate + Ember palettes as built-ins, segmented-
   pill nav (left rail held for mobile), fretboard-layout setting, Rehearsal
   filmstrip + transport deck, Practice recipe tiles. Decisions locked
   2026-06-15; cheap layer first.
-- [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) — Scope for
-  a GitHub-Pages wasm demo. Native Xilem cannot compile to wasm on the current
-  fork (hard build failure); the web path is `xilem_web` (DOM/SVG, a second
-  view vocabulary) or shelving the demo. Tier-0 seams (AudioBackend, Storage,
-  timers, `Instant`) gate any path. Decision pending.
+- [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) —
+  **Superseded 2026-07-04** by the serval-host plan above; kept for the web
+  profile constraints and the Tier-0 seams (AudioBackend, Storage, timers,
+  `Instant`), which carry forward. The Path A/B/C analysis is historical.
 - [2026-05-22_rehearsal_redesign_plan.md](2026-05-22_rehearsal_redesign_plan.md)
   — Prototype → designed UI. Card vocabulary (tagged-union `Card`), a rehearsal
   queue/projections spine, bulldoze-then-build the lens nav. Branch
@@ -99,8 +105,9 @@ section whenever a durable working insight emerges from a session.
   required for woodshedding, but app-specific rehearsal UI, persistence,
   and audio engines live in consuming crates.
 - **Desktop first, mobile later**: ship to itch.io / Gumroad for desktop
-  before attempting mobile. Iced mobile support is the eventual path;
-  contributing to it is part of the project's broader value but does not
+  before attempting mobile. Mobile is a shell around the web build (see the
+  serval-host plan's M track); building toward it is part of the project's
+  broader value but does not
   block the music app.
 - **Generalize across stringed instruments**: theory model parameterizes
   string count and tuning so bass, ukulele, and banjo fall out for free.

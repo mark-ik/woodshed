@@ -4,7 +4,17 @@ What it would take to ship Woodshed as a wasm demo on GitHub Pages, and the
 decision that gates it. Grounded in a code+web investigation (2026-06-14)
 verified against the live fork checkout and `Cargo.lock`.
 
-Status: **scope — decision pending (which path, and functional vs silent).**
+Status: **superseded 2026-07-04 by
+[2026-07-04_serval_host_cross_platform_plan.md](2026-07-04_serval_host_cross_platform_plan.md).**
+The path decision came out differently than the A/B/C menu here: Woodshed
+moves to a serval host (xilem_serval), which renders the same view tree on
+desktop and in the browser (receipt: serval `examples/serval_web_smoke`,
+PASS 2026-07-04). The Tier 0 seams below (AudioBackend, storage, Instant,
+timers) carry forward unchanged into that plan; the Path A/B analysis is
+historical. Constraint updates since writing: the tuner CAN listen in the
+browser (getUserMedia + AudioWorklet, no cpal needed), cpal is bumped to
+0.18 (webaudio/audioworklet output backends), storage is OPFS, and COOP/COEP
+is escapable (coi-serviceworker or a host with real headers).
 
 ## The web profile (target + constraints)
 
