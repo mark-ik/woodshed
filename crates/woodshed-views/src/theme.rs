@@ -32,6 +32,7 @@ pub fn stage_css(p: &Palette) -> String {
     let bg = color_to_hex(p.bg);
     let surface = color_to_hex(p.surface);
     let surface_2 = color_to_hex(p.surface_2);
+    let surface_hover = color_to_hex(p.surface_hover);
     let text_header = color_to_hex(p.text_header);
     let text = color_to_hex(p.text);
     let text_dim = color_to_hex(p.text_dim);
@@ -69,6 +70,12 @@ pub fn stage_css(p: &Palette) -> String {
        color: {on_primary}; font-size: 10px; text-align: center; }}
 .root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
 .step-dot {{ background-color: {secondary}; color: {on_secondary}; }}
+.prog-cards {{ display: flex; margin-bottom: 12px; }}
+.prog-card {{ background-color: {surface_2}; border-radius: 8px; padding: 6px 14px;
+             margin-right: 8px; }}
+.prog-card-active {{ background-color: {surface_hover}; }}
+.prog-numeral {{ color: {tertiary}; font-size: 15px; }}
+.prog-chord {{ color: {text_dim}; font-size: 12px; }}
 .scale-name {{ margin-top: 10px; color: {text_dim}; font-size: 12px; }}
 .placeholder {{ color: {text_dim}; padding: 24px; }}
 .caption {{ margin-top: 12px; color: {text_disabled}; font-size: 12px; }}

@@ -146,6 +146,20 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 2 — Progression lens migrated.** The theory
+  crate already owned the hard part (`Progression::apply_in_key`
+  materializes roman-numeral roles in the shared root's major key,
+  matching woodshed-xilem); core adds `progression_board()` (cards +
+  expanded chord's tones) and a ported `format_role` that now includes
+  the degree-alteration prefix the old app dropped (♭VII renders as
+  ♭VII). Views: catalog sidebar, chord-card strip (numeral in tertiary,
+  concrete chord below, expanded card in `surface_hover`), chord-tone
+  board, description caption. Cold start prompts until a pick. Driven
+  receipt: I-IV-V in A → IV card expands → "showing D (IV)" with D-F#-A
+  on the board. Deferred with the voicing work: per-chord voicing
+  browser, overlay-all-voicings mode, per-chord hues.
+  Cosmetic: dot labels clip slightly at 10px in 24px dots — take with
+  the board polish pass.
 - 2026-07-05: **S4 slice 1 — Arpeggio lens migrated.**
   `woodshed_core::arpeggio` ports the woodshed-xilem algorithm verbatim
   (bass-anchored CAGED shape generation, pitch-ascending run from the

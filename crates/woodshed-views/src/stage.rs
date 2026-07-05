@@ -238,12 +238,120 @@ fn sidebar(ui: &UiState) -> UiChild {
                 )) as UiChild
             })
             .collect(),
+        Lens::Progressions => ui
+            .stage
+            .progressions()
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let class = if ui.stage.progression_idx == Some(i) {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
+                Box::new(clickable(
+                    el("div", text(p.name)).attr("class", class),
+                    move |ui: &mut UiState, _| {
+                        ui.stage.select_progression(i);
+                    },
+                )) as UiChild
+            })
+            .collect(),
         other => vec![Box::new(
             el("div", text(format!("{} catalog arrives with S4", other.label())))
                 .attr("class", "side-item"),
         ) as UiChild],
     };
     Box::new(el("div", items).attr("class", "side"))
+}
+
+fn progression_board_view(ui: &UiState) -> UiChild {
+    let Some(board) = ui.stage.progression_board() else {
+        return Box::new(
+            el(
+                "div",
+                el("div", text("Pick a progression from the list."))
+                    .attr("class", "placeholder"),
+            )
+            .attr("class", "board"),
+        );
+    };
+    let cards: Vec<UiChild> = board
+        .cards
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let class = if c.is_expanded {
+                "prog-card prog-card-active"
+            } else {
+                "prog-card"
+            };
+            Box::new(clickable(
+                el(
+                    "div",
+                    (
+                        el("div", text(c.numeral.clone())).attr("class", "prog-numeral"),
+                        el("div", text(c.chord_label.clone())).attr("class", "prog-chord"),
+                    ),
+                )
+                .attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.stage.progression_expand(i);
+                },
+            )) as UiChild
+        })
+        .collect();
+    let dots: HashMap<(usize, u8), (bool, String)> = board
+        .dots
+        .iter()
+        .map(|d| ((d.string_index, d.fret), (d.is_root, d.label.clone())))
+        .collect();
+    let state = &ui.stage;
+    let rows: Vec<UiChild> = (0..state.string_count())
+        .map(|string_index| {
+            let cells: Vec<UiChild> = (0..=state.fret_count)
+                .map(|fret| {
+                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    match dots.get(&(string_index, fret)) {
+                        Some((is_root, label)) => {
+                            let dot_class = if *is_root { "dot root-dot" } else { "dot" };
+                            Box::new(
+                                el(
+                                    "div",
+                                    (el("div", text(label.clone())).attr("class", dot_class),),
+                                )
+                                .attr("class", cell_class),
+                            ) as UiChild
+                        }
+                        None => {
+                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
+                        }
+                    }
+                })
+                .collect();
+            Box::new(el("div", cells).attr("class", "string")) as UiChild
+        })
+        .collect();
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", cards).attr("class", "prog-cards"),
+                el("div", rows),
+                el(
+                    "div",
+                    text(format!(
+                        "{} — {} · showing {}",
+                        state.material_name(),
+                        board.description,
+                        board.expanded_label,
+                    )),
+                )
+                .attr("class", "scale-name"),
+            ),
+        )
+        .attr("class", "board"),
+    )
 }
 
 fn arpeggio_board_view(ui: &UiState) -> UiChild {
@@ -372,6 +480,9 @@ fn board(ui: &UiState) -> UiChild {
     let state = &ui.stage;
     if state.lens == Lens::Arpeggios {
         return arpeggio_board_view(ui);
+    }
+    if state.lens == Lens::Progressions {
+        return progression_board_view(ui);
     }
     if !state.lens.implemented() {
         return Box::new(

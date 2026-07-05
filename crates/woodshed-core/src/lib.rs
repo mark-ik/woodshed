@@ -17,6 +17,9 @@ use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
 use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::interval::Interval;
 use woodshedding::pitch::{Pitch, Spelling};
+use woodshedding::progression::{
+    catalog as progression_catalog, ChordRole, Progression, RoleQuality,
+};
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
 
@@ -52,7 +55,7 @@ impl Lens {
 
     /// True when the lens resolves dots on the board today.
     pub fn implemented(self) -> bool {
-        matches!(self, Lens::Scales | Lens::Chords | Lens::Arpeggios)
+        !matches!(self, Lens::Exercises)
     }
 }
 
@@ -116,6 +119,35 @@ pub struct StageState {
     /// Inversion: which chord tone the run starts on (0 = root),
     /// clamped to the tone count.
     pub arpeggio_inversion: u8,
+
+    // === Progression lens (S4 slice 2) ===
+    /// Index into the progression catalog; `None` = nothing selected
+    /// (cold-start state, prompts the user to pick from the list).
+    pub progression_idx: Option<usize>,
+    /// Which chord card is expanded onto the board.
+    pub progression_expanded: usize,
+}
+
+/// One chord card of a materialized progression.
+#[derive(Clone, Debug)]
+pub struct ProgressionCard {
+    /// Roman-numeral role ("I", "ii", "V7", "♭VII").
+    pub numeral: String,
+    /// Concrete chord in the current key ("A", "Dm7", "E7").
+    pub chord_label: String,
+    pub is_expanded: bool,
+}
+
+/// Everything the view needs to draw the Progression lens.
+#[derive(Clone, Debug)]
+pub struct ProgressionBoard {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub cards: Vec<ProgressionCard>,
+    /// Chord-tone dots for the expanded card's chord.
+    pub dots: Vec<FretDot>,
+    /// The expanded chord's label (caption use).
+    pub expanded_label: String,
 }
 
 /// One arpeggio-board dot: a shape position with the transport highlight.
@@ -148,6 +180,59 @@ pub fn tunings() -> &'static [TuningSpec] {
     tuning_catalog()
 }
 
+/// Roman-numeral label for a progression role ("I", "ii", "V7", "♭VII").
+/// Ported from woodshed-xilem `format_role`, plus the degree-alteration
+/// prefix (the theory crate supplies the symbol; the old app dropped it).
+pub fn format_role(role: &ChordRole) -> String {
+    let lowercase = matches!(
+        role.quality,
+        RoleQuality::Minor
+            | RoleQuality::Diminished
+            | RoleQuality::Minor7
+            | RoleQuality::HalfDiminished7
+            | RoleQuality::Diminished7
+            | RoleQuality::Minor6
+            | RoleQuality::MinorMajor7
+            | RoleQuality::Minor9
+    );
+    let numeral = match (role.degree, lowercase) {
+        (1, false) => "I",
+        (1, true) => "i",
+        (2, false) => "II",
+        (2, true) => "ii",
+        (3, false) => "III",
+        (3, true) => "iii",
+        (4, false) => "IV",
+        (4, true) => "iv",
+        (5, false) => "V",
+        (5, true) => "v",
+        (6, false) => "VI",
+        (6, true) => "vi",
+        (7, false) => "VII",
+        (7, true) => "vii",
+        _ => "?",
+    };
+    let suffix = match role.quality {
+        RoleQuality::Major | RoleQuality::Minor => "",
+        RoleQuality::Diminished => "°",
+        RoleQuality::Augmented => "+",
+        RoleQuality::Dominant7 => "7",
+        RoleQuality::Major7 => "M7",
+        RoleQuality::Minor7 => "m7",
+        RoleQuality::HalfDiminished7 => "ø7",
+        RoleQuality::Diminished7 => "°7",
+        RoleQuality::Sus2 => "sus2",
+        RoleQuality::Sus4 => "sus4",
+        RoleQuality::Major6 => "6",
+        RoleQuality::Minor6 => "m6",
+        RoleQuality::MinorMajor7 => "mM7",
+        RoleQuality::Major9 => "M9",
+        RoleQuality::Minor9 => "m9",
+        RoleQuality::Dominant9 => "9",
+    };
+    format!("{}{numeral}{suffix}", role.alteration.symbol())
+}
+
 impl Default for StageState {
     fn default() -> Self {
         Self::new()
@@ -175,6 +260,8 @@ impl StageState {
             arpeggio_playing: false,
             arpeggio_direction: ArpeggioDirection::default(),
             arpeggio_inversion: 0,
+            progression_idx: None,
+            progression_expanded: 0,
         }
     }
 
@@ -260,8 +347,87 @@ impl StageState {
                     format!("{}{} arpeggio", self.root_name(), c.symbol)
                 }
             }
+            Lens::Progressions => match self.progression_idx {
+                Some(i) => format!(
+                    "{} in {}",
+                    progression_catalog()[i.min(progression_catalog().len() - 1)].name,
+                    self.root_name(),
+                ),
+                None => "Progression".to_string(),
+            },
             other => other.label().to_string(),
         }
+    }
+
+    // === Progression lens ===
+
+    pub fn progressions(&self) -> &'static [Progression] {
+        progression_catalog()
+    }
+
+    pub fn select_progression(&mut self, idx: usize) {
+        if idx < progression_catalog().len() {
+            self.progression_idx = Some(idx);
+            self.progression_expanded = 0;
+        }
+    }
+
+    pub fn progression_expand(&mut self, idx: usize) {
+        self.progression_expanded = idx;
+    }
+
+    /// Materialize the selected progression in the current key (major
+    /// scale of the shared root, matching woodshed-xilem) and resolve the
+    /// expanded chord's tones. `None` until a progression is picked.
+    pub fn progression_board(&self) -> Option<ProgressionBoard> {
+        let idx = self.progression_idx?;
+        let prog = progression_catalog().get(idx)?;
+        let major = scale_catalog().iter().find(|s| s.name == "Major")?;
+        let chords = prog.apply_in_key(self.root(), major).ok()?;
+        if chords.is_empty() {
+            return None;
+        }
+        let expanded = self.progression_expanded.min(chords.len() - 1);
+        let cards: Vec<ProgressionCard> = chords
+            .iter()
+            .enumerate()
+            .map(|(i, c)| ProgressionCard {
+                numeral: format_role(&c.role),
+                chord_label: format!(
+                    "{}{}{}",
+                    c.root.name, c.root.accidental, c.formula.symbol
+                ),
+                is_expanded: i == expanded,
+            })
+            .collect();
+        let chord = &chords[expanded];
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        let dots = board
+            .positions_for_chord(chord.formula, chord.root)
+            .map(|ps| {
+                ps.into_iter()
+                    .map(|p| FretDot {
+                        string_index: p.string_index,
+                        fret: p.fret,
+                        is_root: p
+                            .interval_from_root
+                            .is_some_and(|iv| iv.semitones() == 0),
+                        label: format!("{}{}", p.pitch.name, p.pitch.accidental),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let expanded_label = format!(
+            "{} ({})",
+            cards[expanded].chord_label, cards[expanded].numeral
+        );
+        Some(ProgressionBoard {
+            name: prog.name,
+            description: prog.description,
+            cards,
+            dots,
+            expanded_label,
+        })
     }
 
     // === Arpeggio lens ===
@@ -422,9 +588,48 @@ mod tests {
     #[test]
     fn unimplemented_lenses_render_empty() {
         let mut s = StageState::new();
-        s.set_lens(Lens::Progressions);
+        s.set_lens(Lens::Exercises);
         assert!(s.dots().is_empty());
         assert!(!s.lens.implemented());
+    }
+
+    #[test]
+    fn progression_board_materializes_in_key() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Progressions);
+        assert!(s.progression_board().is_none(), "cold start prompts");
+        s.select_progression(0);
+        let b = s.progression_board().expect("board after selection");
+        assert!(!b.cards.is_empty());
+        assert_eq!(b.cards.iter().filter(|c| c.is_expanded).count(), 1);
+        assert!(!b.dots.is_empty(), "expanded chord resolves tones");
+        // Expanding another card moves the expansion and changes the label.
+        if b.cards.len() > 1 {
+            let first = b.expanded_label.clone();
+            s.progression_expand(1);
+            let b2 = s.progression_board().unwrap();
+            assert!(b2.cards[1].is_expanded);
+            assert_ne!(b2.expanded_label, first);
+        }
+    }
+
+    #[test]
+    fn format_role_covers_common_shapes() {
+        use woodshedding::progression::{ChordRole, DegreeAlteration, RoleQuality};
+        assert_eq!(format_role(&ChordRole::new(1, RoleQuality::Major)), "I");
+        assert_eq!(format_role(&ChordRole::new(2, RoleQuality::Minor7)), "iim7");
+        assert_eq!(
+            format_role(&ChordRole::new(5, RoleQuality::Dominant7)),
+            "V7"
+        );
+        assert_eq!(
+            format_role(&ChordRole::altered(
+                7,
+                DegreeAlteration::Flat,
+                RoleQuality::Major
+            )),
+            "♭VII"
+        );
     }
 
     #[test]
