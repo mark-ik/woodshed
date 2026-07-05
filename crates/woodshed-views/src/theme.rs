@@ -69,6 +69,11 @@ pub fn stage_css(p: &Palette) -> String {
 .scale-name {{ margin-top: 10px; color: {text_dim}; font-size: 12px; }}
 .placeholder {{ color: {text_dim}; padding: 24px; }}
 .caption {{ margin-top: 12px; color: {text_disabled}; font-size: 12px; }}
+.transport {{ display: flex; margin-bottom: 12px; }}
+.t-btn {{ background-color: {surface_2}; color: {text}; padding: 4px 12px;
+         margin-right: 6px; border-radius: 6px; }}
+.t-narrow {{ padding: 4px 9px; }}
+.t-readout {{ color: {text_dim}; padding: 4px 10px 4px 0; }}
 .select-box {{ background-color: {surface_2}; color: {text}; padding: 4px 12px;
               border-radius: 6px; }}
 .select-list {{ background-color: {surface_2}; border-radius: 6px; padding: 4px;

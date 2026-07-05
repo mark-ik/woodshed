@@ -9,6 +9,7 @@ description = "Woodshed's serval desktop host: winit window + netrender present 
 
 [dependencies]
 woodshed-core = { workspace = true }
+woodshed-audio = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 xilem-serval = { workspace = true }
 layout-dom-api = { workspace = true }

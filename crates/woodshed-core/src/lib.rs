@@ -9,6 +9,8 @@
 //! fretboard dots. Arpeggios / Progressions / Exercises are placeholders
 //! until their engines migrate from woodshed-xilem's `AppState` (S4).
 
+pub mod audio;
+
 use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
 use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::pitch::{Pitch, Spelling};

@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 
+use woodshed_core::audio::{TransportState, TunerState};
 use woodshed_core::{tunings, Lens, StageState, ROOT_NAMES};
 use xilem_serval::{
     clickable, el, map_state, select, text, AnyView, SelectState, ServalCtx, ServalElement,
@@ -17,6 +18,10 @@ use xilem_serval::{
 /// Runner state: the portable core slice plus view-layer widget state.
 pub struct UiState {
     pub stage: StageState,
+    pub transport: TransportState,
+    pub tuner: TunerState,
+    /// A device/stream failure reported by the host's audio backend.
+    pub audio_error: Option<String>,
     pub tuning_dd: SelectState,
     pub root_dd: SelectState,
 }
@@ -31,6 +36,9 @@ impl UiState {
     pub fn new() -> Self {
         let stage = StageState::new();
         Self {
+            transport: TransportState::default(),
+            tuner: TunerState::default(),
+            audio_error: None,
             tuning_dd: SelectState::new(stage.tuning_idx),
             root_dd: SelectState::new(stage.root_idx),
             stage,
@@ -77,6 +85,67 @@ fn header(ui: &UiState) -> UiChild {
             ),
         )
         .attr("class", "header-row"),
+    )
+}
+
+fn transport(ui: &UiState) -> UiChild {
+    let play_label = if ui.transport.playing { "Stop" } else { "Play" };
+    let tuner_label = if ui.tuner.enabled {
+        "Tuner: on"
+    } else {
+        "Tuner: off"
+    };
+    let readout = if let Some(err) = &ui.audio_error {
+        format!("audio: {err}")
+    } else if ui.tuner.enabled {
+        match &ui.tuner.reading {
+            Some(r) => format!(
+                "{}{} {}{:.0}¢{}",
+                r.note,
+                r.octave,
+                if r.cents >= 0.0 { "+" } else { "" },
+                r.cents,
+                if r.in_tune { "  in tune" } else { "" },
+            ),
+            None => "listening...".to_string(),
+        }
+    } else {
+        String::new()
+    };
+    Box::new(
+        el(
+            "div",
+            (
+                clickable(
+                    el("div", text(play_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.transport.playing = !ui.transport.playing;
+                    },
+                ),
+                clickable(
+                    el("div", text("-")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
+                ),
+                el("div", text(format!("{:.0} bpm", ui.transport.bpm)))
+                    .attr("class", "t-readout"),
+                clickable(
+                    el("div", text("+")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
+                ),
+                el("span", ()).attr("class", "header-gap"),
+                clickable(
+                    el("div", text(tuner_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.tuner.enabled = !ui.tuner.enabled;
+                        if !ui.tuner.enabled {
+                            ui.tuner.reading = None;
+                        }
+                    },
+                ),
+                el("div", text(readout)).attr("class", "t-readout"),
+            ),
+        )
+        .attr("class", "transport"),
     )
 }
 
@@ -241,6 +310,7 @@ pub fn stage_root(ui: &UiState) -> UiChild {
                 )
                 .attr("class", "pills"),
                 header(ui),
+                transport(ui),
                 lens_strip(ui),
                 el("div", (sidebar(ui), board(ui))).attr("class", "body"),
                 el(

@@ -13,9 +13,14 @@
 //! every dispatch the host calls `UiState::sync` so dropdown picks land in
 //! the core state.
 
+mod audio;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+
+use audio::CpalBackend;
+use woodshed_core::audio::AudioBackend;
 
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
@@ -47,6 +52,8 @@ struct App {
     /// Cursor position in logical coordinates.
     cursor: (f32, f32),
     modifiers: ModifiersState,
+    /// The W0.1 audio seam: cpal on desktop, Web Audio on the web host.
+    backend: Option<CpalBackend>,
 }
 
 impl App {
@@ -55,6 +62,20 @@ impl App {
     }
 
     fn redraw(&mut self) {
+        // Tuner polling: while listening, fold the latest backend reading
+        // into the state before building the frame, and keep frames coming.
+        // (Desktop's W0.4 stand-in — the browser host uses rAF the same way.)
+        let mut tuner_live = false;
+        if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_ref()) {
+            let mut enabled = false;
+            runner.update(|ui| {
+                enabled = ui.tuner.enabled;
+                if enabled {
+                    ui.tuner.reading = backend.tuner_reading();
+                }
+            });
+            tuner_live = enabled;
+        }
         let (Some(window), Some(host), Some(runner)) =
             (self.window.as_ref(), self.host.as_ref(), self.runner.as_ref())
         else {
@@ -122,13 +143,23 @@ impl App {
             ExternalTexturePlacement::new([0.0, 0.0, pw as f32, ph as f32]),
         );
         frame.present();
+        if tuner_live {
+            window.request_redraw();
+        }
     }
 
-    /// Sync dropdown state into the core and repaint — the tail of every
-    /// input dispatch.
+    /// Sync dropdown state into the core, push the audio state through the
+    /// backend seam, and repaint — the tail of every input dispatch.
     fn after_dispatch(&mut self) {
         if let Some(runner) = self.runner.as_mut() {
-            runner.update(|ui| ui.sync());
+            let backend = self.backend.as_mut();
+            runner.update(|ui| {
+                ui.sync();
+                if let Some(backend) = backend {
+                    backend.set_metronome(ui.transport);
+                    backend.set_tuner_enabled(ui.tuner.enabled);
+                }
+            });
         }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
@@ -202,11 +233,15 @@ impl ApplicationHandler for App {
             },
         )
         .expect("boot serval host");
+        let backend = CpalBackend::new();
+        let mut ui = UiState::new();
+        ui.audio_error = backend.error().map(String::from);
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
-        let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, UiState::new());
+        let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, ui);
         self.window = Some(window);
         self.host = Some(host);
         self.runner = Some(runner);
+        self.backend = Some(backend);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -259,6 +294,7 @@ fn main() {
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),
         modifiers: ModifiersState::empty(),
+        backend: None,
     };
     event_loop.run_app(&mut app).expect("run app");
 }

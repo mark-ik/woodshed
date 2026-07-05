@@ -5359,7 +5359,7 @@ dependencies = [
 
 [[package]]
 name = "tinct"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
@@ -7162,6 +7162,7 @@ dependencies = [
  "serval-winit-host",
  "wgpu 29.0.4",
  "winit",
+ "woodshed-audio",
  "woodshed-core",
  "woodshed-views",
  "xilem-serval",
