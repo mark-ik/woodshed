@@ -158,7 +158,8 @@ workspace and the smoke already models it.
   redraw while listening (desktop's W0.4 stand-in).
   Driven receipt: Play → Stop at 130 bpm after two nudges, tuner
   listening with no reading in a quiet room (honest levels, no placebo).
-  Audible click pending Mark's ear.
+  Audible click confirmed by Mark (2026-07-05) — sound-out through the
+  seam is real end to end.
   Remaining for full S3/S4 parity, tracked for the screen migrations:
   chord/scale render playback, MIDI in/out, song engine, calibration,
   metronome patterns beyond straight quarters.
