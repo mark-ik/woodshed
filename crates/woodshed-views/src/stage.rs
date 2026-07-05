@@ -10,14 +10,19 @@
 use std::collections::HashMap;
 
 use woodshed_core::audio::{TransportState, TunerState};
+use woodshed_core::storage::{PersistedSession, Tab};
 use woodshed_core::{tunings, Lens, StageState, ROOT_NAMES};
 use xilem_serval::{
     clickable, el, map_state, select, text, AnyView, SelectState, ServalCtx, ServalElement,
 };
 
+use crate::theme::ThemeMode;
+
 /// Runner state: the portable core slice plus view-layer widget state.
 pub struct UiState {
     pub stage: StageState,
+    pub tab: Tab,
+    pub theme: ThemeMode,
     pub transport: TransportState,
     pub tuner: TunerState,
     /// A device/stream failure reported by the host's audio backend.
@@ -36,6 +41,8 @@ impl UiState {
     pub fn new() -> Self {
         let stage = StageState::new();
         Self {
+            tab: Tab::Stage,
+            theme: ThemeMode::default(),
             transport: TransportState::default(),
             tuner: TunerState::default(),
             audio_error: None,
@@ -52,16 +59,97 @@ impl UiState {
         self.stage.set_tuning(self.tuning_dd.selected);
         self.stage.set_root(self.root_dd.selected);
     }
+
+    /// Snapshot the persistable subset (the W0.2 seam's payload).
+    pub fn to_persisted(&self) -> PersistedSession {
+        PersistedSession::capture(
+            &self.stage,
+            self.tab,
+            self.transport.bpm,
+            self.theme.label(),
+        )
+    }
+
+    /// Restore a persisted session (indices clamp; unknown theme names
+    /// fall back to the default).
+    pub fn apply_persisted(&mut self, session: &PersistedSession) {
+        session.restore(&mut self.stage);
+        self.tab = session.tab;
+        self.transport.bpm = session.bpm.clamp(30.0, 300.0);
+        self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
+        self.tuning_dd = SelectState::new(self.stage.tuning_idx);
+        self.root_dd = SelectState::new(self.stage.root_idx);
+    }
 }
 
 /// Boxed heterogeneous child view over [`UiState`].
 pub type UiChild = Box<dyn AnyView<UiState, (), ServalCtx, ServalElement>>;
 
-fn pill(label: &str, active: bool) -> UiChild {
-    Box::new(el("span", text(label.to_string())).attr(
-        "class",
-        if active { "pill pill-active" } else { "pill" },
+fn pill(tab: Tab, active: bool) -> UiChild {
+    Box::new(clickable(
+        el("span", text(tab.label())).attr(
+            "class",
+            if active { "pill pill-active" } else { "pill" },
+        ),
+        move |ui: &mut UiState, _| {
+            ui.tab = tab;
+        },
     ))
+}
+
+fn settings_screen(ui: &UiState) -> UiChild {
+    let themes: Vec<UiChild> = ThemeMode::ALL
+        .iter()
+        .map(|&mode| {
+            let class = if mode == ui.theme {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
+            Box::new(clickable(
+                el("div", text(mode.label())).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.theme = mode;
+                },
+            )) as UiChild
+        })
+        .collect();
+    let audio_line = match &ui.audio_error {
+        Some(err) => format!("Audio: {err}"),
+        None => "Audio: output and input streams open.".to_string(),
+    };
+    Box::new(
+        el(
+            "div",
+            (
+                el(
+                    "div",
+                    (
+                        el("div", text("Theme")).attr("class", "settings-heading"),
+                        el("div", themes),
+                    ),
+                )
+                .attr("class", "side"),
+                el(
+                    "div",
+                    (
+                        el("div", text("Session")).attr("class", "settings-heading"),
+                        el("div", text(audio_line)).attr("class", "settings-line"),
+                        el(
+                            "div",
+                            text(
+                                "Selections, tempo, and theme persist to \
+                                 serval-state.json and restore on launch.",
+                            ),
+                        )
+                        .attr("class", "settings-line"),
+                    ),
+                )
+                .attr("class", "board"),
+            ),
+        )
+        .attr("class", "body"),
+    )
 }
 
 fn header(ui: &UiState) -> UiChild {
@@ -641,34 +729,49 @@ fn board(ui: &UiState) -> UiChild {
     )
 }
 
-/// The Stage screen root. Boxed so hosts can name the runner's view type
-/// on stable Rust (`fn(&UiState) -> UiChild`).
+fn tab_content(ui: &UiState) -> UiChild {
+    match ui.tab {
+        Tab::Stage => Box::new(el(
+            "div",
+            (
+                header(ui),
+                transport(ui),
+                lens_strip(ui),
+                el("div", (sidebar(ui), board(ui))).attr("class", "body"),
+            ),
+        )),
+        Tab::Settings => settings_screen(ui),
+        other => Box::new(
+            el(
+                "div",
+                el(
+                    "div",
+                    text(format!(
+                        "The {} tab migrates from woodshed-xilem in S4.",
+                        other.label()
+                    )),
+                )
+                .attr("class", "placeholder"),
+            )
+            .attr("class", "board"),
+        ),
+    }
+}
+
+/// The app root. Boxed so hosts can name the runner's view type on
+/// stable Rust (`fn(&UiState) -> UiChild`).
 pub fn stage_root(ui: &UiState) -> UiChild {
+    let pills: Vec<UiChild> = Tab::ALL
+        .iter()
+        .map(|&t| pill(t, t == ui.tab))
+        .collect();
     Box::new(
         el(
             "div",
             (
                 el("div", text("Woodshed")).attr("class", "title"),
-                el(
-                    "div",
-                    (
-                        pill("Stage", true),
-                        pill("Practice", false),
-                        pill("Song", false),
-                        pill("Rehearsal", false),
-                        pill("Settings", false),
-                    ),
-                )
-                .attr("class", "pills"),
-                header(ui),
-                transport(ui),
-                lens_strip(ui),
-                el("div", (sidebar(ui), board(ui))).attr("class", "body"),
-                el(
-                    "div",
-                    text("serval host S2 — lenses, dropdowns, keyboard"),
-                )
-                .attr("class", "caption"),
+                el("div", pills).attr("class", "pills"),
+                tab_content(ui),
             ),
         )
         .attr("class", "root"),

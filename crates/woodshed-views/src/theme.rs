@@ -12,19 +12,131 @@ fn hex(s: &str) -> tinct::Srgb {
     color_from_hex(s).expect("valid seed hex")
 }
 
-/// The Slate seeds (faithful cool-dark; matches audio-widgets' Slate).
-pub fn slate_seeds() -> Seeds {
-    Seeds {
-        primary: hex("#3366c8"),
-        secondary: hex("#2e9da6"),
-        tertiary: hex("#e0a846"),
-        neutral: hex("#101422"),
-        text_header: None,
-        text_body: None,
-        success: hex("#4fb36e"),
-        danger: hex("#d54e4e"),
-        dark: true,
+/// The built-in themes (seed sets match audio-widgets' engine, so the
+/// serval host and the xilem app agree until the parity cut).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ThemeMode {
+    #[default]
+    Slate,
+    Ember,
+    Light,
+    Dusk,
+    Meadow,
+    Parchment,
+}
+
+impl ThemeMode {
+    pub const ALL: [ThemeMode; 6] = [
+        ThemeMode::Slate,
+        ThemeMode::Ember,
+        ThemeMode::Light,
+        ThemeMode::Dusk,
+        ThemeMode::Meadow,
+        ThemeMode::Parchment,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ThemeMode::Slate => "Slate",
+            ThemeMode::Ember => "Ember",
+            ThemeMode::Light => "Light",
+            ThemeMode::Dusk => "Dusk",
+            ThemeMode::Meadow => "Meadow",
+            ThemeMode::Parchment => "Parchment",
+        }
     }
+
+    /// Inverse of [`label`](Self::label), for the persisted theme name.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|m| m.label() == name)
+    }
+
+    pub fn seeds(self) -> Seeds {
+        match self {
+            // Slate — faithful cool-dark: blue / teal / amber.
+            ThemeMode::Slate => Seeds {
+                primary: hex("#3366c8"),
+                secondary: hex("#2e9da6"),
+                tertiary: hex("#e0a846"),
+                neutral: hex("#101422"),
+                text_header: None,
+                text_body: None,
+                success: hex("#4fb36e"),
+                danger: hex("#d54e4e"),
+                dark: true,
+            },
+            // Ember — warm fire: ember orange-red, gold roots, warm
+            // charcoal-brown surfaces.
+            ThemeMode::Ember => Seeds {
+                primary: hex("#da5e3a"),
+                secondary: hex("#c27a3c"),
+                tertiary: hex("#ebb046"),
+                neutral: hex("#24170f"),
+                text_header: None,
+                text_body: None,
+                success: hex("#6fb36e"),
+                danger: hex("#d5554e"),
+                dark: true,
+            },
+            ThemeMode::Light => Seeds {
+                primary: hex("#2a55b4"),
+                secondary: hex("#1f777f"),
+                tertiary: hex("#a86c14"),
+                neutral: hex("#dfe3ee"),
+                text_header: None,
+                text_body: None,
+                success: hex("#2f8a4f"),
+                danger: hex("#b83333"),
+                dark: false,
+            },
+            // Dusk — cool twilight: mauve / periwinkle / violet.
+            ThemeMode::Dusk => Seeds {
+                primary: hex("#cc6f8c"),
+                secondary: hex("#7c71c4"),
+                tertiary: hex("#b28adc"),
+                neutral: hex("#191628"),
+                text_header: None,
+                text_body: None,
+                success: hex("#6fb36e"),
+                danger: hex("#d5554e"),
+                dark: true,
+            },
+            // Meadow — moss / teal / wheat over green-dark panels.
+            ThemeMode::Meadow => Seeds {
+                primary: hex("#5ba86b"),
+                secondary: hex("#3fa89e"),
+                tertiary: hex("#e0b84a"),
+                neutral: hex("#101e14"),
+                text_header: None,
+                text_body: None,
+                success: hex("#6fc370"),
+                danger: hex("#cf5151"),
+                dark: true,
+            },
+            // Parchment — sepia / sage / ochre on warm cream paper.
+            ThemeMode::Parchment => Seeds {
+                primary: hex("#8a5a2b"),
+                secondary: hex("#4e7c6a"),
+                tertiary: hex("#a8731a"),
+                neutral: hex("#f0e6ce"),
+                text_header: None,
+                text_body: None,
+                success: hex("#2f8a4f"),
+                danger: hex("#b83333"),
+                dark: false,
+            },
+        }
+    }
+
+    /// The full Stage sheet for this theme.
+    pub fn css(self) -> String {
+        stage_css(&derive_palette(&self.seeds()))
+    }
+}
+
+/// The Slate seeds (kept for callers that want the default explicitly).
+pub fn slate_seeds() -> Seeds {
+    ThemeMode::Slate.seeds()
 }
 
 /// The Stage sheet rendered from a derived palette.
@@ -90,6 +202,8 @@ pub fn stage_css(p: &Palette) -> String {
 .select-list {{ background-color: {surface_2}; border-radius: 6px; padding: 4px;
                width: 220px; }}
 .select-option {{ color: {text}; padding: 4px 10px; border-radius: 4px; }}
+.settings-heading {{ color: {text_header}; font-size: 15px; margin-bottom: 8px; }}
+.settings-line {{ color: {text_dim}; margin-bottom: 6px; }}
 "#
     )
 }

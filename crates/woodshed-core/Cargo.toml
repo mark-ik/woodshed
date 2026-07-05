@@ -9,3 +9,7 @@ description = "Woodshed's portable state/logic core: app state over the woodshed
 
 [dependencies]
 woodshedding = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

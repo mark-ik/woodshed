@@ -7146,6 +7146,8 @@ dependencies = [
 name = "woodshed-core"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "woodshedding",
 ]
 
@@ -7153,10 +7155,12 @@ dependencies = [
 name = "woodshed-serval"
 version = "0.1.0"
 dependencies = [
+ "directories",
  "layout-dom-api",
  "netrender",
  "paint_list_api",
  "paint_list_render",
+ "serde_json",
  "serval-layout",
  "serval-scripted-dom",
  "serval-winit-host",

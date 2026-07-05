@@ -21,3 +21,5 @@ paint_list_api = { workspace = true }
 paint_list_render = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
+directories = "5"
+serde_json = { workspace = true }

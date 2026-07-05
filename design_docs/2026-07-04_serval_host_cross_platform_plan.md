@@ -146,6 +146,21 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 4 — persistence (W0.2) + Settings tab + tab
+  nav + all six themes.** `woodshed_core::storage` defines the seam
+  (`Storage` trait + `PersistedSession`, serde with
+  `#[serde(default)]` forward-compat and clamping restore) and the
+  `Tab` enum; the desktop host persists to `serval-state.json` beside
+  the xilem app's `state.json` (same ProjectDirs, distinct file — no
+  clobbering during coexistence), saving after every dispatch and
+  restoring at boot. Pills nav is real tab switching (Practice / Song
+  / Rehearsal are honest placeholders). Settings ships the theme
+  picker: all six seed sets (Slate, Ember, Light, Dusk, Meadow,
+  Parchment) ported into `woodshed-views::theme::ThemeMode`, derived
+  live through tinct, re-skinning on click (sheet regen + forced
+  relayout). Driven receipt: Ember picked in Settings, app killed and
+  relaunched — came back in Ember on the Settings tab with the pick
+  highlighted. This is redesign P1 parity in the new stack.
 - 2026-07-05: **S4 slice 3 — Exercise lens migrated; the lens strip is
   complete.** All generation lives in the theory crate
   (`Exercise::generate` over tuning + `ExerciseParams`); core adds the

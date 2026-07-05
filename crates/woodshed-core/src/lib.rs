@@ -11,6 +11,7 @@
 
 pub mod arpeggio;
 pub mod audio;
+pub mod storage;
 
 use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};
 use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
@@ -26,10 +27,10 @@ use woodshedding::progression::{
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
 
-/// The fretboard lens strip (redesign-plan vocabulary). Scales and Chords
-/// resolve on the board today; the other three arrive with S4.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The fretboard lens strip (redesign-plan vocabulary).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum Lens {
+    #[default]
     Scales,
     Chords,
     Arpeggios,

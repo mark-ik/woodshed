@@ -14,13 +14,17 @@
 //! the core state.
 
 mod audio;
+mod storage;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use audio::CpalBackend;
+use storage::FsStorage;
 use woodshed_core::audio::AudioBackend;
+use woodshed_core::storage::Storage as _;
+use woodshed_views::theme::ThemeMode;
 
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
@@ -57,6 +61,10 @@ struct App {
     /// Last arpeggio auto-advance instant (the step clock while the
     /// arpeggio transport runs).
     last_arp_step: Option<std::time::Instant>,
+    /// The W0.2 storage seam: fs on desktop, OPFS on the web host.
+    storage: FsStorage,
+    /// Theme the current sheet was generated from; a change re-skins.
+    theme: ThemeMode,
 }
 
 impl App {
@@ -177,8 +185,11 @@ impl App {
     }
 
     /// Sync dropdown state into the core, push the audio state through the
-    /// backend seam, and repaint — the tail of every input dispatch.
+    /// backend seam, persist the session, re-skin on a theme change, and
+    /// repaint — the tail of every input dispatch.
     fn after_dispatch(&mut self) {
+        let mut theme = self.theme;
+        let mut persisted: Option<String> = None;
         if let Some(runner) = self.runner.as_mut() {
             let backend = self.backend.as_mut();
             runner.update(|ui| {
@@ -187,7 +198,19 @@ impl App {
                     backend.set_metronome(ui.transport);
                     backend.set_tuner_enabled(ui.tuner.enabled);
                 }
+                theme = ui.theme;
+                persisted = serde_json::to_string(&ui.to_persisted()).ok();
             });
+        }
+        if theme != self.theme {
+            self.theme = theme;
+            self.sheet = theme.css();
+            // Force a full relayout under the new sheet.
+            self.layout = None;
+            self.layout_size = (0.0, 0.0);
+        }
+        if let Some(json) = persisted {
+            self.storage.save(&json);
         }
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
@@ -264,6 +287,15 @@ impl ApplicationHandler for App {
         let backend = CpalBackend::new();
         let mut ui = UiState::new();
         ui.audio_error = backend.error().map(String::from);
+        // Restore the previous session (W0.2): selections, tempo, theme, tab.
+        if let Some(json) = self.storage.load() {
+            match serde_json::from_str(&json) {
+                Ok(session) => ui.apply_persisted(&session),
+                Err(e) => eprintln!("[woodshed-serval] ignoring corrupt session: {e}"),
+            }
+        }
+        self.theme = ui.theme;
+        self.sheet = ui.theme.css();
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
         let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, ui);
         self.window = Some(window);
@@ -324,6 +356,8 @@ fn main() {
         modifiers: ModifiersState::empty(),
         backend: None,
         last_arp_step: None,
+        storage: FsStorage::new(),
+        theme: ThemeMode::default(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }
