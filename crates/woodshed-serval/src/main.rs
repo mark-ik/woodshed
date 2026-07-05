@@ -79,13 +79,19 @@ impl App {
                     ui.tuner.reading = backend.tuner_reading();
                     animating = true;
                 }
-                if ui.stage.arpeggio_playing {
+                let stepping = ui.stage.arpeggio_playing || ui.stage.exercise_playing;
+                if stepping {
                     let beat = std::time::Duration::from_secs_f32(
                         60.0 / ui.transport.bpm.max(30.0),
                     );
                     match last_arp {
                         Some(t) if now.duration_since(*t) >= beat => {
-                            ui.stage.arpeggio_advance();
+                            if ui.stage.arpeggio_playing {
+                                ui.stage.arpeggio_advance();
+                            }
+                            if ui.stage.exercise_playing {
+                                ui.stage.exercise_advance();
+                            }
                             *last_arp = Some(now);
                         }
                         None => *last_arp = Some(now),

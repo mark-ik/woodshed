@@ -257,12 +257,116 @@ fn sidebar(ui: &UiState) -> UiChild {
                 )) as UiChild
             })
             .collect(),
-        other => vec![Box::new(
-            el("div", text(format!("{} catalog arrives with S4", other.label())))
-                .attr("class", "side-item"),
-        ) as UiChild],
+        Lens::Exercises => ui
+            .stage
+            .exercises()
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let class = if i == ui.stage.exercise_idx {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
+                Box::new(clickable(
+                    el("div", text(e.name)).attr("class", class),
+                    move |ui: &mut UiState, _| {
+                        ui.stage.select_exercise(i);
+                    },
+                )) as UiChild
+            })
+            .collect(),
     };
     Box::new(el("div", items).attr("class", "side"))
+}
+
+fn exercise_board_view(ui: &UiState) -> UiChild {
+    let state = &ui.stage;
+    let board = state.exercise_board();
+    let play_label = if state.exercise_playing { "Pause" } else { "Run" };
+    let deck: UiChild = Box::new(
+        el(
+            "div",
+            (
+                clickable(
+                    el("div", text(play_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.stage.exercise_playing = !ui.stage.exercise_playing;
+                    },
+                ),
+                clickable(
+                    el("div", text("Step")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.stage.exercise_advance(),
+                ),
+                clickable(
+                    el("div", text("<")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.stage.exercise_nudge_fret(-1),
+                ),
+                el("div", text(format!("fret {}", board.starting_fret)))
+                    .attr("class", "t-readout"),
+                clickable(
+                    el("div", text(">")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.stage.exercise_nudge_fret(1),
+                ),
+            ),
+        )
+        .attr("class", "transport"),
+    );
+    let dots: HashMap<(usize, u8), (usize, String)> = board
+        .dots
+        .iter()
+        .map(|d| ((d.string_index, d.fret), (d.recency, d.label.clone())))
+        .collect();
+    let rows: Vec<UiChild> = (0..state.string_count())
+        .map(|string_index| {
+            let cells: Vec<UiChild> = (0..=state.fret_count)
+                .map(|fret| {
+                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    match dots.get(&(string_index, fret)) {
+                        Some((recency, label)) => {
+                            let dot_class = if *recency == 0 {
+                                "dot step-dot"
+                            } else {
+                                "dot trail-dot"
+                            };
+                            Box::new(
+                                el(
+                                    "div",
+                                    (el("div", text(label.clone())).attr("class", dot_class),),
+                                )
+                                .attr("class", cell_class),
+                            ) as UiChild
+                        }
+                        None => {
+                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
+                        }
+                    }
+                })
+                .collect();
+            Box::new(el("div", cells).attr("class", "string")) as UiChild
+        })
+        .collect();
+    Box::new(
+        el(
+            "div",
+            (
+                deck,
+                el("div", rows),
+                el(
+                    "div",
+                    text(format!(
+                        "{} — step {}/{} · {}",
+                        board.name,
+                        board.step + 1,
+                        board.total,
+                        board.description,
+                    )),
+                )
+                .attr("class", "scale-name"),
+            ),
+        )
+        .attr("class", "board"),
+    )
 }
 
 fn progression_board_view(ui: &UiState) -> UiChild {
@@ -484,21 +588,8 @@ fn board(ui: &UiState) -> UiChild {
     if state.lens == Lens::Progressions {
         return progression_board_view(ui);
     }
-    if !state.lens.implemented() {
-        return Box::new(
-            el(
-                "div",
-                el(
-                    "div",
-                    text(format!(
-                        "The {} lens migrates from woodshed-xilem in S4.",
-                        state.lens.label()
-                    )),
-                )
-                .attr("class", "placeholder"),
-            )
-            .attr("class", "board"),
-        );
+    if state.lens == Lens::Exercises {
+        return exercise_board_view(ui);
     }
     let dots: HashMap<(usize, u8), (bool, String)> = state
         .dots()

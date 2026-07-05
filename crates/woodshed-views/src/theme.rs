@@ -70,6 +70,7 @@ pub fn stage_css(p: &Palette) -> String {
        color: {on_primary}; font-size: 10px; text-align: center; }}
 .root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
 .step-dot {{ background-color: {secondary}; color: {on_secondary}; }}
+.trail-dot {{ background-color: {surface_hover}; color: {text_dim}; }}
 .prog-cards {{ display: flex; margin-bottom: 12px; }}
 .prog-card {{ background-color: {surface_2}; border-radius: 8px; padding: 6px 14px;
              margin-right: 8px; }}

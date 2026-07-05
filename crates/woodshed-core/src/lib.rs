@@ -14,6 +14,9 @@ pub mod audio;
 
 use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};
 use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
+use woodshedding::exercise::{
+    catalog as exercise_catalog, Exercise, ExerciseParams,
+};
 use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::interval::Interval;
 use woodshedding::pitch::{Pitch, Spelling};
@@ -53,9 +56,10 @@ impl Lens {
         }
     }
 
-    /// True when the lens resolves dots on the board today.
+    /// True when the lens resolves dots on the board today. All five do
+    /// as of S4 slice 3; kept for the S4 tab placeholders' sake.
     pub fn implemented(self) -> bool {
-        !matches!(self, Lens::Exercises)
+        true
     }
 }
 
@@ -126,6 +130,41 @@ pub struct StageState {
     pub progression_idx: Option<usize>,
     /// Which chord card is expanded onto the board.
     pub progression_expanded: usize,
+
+    // === Exercise lens (S4 slice 3) ===
+    pub exercise_idx: usize,
+    /// Lowest fret of the four-fret hand position.
+    pub exercise_starting_fret: u8,
+    /// Transport cursor through the step sequence.
+    pub exercise_step_idx: usize,
+    /// True while auto-advancing.
+    pub exercise_playing: bool,
+}
+
+/// How many trailing steps the exercise board keeps visible behind the
+/// current one (the fading-motion presentation from woodshed-xilem).
+pub const EXERCISE_TRAIL: usize = 3;
+
+/// One exercise-board dot: the current step or one of its trail.
+#[derive(Clone, Debug)]
+pub struct ExerciseDot {
+    pub string_index: usize,
+    pub fret: u8,
+    /// 0 = the current step; 1..=EXERCISE_TRAIL = steps behind it.
+    pub recency: usize,
+    /// Suggested fingering label ("1"-"4", empty when unspecified).
+    pub label: String,
+}
+
+/// Everything the view needs to draw the Exercise lens.
+#[derive(Clone, Debug)]
+pub struct ExerciseBoard {
+    pub dots: Vec<ExerciseDot>,
+    pub step: usize,
+    pub total: usize,
+    pub starting_fret: u8,
+    pub name: &'static str,
+    pub description: &'static str,
 }
 
 /// One chord card of a materialized progression.
@@ -262,6 +301,10 @@ impl StageState {
             arpeggio_inversion: 0,
             progression_idx: None,
             progression_expanded: 0,
+            exercise_idx: 0,
+            exercise_starting_fret: 1,
+            exercise_step_idx: 0,
+            exercise_playing: false,
         }
     }
 
@@ -355,7 +398,82 @@ impl StageState {
                 ),
                 None => "Progression".to_string(),
             },
-            other => other.label().to_string(),
+            Lens::Exercises => self.exercise().name.to_string(),
+        }
+    }
+
+    // === Exercise lens ===
+
+    pub fn exercises(&self) -> &'static [Exercise] {
+        exercise_catalog()
+    }
+
+    pub fn exercise(&self) -> &'static Exercise {
+        &exercise_catalog()[self.exercise_idx.min(exercise_catalog().len() - 1)]
+    }
+
+    pub fn select_exercise(&mut self, idx: usize) {
+        if idx < exercise_catalog().len() {
+            self.exercise_idx = idx;
+            self.exercise_step_idx = 0;
+        }
+    }
+
+    pub fn exercise_advance(&mut self) {
+        self.exercise_step_idx = self.exercise_step_idx.wrapping_add(1);
+    }
+
+    /// Shift the four-fret hand position, clamped to the board.
+    pub fn exercise_nudge_fret(&mut self, delta: i32) {
+        let max = self.fret_count.saturating_sub(3);
+        let next = (self.exercise_starting_fret as i32 + delta).clamp(0, max as i32);
+        if next as u8 != self.exercise_starting_fret {
+            self.exercise_starting_fret = next as u8;
+            self.exercise_step_idx = 0;
+        }
+    }
+
+    /// Resolve the Exercise lens: the current step plus its fading trail
+    /// (the sequence-aware presentation — motion order, not a static
+    /// rectangle of positions).
+    pub fn exercise_board(&self) -> ExerciseBoard {
+        let ex = self.exercise();
+        let params = ExerciseParams {
+            starting_fret: self.exercise_starting_fret,
+            ..ExerciseParams::default()
+        };
+        let steps = ex.generate(&self.tuning(), &params);
+        let total = steps.len().max(1);
+        let step = self.exercise_step_idx % total;
+        let mut dots = Vec::new();
+        for recency in 0..=EXERCISE_TRAIL.min(step) {
+            let s = steps[step - recency];
+            // A trail entry under a newer dot on the same position would
+            // repaint over it; keep the newest only.
+            if dots
+                .iter()
+                .any(|d: &ExerciseDot| d.string_index == s.string_index && d.fret == s.fret)
+            {
+                continue;
+            }
+            dots.push(ExerciseDot {
+                string_index: s.string_index,
+                fret: s.fret,
+                recency,
+                label: if s.finger == 0 {
+                    String::new()
+                } else {
+                    s.finger.to_string()
+                },
+            });
+        }
+        ExerciseBoard {
+            dots,
+            step,
+            total,
+            starting_fret: self.exercise_starting_fret,
+            name: ex.name,
+            description: ex.description,
         }
     }
 
@@ -586,11 +704,30 @@ mod tests {
     }
 
     #[test]
-    fn unimplemented_lenses_render_empty() {
+    fn all_lenses_implemented() {
+        assert!(Lens::ALL.iter().all(|l| l.implemented()));
+    }
+
+    #[test]
+    fn exercise_board_steps_with_trail() {
         let mut s = StageState::new();
         s.set_lens(Lens::Exercises);
-        assert!(s.dots().is_empty());
-        assert!(!s.lens.implemented());
+        let b0 = s.exercise_board();
+        assert!(b0.total > 1, "exercise generates a sequence");
+        assert_eq!(b0.dots.len(), 1, "cold start shows only the current step");
+        for _ in 0..EXERCISE_TRAIL + 2 {
+            s.exercise_advance();
+        }
+        let b = s.exercise_board();
+        assert!(b.dots.len() > 1, "trail appears behind the cursor");
+        assert!(b.dots.len() <= EXERCISE_TRAIL + 1);
+        assert_eq!(b.dots.iter().filter(|d| d.recency == 0).count(), 1);
+        // Fret nudge clamps and resets the cursor.
+        s.exercise_nudge_fret(100);
+        assert_eq!(s.exercise_starting_fret, s.fret_count - 3);
+        assert_eq!(s.exercise_step_idx, 0);
+        s.exercise_nudge_fret(-100);
+        assert_eq!(s.exercise_starting_fret, 0);
     }
 
     #[test]
