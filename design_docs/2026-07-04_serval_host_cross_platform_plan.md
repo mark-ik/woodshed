@@ -146,6 +146,25 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S1 done — Stage renders from live state and a click selects
+  a scale** (screenshots: `woodshed-serval-s1-initial.png` /
+  `-clicked.png`; synthetic click on "Major" moved the selection, the
+  caption updated to "A Major — 47 positions", and the dots re-spelled to
+  sharps from the theory crate).
+  - New `woodshed-core` crate (the W1.1 split): `StageState` over
+    `woodshedding` (tuning + root + scale, `dots()` via
+    `Fretboard::positions_for_scale`), unit-tested. The plan's Shape gains
+    this crate; the remaining lenses migrate into it during S4.
+  - `woodshed-views`: `stage` module over live state (`clickable` sidebar
+    mutating `StageState`) + `theme` module. Theme S1 carries the DERIVED
+    Slate palette verbatim (probed from `audio-widgets`'
+    `derive_palette`); porting the OKLCH engine to a pure crate (so
+    Ember/user themes work without masonry) is an open follow-up — it
+    touches the Strophe-shared `audio-widgets`, so it wants its own call.
+  - Host: DPI-aware (`IncrementalLayout` at logical size,
+    `rasterize_scaled` at physical), retained layout hit-testing, click
+    dispatch through `ServalAppRunner::dispatch_click`. Layout is rebuilt
+    per frame (fine at this scale); incremental `apply` lands with S2.
 - 2026-07-05: **S0 done.** `woodshed-views` (demo Stage sheet ported from
   the smoke) + `woodshed-serval` (winit host on `serval-winit-host`'s
   `SurfaceHost`: rasterize → acquire → `compose_external_texture` →

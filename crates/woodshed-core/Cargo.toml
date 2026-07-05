@@ -1,0 +1,11 @@
+[package]
+name = "woodshed-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Woodshed's portable state/logic core: app state over the woodshedding theory crate, no UI or host dependency. The serval-host plan's W1.1 split; S1 ships the Stage slice."
+
+[dependencies]
+woodshedding = { workspace = true }

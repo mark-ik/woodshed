@@ -7,6 +7,7 @@ members = [
     "crates/xilem-components",
     "crates/audio-widgets",
     "crates/woodshed-xilem",
+    "crates/woodshed-core",
     "crates/woodshed-views",
     "crates/woodshed-serval",
 ]
@@ -21,6 +22,8 @@ rust-version = "1.80"
 [workspace.dependencies]
 # Internal crates
 woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
+# Portable state/logic core for the serval-host stack (W1.1 split).
+woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 # Shared audio widgets (waveform, …) — also consumed cross-repo by
 # Strophe via path-dep; the first `audio-widgets` extraction.

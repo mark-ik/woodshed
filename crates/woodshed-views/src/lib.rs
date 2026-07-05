@@ -5,10 +5,12 @@
 //! plain CSS emitted per sheet, which is where the seed-derived theme engine
 //! plugs in from S1 on.
 //!
-//! S0 ships only the [`demo`] module: the static Stage sheet (ported from
-//! serval's `serval_web_smoke`, the 2026-07-04 browser receipt). S1 replaces
-//! it with views over the real `AppState`.
+//! S1: [`stage`] renders the Stage lens over live `woodshed_core::StageState`
+//! (scale sidebar clicks select), styled by [`theme`]'s Slate sheet. The S0
+//! static [`demo`] module is kept for host smoke tests until S2.
 
 pub mod demo;
+pub mod stage;
+pub mod theme;
 
 pub use xilem_serval;

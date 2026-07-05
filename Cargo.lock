@@ -7136,6 +7136,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "woodshed-core"
+version = "0.1.0"
+dependencies = [
+ "woodshedding",
+]
+
+[[package]]
 name = "woodshed-serval"
 version = "0.1.0"
 dependencies = [
@@ -7147,6 +7154,7 @@ dependencies = [
  "serval-winit-host",
  "wgpu 29.0.4",
  "winit",
+ "woodshed-core",
  "woodshed-views",
  "xilem-serval",
 ]
@@ -7155,6 +7163,7 @@ dependencies = [
 name = "woodshed-views"
 version = "0.1.0"
 dependencies = [
+ "woodshed-core",
  "xilem-serval",
 ]
 

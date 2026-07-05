@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Woodshed's serval desktop host: winit window + netrender present over the woodshed-views view layer. Serval-host plan S0+."
 
 [dependencies]
+woodshed-core = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 xilem-serval = { workspace = true }
 serval-scripted-dom = { workspace = true }

@@ -8,4 +8,5 @@ repository.workspace = true
 description = "Woodshed's xilem_serval view layer: view fns + CSS sheets for the serval host (desktop and web). Serval-host plan S0+."
 
 [dependencies]
+woodshed-core = { workspace = true }
 xilem-serval = { workspace = true }
