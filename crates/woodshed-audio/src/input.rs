@@ -730,7 +730,7 @@ impl InputEngineBuilder {
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.into();
         let channels = config.channels as usize;
-        let sample_rate_hz = config.sample_rate.0 as f32;
+        let sample_rate_hz = config.sample_rate as f32;
 
         let mut analyzers = self.analyzers;
         // Reusable scratch buffer for the per-callback mono downmix.
@@ -740,7 +740,7 @@ impl InputEngineBuilder {
         let stream = match sample_format {
             cpal::SampleFormat::F32 => device
                 .build_input_stream(
-                    &config,
+                    config,
                     move |data: &[f32], _: &cpal::InputCallbackInfo| {
                         mono.clear();
                         mono.reserve(data.len() / channels.max(1));

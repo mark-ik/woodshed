@@ -56,7 +56,7 @@ masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodsh
 winit = "0.30"
 
 # Audio
-cpal = "0.15"
+cpal = "0.18"
 pitch-detector = { version = "0.3", features = ["hinted"] }
 # `pitch-detection` (separate crate from `pitch-detector` above)
 # ships the time-domain detectors — Autocorrelation, McLeod (NSDF),

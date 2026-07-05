@@ -23,9 +23,12 @@ pub enum AudioError {
     NoOutputDevice,
     NoInputDevice,
     UnsupportedSampleFormat(cpal::SampleFormat),
-    StreamConfig(cpal::DefaultStreamConfigError),
-    StreamBuild(cpal::BuildStreamError),
-    StreamPlay(cpal::PlayStreamError),
+    // cpal 0.18 collapsed its per-operation error enums into one
+    // `cpal::Error`; the variants stay split here to keep which
+    // operation failed in the message.
+    StreamConfig(cpal::Error),
+    StreamBuild(cpal::Error),
+    StreamPlay(cpal::Error),
 }
 
 impl std::fmt::Display for AudioError {
@@ -172,7 +175,7 @@ impl SequencerEngine {
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.into();
         let channels = config.channels;
-        let sample_rate = config.sample_rate.0 as f32;
+        let sample_rate = config.sample_rate as f32;
 
         let state = Arc::new(Mutex::new(EngineState::new(initial_pattern, sample_rate)));
         let state_for_callback = Arc::clone(&state);
@@ -180,7 +183,7 @@ impl SequencerEngine {
         let stream = match sample_format {
             cpal::SampleFormat::F32 => device
                 .build_output_stream(
-                    &config,
+                    config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         let mut s = state_for_callback.lock().unwrap();
                         process_buffer(&mut s, data, channels);

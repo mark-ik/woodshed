@@ -288,7 +288,7 @@ impl SongEngine {
         let sample_format = supported.sample_format();
         let config: StreamConfig = supported.into();
         let channels = config.channels;
-        let sample_rate = config.sample_rate.0 as f32;
+        let sample_rate = config.sample_rate as f32;
 
         let internals = Arc::new(Mutex::new(SongEngineInternals::new(
             initial_song,
@@ -300,7 +300,7 @@ impl SongEngine {
         let stream = match sample_format {
             cpal::SampleFormat::F32 => device
                 .build_output_stream(
-                    &config,
+                    config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         let mut s = internals_for_callback.lock().unwrap();
                         process_song_buffer(&mut s, data);
