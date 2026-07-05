@@ -146,6 +146,30 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S2 done — dropdowns, lens strip, keyboard.** Root/tuning
+  as xilem_serval `select` overlays in the header; lens strip (Scale /
+  Chord / Arpeggio / Progression / Exercise) with Scales + Chords lenses
+  resolving on the board (`positions_for_chord`) and the other three as
+  S4 placeholders; Tab traversal + Enter activation through
+  `focus_traverse` / `dispatch_key` with the `serval-winit-host` key
+  mapping; incremental `apply` for attribute-only mutation batches.
+  Driven receipts: Chord lens by mouse and by Tab-Tab-Enter, Root → C
+  through the overlay ("C Major — 21 positions", C-E-G).
+  - **Theming now rides `tinct`** (the pure OKLCH engine, repo dir
+    `tincture`) — Slate seeds → `derive_palette` → CSS. The
+    audio-widgets extraction question is closed; audio-widgets can
+    itself migrate to tinct later if wanted.
+  - **Serval engine fix #3, found by the dropdown:** hit-testing walked
+    DOM order, so the open select overlay lost clicks to the in-flow
+    sidebar behind it (clicks went *through* the popup). Fixed in
+    serval-layout by lifting positioned subtrees over the whole in-flow
+    hit walk, mirroring paint's plane split (two commits: sibling-level
+    reorder `d15455130a1` proved insufficient for the cross-subtree
+    shape; the deferred-queue lift `db0c9751d81` fixes it; regression
+    tests for both shapes). Same approximation tier as paint: no z-index
+    bucket sort, no negative-z.
+  - Polish deferred: focus-ring styling (traversal is functional but
+    invisible), select caret glyph, `Escape` closing an open list.
 - 2026-07-05: **S1 done — Stage renders from live state and a click selects
   a scale** (screenshots: `woodshed-serval-s1-initial.png` /
   `-clicked.png`; synthetic click on "Major" moved the selection, the

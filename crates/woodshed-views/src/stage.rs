@@ -1,57 +1,185 @@
-//! The Stage lens over live [`StageState`] (S1).
+//! The Stage screen over live state (S2).
 //!
-//! Pills nav (Stage active; the other tabs are inert until S4 brings their
-//! screens), the scale-catalog sidebar (click selects), and the fretboard
-//! rendered as DOM dots from [`StageState::dots`].
+//! Header dropdowns (tuning, root — xilem_serval `select`), the lens strip
+//! (Scale / Chord / Arpeggio / Progression / Exercise), a per-lens catalog
+//! sidebar, and the fretboard rendered as DOM dots. The runner state is
+//! [`UiState`]: the portable `woodshed_core::StageState` plus the
+//! view-layer dropdown state; hosts call [`UiState::sync`] after any
+//! dispatch so dropdown picks land in the core state.
 
 use std::collections::HashMap;
 
-use woodshed_core::StageState;
-use xilem_serval::{clickable, el, text, AnyView, ServalCtx, ServalElement};
+use woodshed_core::{tunings, Lens, StageState, ROOT_NAMES};
+use xilem_serval::{
+    clickable, el, map_state, select, text, AnyView, SelectState, ServalCtx, ServalElement,
+};
 
-/// Boxed heterogeneous child view over [`StageState`].
-pub type StageChild = Box<dyn AnyView<StageState, (), ServalCtx, ServalElement>>;
+/// Runner state: the portable core slice plus view-layer widget state.
+pub struct UiState {
+    pub stage: StageState,
+    pub tuning_dd: SelectState,
+    pub root_dd: SelectState,
+}
 
-fn pill(label: &str, active: bool) -> StageChild {
+impl Default for UiState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UiState {
+    pub fn new() -> Self {
+        let stage = StageState::new();
+        Self {
+            tuning_dd: SelectState::new(stage.tuning_idx),
+            root_dd: SelectState::new(stage.root_idx),
+            stage,
+        }
+    }
+
+    /// Mirror dropdown picks into the core state. Hosts call this after
+    /// every dispatch (the `select` widget mutates only its own
+    /// `SelectState`).
+    pub fn sync(&mut self) {
+        self.stage.set_tuning(self.tuning_dd.selected);
+        self.stage.set_root(self.root_dd.selected);
+    }
+}
+
+/// Boxed heterogeneous child view over [`UiState`].
+pub type UiChild = Box<dyn AnyView<UiState, (), ServalCtx, ServalElement>>;
+
+fn pill(label: &str, active: bool) -> UiChild {
     Box::new(el("span", text(label.to_string())).attr(
         "class",
         if active { "pill pill-active" } else { "pill" },
     ))
 }
 
-fn sidebar(state: &StageState) -> StageChild {
-    let items: Vec<StageChild> = state
-        .scales()
+fn header(ui: &UiState) -> UiChild {
+    let tuning_names: Vec<&str> = tunings().iter().map(|t| t.name).collect();
+    let tuning_dd = map_state(
+        select(&ui.tuning_dd, &tuning_names),
+        |ui: &mut UiState| &mut ui.tuning_dd,
+    );
+    let root_dd = map_state(select(&ui.root_dd, &ROOT_NAMES), |ui: &mut UiState| {
+        &mut ui.root_dd
+    });
+    Box::new(
+        el(
+            "div",
+            (
+                el("span", text("Tuning")).attr("class", "header-label"),
+                tuning_dd,
+                el("span", ()).attr("class", "header-gap"),
+                el("span", text("Root")).attr("class", "header-label"),
+                root_dd,
+            ),
+        )
+        .attr("class", "header-row"),
+    )
+}
+
+fn lens_strip(ui: &UiState) -> UiChild {
+    let items: Vec<UiChild> = Lens::ALL
         .iter()
-        .enumerate()
-        .map(|(i, s)| {
-            let class = if i == state.scale_idx {
-                "side-item side-active"
+        .map(|&lens| {
+            let class = if lens == ui.stage.lens {
+                "lens lens-active"
             } else {
-                "side-item"
+                "lens"
             };
             Box::new(clickable(
-                el("div", text(s.name)).attr("class", class),
-                move |st: &mut StageState, _| {
-                    st.select_scale(i);
+                el("div", text(lens.label())).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.stage.set_lens(lens);
                 },
-            )) as StageChild
+            )) as UiChild
         })
         .collect();
+    Box::new(el("div", items).attr("class", "lens-strip"))
+}
+
+fn sidebar(ui: &UiState) -> UiChild {
+    let items: Vec<UiChild> = match ui.stage.lens {
+        Lens::Scales => ui
+            .stage
+            .scales()
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let class = if i == ui.stage.scale_idx {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
+                Box::new(clickable(
+                    el("div", text(s.name)).attr("class", class),
+                    move |ui: &mut UiState, _| {
+                        ui.stage.select_scale(i);
+                    },
+                )) as UiChild
+            })
+            .collect(),
+        Lens::Chords => ui
+            .stage
+            .chords()
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let class = if i == ui.stage.chord_idx {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
+                let label = if c.symbol.is_empty() {
+                    c.name.to_string()
+                } else {
+                    format!("{} ({})", c.name, c.symbol)
+                };
+                Box::new(clickable(
+                    el("div", text(label)).attr("class", class),
+                    move |ui: &mut UiState, _| {
+                        ui.stage.select_chord(i);
+                    },
+                )) as UiChild
+            })
+            .collect(),
+        other => vec![Box::new(
+            el("div", text(format!("{} catalog arrives with S4", other.label())))
+                .attr("class", "side-item"),
+        ) as UiChild],
+    };
     Box::new(el("div", items).attr("class", "side"))
 }
 
-fn board(state: &StageState) -> StageChild {
+fn board(ui: &UiState) -> UiChild {
+    let state = &ui.stage;
+    if !state.lens.implemented() {
+        return Box::new(
+            el(
+                "div",
+                el(
+                    "div",
+                    text(format!(
+                        "The {} lens migrates from woodshed-xilem in S4.",
+                        state.lens.label()
+                    )),
+                )
+                .attr("class", "placeholder"),
+            )
+            .attr("class", "board"),
+        );
+    }
     let dots: HashMap<(usize, u8), (bool, String)> = state
         .dots()
         .into_iter()
         .map(|d| ((d.string_index, d.fret), (d.is_root, d.label)))
         .collect();
-    let rows: Vec<StageChild> = (0..state.string_count())
+    let rows: Vec<UiChild> = (0..state.string_count())
         .map(|string_index| {
-            let cells: Vec<StageChild> = (0..=state.fret_count)
+            let cells: Vec<UiChild> = (0..=state.fret_count)
                 .map(|fret| {
-                    // Space the nut (fret 0) apart from the fretted columns.
                     let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
                     match dots.get(&(string_index, fret)) {
                         Some((is_root, label)) => {
@@ -62,15 +190,15 @@ fn board(state: &StageState) -> StageChild {
                                     (el("div", text(label.clone())).attr("class", dot_class),),
                                 )
                                 .attr("class", cell_class),
-                            ) as StageChild
+                            ) as UiChild
                         }
                         None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as StageChild
+                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
                         }
                     }
                 })
                 .collect();
-            Box::new(el("div", cells).attr("class", "string")) as StageChild
+            Box::new(el("div", cells).attr("class", "string")) as UiChild
         })
         .collect();
     Box::new(
@@ -81,9 +209,8 @@ fn board(state: &StageState) -> StageChild {
                 el(
                     "div",
                     text(format!(
-                        "{} {} — {} positions",
-                        state.root.name,
-                        state.scale().name,
+                        "{} — {} positions",
+                        state.material_name(),
                         dots.len()
                     )),
                 )
@@ -95,8 +222,8 @@ fn board(state: &StageState) -> StageChild {
 }
 
 /// The Stage screen root. Boxed so hosts can name the runner's view type
-/// on stable Rust (`fn(&StageState) -> StageChild`).
-pub fn stage_root(state: &StageState) -> StageChild {
+/// on stable Rust (`fn(&UiState) -> UiChild`).
+pub fn stage_root(ui: &UiState) -> UiChild {
     Box::new(
         el(
             "div",
@@ -113,10 +240,12 @@ pub fn stage_root(state: &StageState) -> StageChild {
                     ),
                 )
                 .attr("class", "pills"),
-                el("div", (sidebar(state), board(state))).attr("class", "body"),
+                header(ui),
+                lens_strip(ui),
+                el("div", (sidebar(ui), board(ui))).attr("class", "body"),
                 el(
                     "div",
-                    text("serval host S1 — click a scale in the sidebar"),
+                    text("serval host S2 — lenses, dropdowns, keyboard"),
                 )
                 .attr("class", "caption"),
             ),

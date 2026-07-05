@@ -11,6 +11,7 @@ description = "Woodshed's serval desktop host: winit window + netrender present 
 woodshed-core = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 xilem-serval = { workspace = true }
+layout-dom-api = { workspace = true }
 serval-scripted-dom = { workspace = true }
 serval-layout = { workspace = true }
 serval-winit-host = { workspace = true }

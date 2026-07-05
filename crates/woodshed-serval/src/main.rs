@@ -1,12 +1,17 @@
-//! Woodshed's serval desktop host (S1: live state + clicks).
+//! Woodshed's serval desktop host (S2: interaction spine).
 //!
-//! A winit window presenting `woodshed-views`' Stage screen over a live
-//! `woodshed_core::StageState`: `ServalAppRunner` diffs the views into a
-//! `ScriptedDom`, `IncrementalLayout` lays it out at logical size (DPI
-//! aware), paint emission lowers to a `netrender::Scene`, and
-//! `serval-winit-host`'s `SurfaceHost` rasterizes at physical resolution and
-//! composites onto the backbuffer. Mouse clicks hit-test the retained layout
-//! and dispatch through the runner (sidebar click selects a scale).
+//! A winit window presenting `woodshed-views`' Stage screen over live state:
+//! `ServalAppRunner` diffs the views into a `ScriptedDom`, a retained
+//! `IncrementalLayout` lays it out at logical size (DPI aware, incremental
+//! `apply` for attribute-only batches), paint emission lowers to a
+//! `netrender::Scene`, and `serval-winit-host`'s `SurfaceHost` rasterizes at
+//! physical resolution and composites onto the backbuffer.
+//!
+//! Input: clicks hit-test the retained layout and dispatch through the
+//! runner (sidebar, lens strip, header dropdowns); Tab traverses focus;
+//! other keys route through `key_event_from_winit` → `dispatch_key`. After
+//! every dispatch the host calls `UiState::sync` so dropdown picks land in
+//! the core state.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,30 +20,33 @@ use std::sync::Arc;
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
 use serval_layout::{IncrementalLayout, ScrollOffsets};
+use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_winit_host::SurfaceHost;
+use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
-use woodshed_core::StageState;
-use woodshed_views::stage::{stage_root, StageChild};
+use woodshed_views::stage::{stage_root, UiChild, UiState};
 use woodshed_views::theme::slate_stage_css;
 use xilem_serval::{PointerClick, Propagation, ServalAppRunner};
 
-type Runner = ServalAppRunner<StageState, fn(&StageState) -> StageChild, StageChild>;
+type Runner = ServalAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
 
 struct App {
     window: Option<Arc<Window>>,
     host: Option<SurfaceHost>,
     runner: Option<Runner>,
-    /// Retained layout session from the most recent redraw, in logical
-    /// coordinates — the click hit-test target. Rebuilt each frame (S1
-    /// simplicity; incremental `apply` arrives with S2's input spine).
+    /// Retained layout session in logical coordinates — hit-test target
+    /// and incremental-apply subject.
     layout: Option<IncrementalLayout<NodeId>>,
+    /// Logical size the retained layout was built at.
+    layout_size: (f32, f32),
     sheet: String,
     /// Cursor position in logical coordinates.
     cursor: (f32, f32),
+    modifiers: ModifiersState,
 }
 
 impl App {
@@ -59,9 +67,27 @@ impl App {
 
         let scene = {
             let dom = runner.dom();
+            let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
+            dom.borrow_mut().drain_mutations(&mut muts);
             let dom_ref = dom.borrow();
             let sheets: Vec<&str> = vec![self.sheet.as_str()];
-            let layout = IncrementalLayout::new(&*dom_ref, &sheets, lw, lh);
+            let structural = muts
+                .iter()
+                .any(|m| !matches!(m, DomMutation::AttributeChanged { .. }));
+            let size_changed = self.layout_size != (lw, lh);
+            match self.layout.as_mut() {
+                Some(layout) if !structural && !size_changed => {
+                    if !muts.is_empty() {
+                        let _ = layout.apply(&*dom_ref, &sheets, &muts);
+                    }
+                }
+                _ => {
+                    self.layout =
+                        Some(IncrementalLayout::new(&*dom_ref, &sheets, lw, lh));
+                    self.layout_size = (lw, lh);
+                }
+            }
+            let layout = self.layout.as_ref().expect("layout just ensured");
             let list = layout.emit_paint_list(
                 &*dom_ref,
                 &ScrollOffsets::default(),
@@ -73,7 +99,6 @@ impl App {
                 list.fonts(),
                 list.images(),
             );
-            self.layout = Some(layout);
             translated.scene
         };
 
@@ -99,6 +124,17 @@ impl App {
         frame.present();
     }
 
+    /// Sync dropdown state into the core and repaint — the tail of every
+    /// input dispatch.
+    fn after_dispatch(&mut self) {
+        if let Some(runner) = self.runner.as_mut() {
+            runner.update(|ui| ui.sync());
+        }
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
+    }
+
     fn click(&mut self) {
         let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
             return;
@@ -117,8 +153,25 @@ impl App {
                 prop: Propagation::new(),
             },
         );
-        if let Some(window) = self.window.as_ref() {
-            window.request_redraw();
+        self.after_dispatch();
+    }
+
+    fn key(&mut self, event: &WinitKeyEvent) {
+        if event.state != ElementState::Pressed {
+            return;
+        }
+        let Some(runner) = self.runner.as_mut() else {
+            return;
+        };
+        if let WinitKey::Named(WinitNamedKey::Tab) = event.logical_key {
+            runner.focus_traverse(!self.modifiers.shift_key());
+            self.after_dispatch();
+            return;
+        }
+        let mods = modifiers_from_winit(self.modifiers);
+        if let Some(kev) = key_event_from_winit(&event.logical_key, mods) {
+            runner.dispatch_key(kev);
+            self.after_dispatch();
         }
     }
 }
@@ -150,7 +203,7 @@ impl ApplicationHandler for App {
         )
         .expect("boot serval host");
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
-        let runner = Runner::new(dom, stage_root as fn(&StageState) -> StageChild, StageState::new());
+        let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, UiState::new());
         self.window = Some(window);
         self.host = Some(host);
         self.runner = Some(runner);
@@ -172,6 +225,9 @@ impl ApplicationHandler for App {
                     window.request_redraw();
                 }
             }
+            WindowEvent::ModifiersChanged(mods) => {
+                self.modifiers = mods.state();
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let scale = self.scale_factor();
                 self.cursor = (
@@ -184,6 +240,7 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => self.click(),
+            WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::RedrawRequested => self.redraw(),
             _ => {}
         }
@@ -198,8 +255,10 @@ fn main() {
         host: None,
         runner: None,
         layout: None,
+        layout_size: (0.0, 0.0),
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),
+        modifiers: ModifiersState::empty(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }

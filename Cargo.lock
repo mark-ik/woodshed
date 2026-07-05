@@ -5358,6 +5358,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinct"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "tiny-skia"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7146,6 +7153,7 @@ dependencies = [
 name = "woodshed-serval"
 version = "0.1.0"
 dependencies = [
+ "layout-dom-api",
  "netrender",
  "paint_list_api",
  "paint_list_render",
@@ -7163,6 +7171,7 @@ dependencies = [
 name = "woodshed-views"
 version = "0.1.0"
 dependencies = [
+ "tinct",
  "woodshed-core",
  "xilem-serval",
 ]

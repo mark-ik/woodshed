@@ -1,56 +1,84 @@
-//! Theme CSS for the serval host.
+//! Theme CSS for the serval host, derived through `tinct`.
 //!
-//! S1 carries the **derived Slate palette verbatim** (probed from
-//! `audio-widgets::theme::derive_palette` on the Slate seeds, 2026-07-05)
-//! as constants, emitted as one CSS sheet. The OKLCH seed engine itself
-//! still lives in `audio-widgets` (masonry-coupled, Strophe-shared);
-//! porting the derivation math to a pure crate so Ember/user themes work
-//! here is a follow-up recorded in the serval-host plan.
+//! A theme is a few seed colours; `tinct::derive_palette` produces the full
+//! semantic palette (surface ladder, text tiers, tonal triad, flags), and
+//! this module renders it as the CSS sheet the views class against. Same
+//! seeds as `audio-widgets::theme`'s Slate, so the serval host and the
+//! xilem app agree until the parity cut.
 
-/// Derived Slate palette (probe output, hex).
-pub mod slate {
-    pub const BG: &str = "#090c1a";
-    pub const SURFACE: &str = "#131826";
-    pub const SURFACE_2: &str = "#1f2332";
-    pub const SURFACE_HOVER: &str = "#2d3242";
-    pub const TEXT_HEADER: &str = "#e7eeff";
-    pub const TEXT: &str = "#e7eeff";
-    pub const TEXT_DIM: &str = "#a3aaba";
-    pub const TEXT_DISABLED: &str = "#686e7d";
-    pub const PRIMARY: &str = "#3366c8";
-    pub const ON_PRIMARY: &str = "#f4f4f8";
-    pub const SECONDARY: &str = "#2e9da6";
-    pub const ON_SECONDARY: &str = "#14141a";
-    pub const TERTIARY: &str = "#e0a846";
-    pub const ON_TERTIARY: &str = "#14141a";
-    pub const SUCCESS: &str = "#4fb36e";
-    pub const DANGER: &str = "#d54e4e";
+use tinct::{color_from_hex, color_to_hex, derive_palette, Palette, Seeds};
+
+fn hex(s: &str) -> tinct::Srgb {
+    color_from_hex(s).expect("valid seed hex")
 }
 
-/// The Stage sheet in the Slate palette.
-pub fn slate_stage_css() -> String {
-    use slate::*;
+/// The Slate seeds (faithful cool-dark; matches audio-widgets' Slate).
+pub fn slate_seeds() -> Seeds {
+    Seeds {
+        primary: hex("#3366c8"),
+        secondary: hex("#2e9da6"),
+        tertiary: hex("#e0a846"),
+        neutral: hex("#101422"),
+        text_header: None,
+        text_body: None,
+        success: hex("#4fb36e"),
+        danger: hex("#d54e4e"),
+        dark: true,
+    }
+}
+
+/// The Stage sheet rendered from a derived palette.
+pub fn stage_css(p: &Palette) -> String {
+    let bg = color_to_hex(p.bg);
+    let surface = color_to_hex(p.surface);
+    let surface_2 = color_to_hex(p.surface_2);
+    let text_header = color_to_hex(p.text_header);
+    let text = color_to_hex(p.text);
+    let text_dim = color_to_hex(p.text_dim);
+    let text_disabled = color_to_hex(p.text_disabled);
+    let primary = color_to_hex(p.primary);
+    let on_primary = color_to_hex(p.on_primary);
+    let tertiary = color_to_hex(p.tertiary);
+    let on_tertiary = color_to_hex(p.on_tertiary);
     format!(
         r#"
-.root {{ width: 100%; height: 100%; background-color: {BG}; color: {TEXT};
+.root {{ width: 100%; height: 100%; background-color: {bg}; color: {text};
         font-family: sans-serif; font-size: 14px; padding: 16px; }}
-.title {{ font-size: 18px; color: {TEXT_HEADER}; margin-bottom: 12px; }}
-.pills {{ display: flex; margin-bottom: 16px; }}
-.pill {{ padding: 6px 14px; margin-right: 6px; border-radius: 14px; color: {TEXT_DIM}; }}
-.pill-active {{ background-color: {SURFACE_2}; color: {TERTIARY}; }}
+.title {{ font-size: 18px; color: {text_header}; margin-bottom: 12px; }}
+.header-row {{ display: flex; margin-bottom: 12px; }}
+.header-label {{ color: {text_dim}; padding: 4px 6px 4px 0; }}
+.header-gap {{ width: 18px; }}
+.pills {{ display: flex; margin-bottom: 12px; }}
+.pill {{ padding: 6px 14px; margin-right: 6px; border-radius: 14px; color: {text_dim}; }}
+.pill-active {{ background-color: {surface_2}; color: {tertiary}; }}
+.lens-strip {{ display: flex; margin-bottom: 16px; }}
+.lens {{ padding: 4px 12px; margin-right: 6px; border-radius: 12px; color: {text_dim};
+        font-size: 13px; }}
+.lens-active {{ background-color: {surface_2}; color: {tertiary}; }}
 .body {{ display: flex; }}
 .side {{ width: 220px; margin-right: 16px; }}
-.side-item {{ padding: 5px 10px; color: {TEXT_DIM}; border-radius: 6px; }}
-.side-active {{ background-color: {SURFACE_2}; color: {TEXT}; }}
-.board {{ background-color: {SURFACE}; border-radius: 10px; padding: 14px; }}
+.side-item {{ padding: 5px 10px; color: {text_dim}; border-radius: 6px; }}
+.side-active {{ background-color: {surface_2}; color: {text}; }}
+.board {{ background-color: {surface}; border-radius: 10px; padding: 14px; }}
 .string {{ display: flex; margin-bottom: 6px; }}
 .fret {{ width: 46px; height: 28px; }}
 .nut-gap {{ margin-right: 8px; }}
-.dot {{ width: 24px; height: 24px; border-radius: 12px; background-color: {PRIMARY};
-       color: {ON_PRIMARY}; font-size: 10px; text-align: center; }}
-.root-dot {{ background-color: {TERTIARY}; color: {ON_TERTIARY}; }}
-.scale-name {{ margin-top: 10px; color: {TEXT_DIM}; font-size: 12px; }}
-.caption {{ margin-top: 12px; color: {TEXT_DISABLED}; font-size: 12px; }}
+.dot {{ width: 24px; height: 24px; border-radius: 12px; background-color: {primary};
+       color: {on_primary}; font-size: 10px; text-align: center; }}
+.root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
+.scale-name {{ margin-top: 10px; color: {text_dim}; font-size: 12px; }}
+.placeholder {{ color: {text_dim}; padding: 24px; }}
+.caption {{ margin-top: 12px; color: {text_disabled}; font-size: 12px; }}
+.select-box {{ background-color: {surface_2}; color: {text}; padding: 4px 12px;
+              border-radius: 6px; }}
+.select-list {{ background-color: {surface_2}; border-radius: 6px; padding: 4px;
+               width: 220px; }}
+.select-option {{ color: {text}; padding: 4px 10px; border-radius: 4px; }}
 "#
     )
+}
+
+/// The default sheet: Slate seeds through the derivation.
+pub fn slate_stage_css() -> String {
+    stage_css(&derive_palette(&slate_seeds()))
 }

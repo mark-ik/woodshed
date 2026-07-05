@@ -67,6 +67,7 @@ winit = "0.30"
 # path deps (layout-dom-api, xilem-core, ...) resolve inside its git
 # checkout; only the crates woodshed names appear here.
 xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+layout-dom-api = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
@@ -78,6 +79,11 @@ paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch =
 # netrender's own per-target manifest split. The serval stack is wgpu 29;
 # woodshed-xilem's wgpu 28 tree coexists until the S5 parity cut.
 wgpu = { version = "29", default-features = false, features = ["std"] }
+
+# Theming: pure OKLCH seed-to-palette derivation (Strophos-family shared
+# crate; repo dir is `tincture`, package is `tinct`). Replaces reaching
+# into audio-widgets' masonry-coupled theme module.
+tinct = { git = "https://github.com/mark-ik/tinct", branch = "main" }
 
 # Audio
 cpal = "0.18"
