@@ -146,6 +146,20 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 3 — Exercise lens migrated; the lens strip is
+  complete.** All generation lives in the theory crate
+  (`Exercise::generate` over tuning + `ExerciseParams`); core adds the
+  sequence-aware board (current step + fading trail of
+  `EXERCISE_TRAIL` steps, newest-wins on collisions, fingering labels)
+  and the four-fret hand-position nudge with clamping. The host beat
+  clock now advances whichever step transport is playing. All five
+  lenses resolve; the placeholder path is deleted. Driven receipt:
+  Chromatic 1-2-3-4 running at step 7/48 with the trail exactly
+  matching the generator (string-5 fingers 1-2 behind the current 3,
+  string-6 finger 4 from the prior pass). Direction/trill params and
+  per-step audio deferred with the S3 audio deepening.
+  S4 remaining: Practice / Song / Rehearsal / Settings tabs,
+  persistence (W0.2), redesign P4-P6.
 - 2026-07-05: **S4 slice 2 — Progression lens migrated.** The theory
   crate already owned the hard part (`Progression::apply_in_key`
   materializes roman-numeral roles in the shared root's major key,
