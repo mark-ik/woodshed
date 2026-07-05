@@ -1,0 +1,20 @@
+[package]
+name = "woodshed-serval"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Woodshed's serval desktop host: winit window + netrender present over the woodshed-views view layer. Serval-host plan S0+."
+
+[dependencies]
+woodshed-views = { path = "../woodshed-views" }
+xilem-serval = { workspace = true }
+serval-scripted-dom = { workspace = true }
+serval-layout = { workspace = true }
+serval-winit-host = { workspace = true }
+netrender = { workspace = true }
+paint_list_api = { workspace = true }
+paint_list_render = { workspace = true }
+wgpu = { workspace = true }
+winit = { workspace = true }

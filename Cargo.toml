@@ -7,6 +7,8 @@ members = [
     "crates/xilem-components",
     "crates/audio-widgets",
     "crates/woodshed-xilem",
+    "crates/woodshed-views",
+    "crates/woodshed-serval",
 ]
 
 [workspace.package]
@@ -55,6 +57,25 @@ masonry = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-the
 masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
 winit = "0.30"
 
+# UI — serval host (2026-07-04 serval-host plan; retires the xilem fork at
+# the S5 parity cut). GIT deps on the owned repos so any machine resolves;
+# local checkouts are picked up via the gitignored .cargo/config.toml
+# source-specific [patch] overrides (the mere pattern). serval's internal
+# path deps (layout-dom-api, xilem-core, ...) resolve inside its git
+# checkout; only the crates woodshed names appear here.
+xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender_device = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+# wgpu for host-side surface/compose types only; backend features come from
+# netrender's own per-target manifest split. The serval stack is wgpu 29;
+# woodshed-xilem's wgpu 28 tree coexists until the S5 parity cut.
+wgpu = { version = "29", default-features = false, features = ["std"] }
+
 # Audio
 cpal = "0.18"
 pitch-detector = { version = "0.3", features = ["hinted"] }
@@ -81,3 +102,22 @@ serde_json = "1.0"
 # Xilem's deeply-nested generic view types would otherwise overflow
 # the per-symbol PDB budget (LNK4319) on dev builds; the truncate
 # mode keeps debug info usable while bumping the limit.
+
+# Mirror of serval's [patch.crates-io] entries this workspace's serval
+# graph needs — patches are per-workspace-root and do NOT inherit through
+# a git dep (the mere root carries the same mirror). No local paths here:
+# taffy + ipc-channel are vendored inside the serval repo and reached
+# through its git, by branch (owned forks track branches, never revs).
+[patch.crates-io]
+# stylo_taffy names crates.io stylo/stylo_atoms ^0.18; serval pins the
+# same crates from the servo/stylo git rev (the v0.18.0 release tag), and
+# stylo declares links = "servo_style_crate" (one Stylo per graph), so
+# redirect to the same rev to unify.
+stylo = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
+stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
+# serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's
+# vendored float-layout fork, not on crates.io).
+taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# ipc-channel: serval's in-process fork (force-inprocess default; drops
+# the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
+ipc-channel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }

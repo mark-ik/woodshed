@@ -146,6 +146,23 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S0 done.** `woodshed-views` (demo Stage sheet ported from
+  the smoke) + `woodshed-serval` (winit host on `serval-winit-host`'s
+  `SurfaceHost`: rasterize → acquire → `compose_external_texture` →
+  present). Serval/netrender consumed as git deps with the mere-pattern
+  local `[patch]` overrides in the gitignored `.cargo/config.toml` (whose
+  long-inert xilem-woodshed `paths` override was also fixed: it sat below
+  a `[target]` header and parsed as a key of that table). Committed patch
+  mirror: stylo/stylo_atoms (servo/stylo rev), taffy + ipc-channel via
+  mark-ik/serval. Verified by screenshot: window renders the sheet on
+  Windows, colors matching the browser receipt.
+  - **Finding: sRGB surfaces double-encode the serval scene.** vello
+    writes display-referred bytes; `serval-winit-host::create_surface`
+    preferred the sRGB backbuffer, which re-encodes and washes out every
+    color. Fixed in serval (`40e5dd92760`, prefer non-srgb). Meerkat uses
+    the same path and will darken to true colors on its next build.
+  - Note: S0 lays out at physical pixels (no DPI scaling); wire
+    `scale_factor` through `rasterize_scaled` during S1.
 - 2026-07-04: Plan created. Decision locked: xilem_serval host, Dioxus
   recorded as the alternative. Prior receipts: cpal 0.18 bump (`aaa7cde`),
   serval browser render receipt (serval `2422044ad1a`), netrender wasm
