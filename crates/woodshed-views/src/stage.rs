@@ -214,6 +214,30 @@ fn sidebar(ui: &UiState) -> UiChild {
                 )) as UiChild
             })
             .collect(),
+        Lens::Arpeggios => ui
+            .stage
+            .chords()
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let class = if i == ui.stage.arpeggio_idx {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
+                let label = if c.symbol.is_empty() {
+                    c.name.to_string()
+                } else {
+                    format!("{} ({})", c.name, c.symbol)
+                };
+                Box::new(clickable(
+                    el("div", text(label)).attr("class", class),
+                    move |ui: &mut UiState, _| {
+                        ui.stage.select_arpeggio(i);
+                    },
+                )) as UiChild
+            })
+            .collect(),
         other => vec![Box::new(
             el("div", text(format!("{} catalog arrives with S4", other.label())))
                 .attr("class", "side-item"),
@@ -222,8 +246,133 @@ fn sidebar(ui: &UiState) -> UiChild {
     Box::new(el("div", items).attr("class", "side"))
 }
 
+fn arpeggio_board_view(ui: &UiState) -> UiChild {
+    use woodshed_core::arpeggio::ArpeggioDirection;
+    let state = &ui.stage;
+    let board = state.arpeggio_board();
+    let dir_label = match board.direction {
+        ArpeggioDirection::UpDown => "Up-Down",
+        ArpeggioDirection::Up => "Up",
+        ArpeggioDirection::Down => "Down",
+    };
+    let play_label = if state.arpeggio_playing { "Pause" } else { "Run" };
+    let deck: UiChild = Box::new(
+        el(
+            "div",
+            (
+                clickable(
+                    el("div", text(play_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.stage.arpeggio_playing = !ui.stage.arpeggio_playing;
+                    },
+                ),
+                clickable(
+                    el("div", text("Step")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.stage.arpeggio_advance(),
+                ),
+                clickable(
+                    el("div", text(dir_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.stage.arpeggio_cycle_direction(),
+                ),
+                clickable(
+                    el("div", text(board.inversion_label.clone())).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.stage.arpeggio_cycle_inversion(),
+                ),
+                clickable(
+                    el("div", text("<")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| {
+                        let b = ui.stage.arpeggio_board();
+                        let prev = (b.position_idx + b.shape_count - 1) % b.shape_count;
+                        ui.stage.arpeggio_select_position(prev);
+                    },
+                ),
+                el(
+                    "div",
+                    text(format!("shape {}/{}", board.position_idx + 1, board.shape_count)),
+                )
+                .attr("class", "t-readout"),
+                clickable(
+                    el("div", text(">")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| {
+                        let b = ui.stage.arpeggio_board();
+                        let next = (b.position_idx + 1) % b.shape_count;
+                        ui.stage.arpeggio_select_position(next);
+                    },
+                ),
+            ),
+        )
+        .attr("class", "transport"),
+    );
+    let dots: HashMap<(usize, u8), (bool, bool, String)> = board
+        .dots
+        .iter()
+        .map(|d| {
+            (
+                (d.string_index, d.fret),
+                (d.is_root, d.is_current, d.label.clone()),
+            )
+        })
+        .collect();
+    let rows: Vec<UiChild> = (0..state.string_count())
+        .map(|string_index| {
+            let cells: Vec<UiChild> = (0..=state.fret_count)
+                .map(|fret| {
+                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    match dots.get(&(string_index, fret)) {
+                        Some((is_root, is_current, label)) => {
+                            let dot_class = if *is_current {
+                                "dot step-dot"
+                            } else if *is_root {
+                                "dot root-dot"
+                            } else {
+                                "dot"
+                            };
+                            Box::new(
+                                el(
+                                    "div",
+                                    (el("div", text(label.clone())).attr("class", dot_class),),
+                                )
+                                .attr("class", cell_class),
+                            ) as UiChild
+                        }
+                        None => {
+                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
+                        }
+                    }
+                })
+                .collect();
+            Box::new(el("div", cells).attr("class", "string")) as UiChild
+        })
+        .collect();
+    Box::new(
+        el(
+            "div",
+            (
+                deck,
+                el("div", rows),
+                el(
+                    "div",
+                    text(format!(
+                        "{} — frets {}-{}, step {}/{}",
+                        state.material_name(),
+                        board.start_fret,
+                        board.start_fret + woodshed_core::arpeggio::ARP_SHAPE_SPAN,
+                        board.step + 1,
+                        board.walk_len,
+                    )),
+                )
+                .attr("class", "scale-name"),
+            ),
+        )
+        .attr("class", "board"),
+    )
+}
+
 fn board(ui: &UiState) -> UiChild {
     let state = &ui.stage;
+    if state.lens == Lens::Arpeggios {
+        return arpeggio_board_view(ui);
+    }
     if !state.lens.implemented() {
         return Box::new(
             el(

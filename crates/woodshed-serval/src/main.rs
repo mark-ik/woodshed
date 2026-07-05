@@ -54,6 +54,9 @@ struct App {
     modifiers: ModifiersState,
     /// The W0.1 audio seam: cpal on desktop, Web Audio on the web host.
     backend: Option<CpalBackend>,
+    /// Last arpeggio auto-advance instant (the step clock while the
+    /// arpeggio transport runs).
+    last_arp_step: Option<std::time::Instant>,
 }
 
 impl App {
@@ -62,20 +65,39 @@ impl App {
     }
 
     fn redraw(&mut self) {
-        // Tuner polling: while listening, fold the latest backend reading
-        // into the state before building the frame, and keep frames coming.
-        // (Desktop's W0.4 stand-in — the browser host uses rAF the same way.)
-        let mut tuner_live = false;
+        // Animation drives (desktop's W0.4 stand-in — the browser host uses
+        // rAF the same way): while the tuner listens, fold the latest
+        // backend reading into the state; while the arpeggio transport
+        // runs, advance a step each beat at the transport bpm. Either keeps
+        // frames coming.
+        let mut animating = false;
         if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_ref()) {
-            let mut enabled = false;
+            let now = std::time::Instant::now();
+            let last_arp = &mut self.last_arp_step;
             runner.update(|ui| {
-                enabled = ui.tuner.enabled;
-                if enabled {
+                if ui.tuner.enabled {
                     ui.tuner.reading = backend.tuner_reading();
+                    animating = true;
+                }
+                if ui.stage.arpeggio_playing {
+                    let beat = std::time::Duration::from_secs_f32(
+                        60.0 / ui.transport.bpm.max(30.0),
+                    );
+                    match last_arp {
+                        Some(t) if now.duration_since(*t) >= beat => {
+                            ui.stage.arpeggio_advance();
+                            *last_arp = Some(now);
+                        }
+                        None => *last_arp = Some(now),
+                        _ => {}
+                    }
+                    animating = true;
+                } else {
+                    *last_arp = None;
                 }
             });
-            tuner_live = enabled;
         }
+        let tuner_live = animating;
         let (Some(window), Some(host), Some(runner)) =
             (self.window.as_ref(), self.host.as_ref(), self.runner.as_ref())
         else {
@@ -295,6 +317,7 @@ fn main() {
         cursor: (0.0, 0.0),
         modifiers: ModifiersState::empty(),
         backend: None,
+        last_arp_step: None,
     };
     event_loop.run_app(&mut app).expect("run app");
 }

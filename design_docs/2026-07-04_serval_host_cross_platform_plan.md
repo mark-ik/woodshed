@@ -146,6 +146,20 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 1 — Arpeggio lens migrated.**
+  `woodshed_core::arpeggio` ports the woodshed-xilem algorithm verbatim
+  (bass-anchored CAGED shape generation, pitch-ascending run from the
+  inversion's bass tone, up/down/ping-pong walk without turnaround
+  repeats), unit-tested (shapes windowed, run ascends from bass, UpDown
+  walk = 2n-2). StageState grows the arpeggio fields +
+  `arpeggio_board()`; the view adds the deck (Run/Pause, Step, direction
+  cycler, inversion cycler, shape ‹ n/m ›) and the step-dot highlight in
+  `secondary`; the host advances the transport on the redraw chain at the
+  transport bpm (still the W0.4 stand-in; the shared beat grid /
+  metronome phase-lock from the old app is deferred with the sound-per-
+  step voice). Driven receipt: Run at 120 bpm, step counter advancing
+  (5/10 → 7/10 across 0.7 s) with the highlight walking the run;
+  ping-pong turnaround verified against the walk math.
 - 2026-07-05: **S3 spine done — engines through the W0.1 seam.**
   `woodshed_core::audio` defines the seam (`AudioBackend` trait +
   `TransportState`/`TunerState`/`TunerReading`, pure data);

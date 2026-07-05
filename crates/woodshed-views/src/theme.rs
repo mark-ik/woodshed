@@ -38,6 +38,8 @@ pub fn stage_css(p: &Palette) -> String {
     let text_disabled = color_to_hex(p.text_disabled);
     let primary = color_to_hex(p.primary);
     let on_primary = color_to_hex(p.on_primary);
+    let secondary = color_to_hex(p.secondary);
+    let on_secondary = color_to_hex(p.on_secondary);
     let tertiary = color_to_hex(p.tertiary);
     let on_tertiary = color_to_hex(p.on_tertiary);
     format!(
@@ -66,6 +68,7 @@ pub fn stage_css(p: &Palette) -> String {
 .dot {{ width: 24px; height: 24px; border-radius: 12px; background-color: {primary};
        color: {on_primary}; font-size: 10px; text-align: center; }}
 .root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
+.step-dot {{ background-color: {secondary}; color: {on_secondary}; }}
 .scale-name {{ margin-top: 10px; color: {text_dim}; font-size: 12px; }}
 .placeholder {{ color: {text_dim}; padding: 24px; }}
 .caption {{ margin-top: 12px; color: {text_disabled}; font-size: 12px; }}

@@ -9,10 +9,13 @@
 //! fretboard dots. Arpeggios / Progressions / Exercises are placeholders
 //! until their engines migrate from woodshed-xilem's `AppState` (S4).
 
+pub mod arpeggio;
 pub mod audio;
 
+use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};
 use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
 use woodshedding::fretboard::{Fretboard, Position};
+use woodshedding::interval::Interval;
 use woodshedding::pitch::{Pitch, Spelling};
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
@@ -49,7 +52,7 @@ impl Lens {
 
     /// True when the lens resolves dots on the board today.
     pub fn implemented(self) -> bool {
-        matches!(self, Lens::Scales | Lens::Chords)
+        matches!(self, Lens::Scales | Lens::Chords | Lens::Arpeggios)
     }
 }
 
@@ -99,6 +102,44 @@ pub struct StageState {
     pub chord_idx: usize,
     /// Highest fret shown (inclusive, from the nut at 0).
     pub fret_count: u8,
+
+    // === Arpeggio lens (S4 slice 1) ===
+    /// Index into the *chord* catalog — the arpeggio's quality.
+    pub arpeggio_idx: usize,
+    /// Which generated position shape is active.
+    pub arpeggio_position_idx: usize,
+    /// Transport cursor through the walk.
+    pub arpeggio_step_idx: usize,
+    /// True while the step-through transport is auto-advancing.
+    pub arpeggio_playing: bool,
+    pub arpeggio_direction: ArpeggioDirection,
+    /// Inversion: which chord tone the run starts on (0 = root),
+    /// clamped to the tone count.
+    pub arpeggio_inversion: u8,
+}
+
+/// One arpeggio-board dot: a shape position with the transport highlight.
+#[derive(Clone, Debug)]
+pub struct ArpDot {
+    pub string_index: usize,
+    pub fret: u8,
+    pub is_root: bool,
+    /// Under the transport cursor right now.
+    pub is_current: bool,
+    pub label: String,
+}
+
+/// Everything the view needs to draw the Arpeggio lens.
+#[derive(Clone, Debug)]
+pub struct ArpeggioBoard {
+    pub dots: Vec<ArpDot>,
+    pub shape_count: usize,
+    pub position_idx: usize,
+    pub start_fret: u8,
+    pub walk_len: usize,
+    pub step: usize,
+    pub direction: ArpeggioDirection,
+    pub inversion_label: String,
 }
 
 /// The tuning catalog (all instruments; instrument filtering arrives with
@@ -128,6 +169,12 @@ impl StageState {
             scale_idx,
             chord_idx: 0,
             fret_count: 12,
+            arpeggio_idx: 0,
+            arpeggio_position_idx: 0,
+            arpeggio_step_idx: 0,
+            arpeggio_playing: false,
+            arpeggio_direction: ArpeggioDirection::default(),
+            arpeggio_inversion: 0,
         }
     }
 
@@ -205,7 +252,107 @@ impl StageState {
                     format!("{}{} ({})", self.root_name(), c.symbol, c.name)
                 }
             }
+            Lens::Arpeggios => {
+                let c = self.arpeggio_chord();
+                if c.symbol.is_empty() {
+                    format!("{} {} arpeggio", self.root_name(), c.name)
+                } else {
+                    format!("{}{} arpeggio", self.root_name(), c.symbol)
+                }
+            }
             other => other.label().to_string(),
+        }
+    }
+
+    // === Arpeggio lens ===
+
+    pub fn arpeggio_chord(&self) -> &'static ChordFormula {
+        &chord_catalog()[self.arpeggio_idx.min(chord_catalog().len() - 1)]
+    }
+
+    pub fn select_arpeggio(&mut self, idx: usize) {
+        if idx < chord_catalog().len() {
+            self.arpeggio_idx = idx;
+            self.arpeggio_position_idx = 0;
+            self.arpeggio_step_idx = 0;
+        }
+    }
+
+    pub fn arpeggio_select_position(&mut self, idx: usize) {
+        self.arpeggio_position_idx = idx;
+        self.arpeggio_step_idx = 0;
+    }
+
+    pub fn arpeggio_cycle_direction(&mut self) {
+        self.arpeggio_direction = self.arpeggio_direction.next();
+        self.arpeggio_step_idx = 0;
+    }
+
+    pub fn arpeggio_cycle_inversion(&mut self) {
+        let tones = self.arpeggio_chord().intervals.len().max(1) as u8;
+        self.arpeggio_inversion = (self.arpeggio_inversion + 1) % tones;
+        self.arpeggio_position_idx = 0;
+        self.arpeggio_step_idx = 0;
+    }
+
+    pub fn arpeggio_advance(&mut self) {
+        self.arpeggio_step_idx = self.arpeggio_step_idx.wrapping_add(1);
+    }
+
+    /// The inversion's bass tone (the run's starting chord tone).
+    fn arpeggio_bass(&self) -> Interval {
+        let formula = self.arpeggio_chord();
+        let inv = (self.arpeggio_inversion as usize)
+            .min(formula.intervals.len().saturating_sub(1));
+        formula
+            .intervals
+            .get(inv)
+            .copied()
+            .unwrap_or(Interval::PERFECT_UNISON)
+    }
+
+    /// Resolve the Arpeggio lens: the active shape's dots with the
+    /// transport highlight, plus everything the deck controls display.
+    pub fn arpeggio_board(&self) -> ArpeggioBoard {
+        let formula = self.arpeggio_chord();
+        let bass = self.arpeggio_bass();
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        let shapes = generate_shapes(&board, formula, self.root(), bass);
+        let shape_count = shapes.len();
+        let position_idx = self.arpeggio_position_idx.min(shape_count.saturating_sub(1));
+        let shape = &shapes[position_idx];
+        let run = ArpeggioRun::new(&shape.positions, bass, self.arpeggio_direction);
+        let current = run.position_at(self.arpeggio_step_idx);
+        let dots = shape
+            .positions
+            .iter()
+            .enumerate()
+            .map(|(i, p)| ArpDot {
+                string_index: p.string_index,
+                fret: p.fret,
+                is_root: p.interval_from_root.is_some_and(|iv| iv.semitones() == 0),
+                is_current: current == Some(i),
+                label: format!("{}{}", p.pitch.name, p.pitch.accidental),
+            })
+            .collect();
+        let inv = (self.arpeggio_inversion as usize)
+            .min(formula.intervals.len().saturating_sub(1));
+        let inversion_label = match inv {
+            0 => "Inv: Root".to_string(),
+            1 => "Inv: 1st".to_string(),
+            2 => "Inv: 2nd".to_string(),
+            3 => "Inv: 3rd".to_string(),
+            k => format!("Inv: {k}th"),
+        };
+        ArpeggioBoard {
+            dots,
+            shape_count,
+            position_idx,
+            start_fret: shape.start_fret,
+            walk_len: run.walk_len(),
+            step: self.arpeggio_step_idx % run.walk_len(),
+            direction: self.arpeggio_direction,
+            inversion_label,
         }
     }
 
@@ -275,8 +422,30 @@ mod tests {
     #[test]
     fn unimplemented_lenses_render_empty() {
         let mut s = StageState::new();
-        s.set_lens(Lens::Arpeggios);
+        s.set_lens(Lens::Progressions);
         assert!(s.dots().is_empty());
         assert!(!s.lens.implemented());
+    }
+
+    #[test]
+    fn arpeggio_board_resolves_and_steps() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Arpeggios);
+        let b0 = s.arpeggio_board();
+        assert!(!b0.dots.is_empty());
+        assert!(b0.walk_len >= 1);
+        assert_eq!(b0.dots.iter().filter(|d| d.is_current).count(), 1);
+        let cur0: Vec<_> = b0
+            .dots
+            .iter()
+            .map(|d| d.is_current)
+            .collect();
+        s.arpeggio_advance();
+        let b1 = s.arpeggio_board();
+        let cur1: Vec<_> = b1.dots.iter().map(|d| d.is_current).collect();
+        assert_ne!(cur0, cur1, "advance moves the highlight");
+        s.arpeggio_cycle_inversion();
+        let b2 = s.arpeggio_board();
+        assert_eq!(b2.step, 0, "inversion change resets the transport");
     }
 }
