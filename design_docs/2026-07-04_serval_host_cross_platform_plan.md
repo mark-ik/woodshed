@@ -146,6 +146,26 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-06: **S4 slice 9 — the card editor + dwell transport.**
+  Rehearsal's editor strip edits the cursor card in place (persisted
+  with the set): touch cycle (block → arp up-down → up → down), hold
+  cycle (manual → 2/4/8 bars → 30s), per-card tempo override (card bpm
+  wins over transport), pinned fret-window nudge + free. Core:
+  `dots_for_card` honors the window (first Setting-fidelity piece);
+  `card_dwell` maps Hold to wall-clock. The rehearsal deck gains
+  Run/Pause: the host advances on each card's own dwell, parks on
+  manual cards, and stops at the end when loop is off. Driven receipt:
+  2-bar hold at 120 auto-advanced to card 2/12 at the 4s mark, played
+  card dimmed, board re-resolved with the window applied, transport
+  parked on the next card's manual hold.
+  - **Workspace lesson (cost an hour): never use cargo's global
+    `paths` override.** It matches by package NAME graph-wide, so the
+    xilem fork's `xilem_core` hijacked serval's vendored `xilem_core`
+    (surfaced when a concurrent serval edit extended a trait). A
+    source-keyed `[patch]` can't express it either (two path-sourced
+    same-version packages collide in the lock). Resolution: the
+    dormant xilem fork rides its git dep; only the active serval
+    family keeps local overrides.
 - 2026-07-05: **S4 slice 8 — P4 fretboard layouts + CSD chrome + polish
   batch.**
   - **P4**: `BoardLayout` (Two pane / Hero / Full canvas) as a Settings

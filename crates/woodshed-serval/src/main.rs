@@ -63,6 +63,8 @@ struct App {
     /// Last arpeggio auto-advance instant (the step clock while the
     /// arpeggio transport runs).
     last_arp_step: Option<std::time::Instant>,
+    /// Last rehearsal dwell-advance instant.
+    last_rehearsal_step: Option<std::time::Instant>,
     /// The W0.2 storage seam: fs on desktop, OPFS on the web host.
     storage: FsStorage,
     /// Theme the current sheet was generated from; a change re-skins.
@@ -115,6 +117,7 @@ impl App {
         if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_ref()) {
             let now = std::time::Instant::now();
             let last_arp = &mut self.last_arp_step;
+            let last_rehearsal = &mut self.last_rehearsal_step;
             runner.update(|ui| {
                 if ui.tuner.enabled {
                     ui.tuner.reading = backend.tuner_reading();
@@ -125,6 +128,32 @@ impl App {
                         ui.song_bar_live = bar;
                     }
                     animating = true;
+                }
+                if ui.rehearsal_running && !ui.set.cards.is_empty() {
+                    let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
+                    match woodshed_core::card_dwell(
+                        &ui.set.cards[cursor],
+                        ui.transport.bpm,
+                    ) {
+                        Some(dwell) => {
+                            match last_rehearsal {
+                                Some(t) if now.duration_since(*t) >= dwell => {
+                                    if !woodshed_core::step_set(&mut ui.set, 1) {
+                                        // End of set, loop off: stop.
+                                        ui.rehearsal_running = false;
+                                    }
+                                    *last_rehearsal = Some(now);
+                                }
+                                None => *last_rehearsal = Some(now),
+                                _ => {}
+                            }
+                            animating = true;
+                        }
+                        // Manual card: the dwell transport waits here.
+                        None => *last_rehearsal = None,
+                    }
+                } else {
+                    *last_rehearsal = None;
                 }
                 let stepping = ui.stage.arpeggio_playing || ui.stage.exercise_playing;
                 if stepping {
@@ -533,6 +562,7 @@ fn main() {
         modifiers: ModifiersState::empty(),
         backend: None,
         last_arp_step: None,
+        last_rehearsal_step: None,
         storage: FsStorage::new(),
         theme: ThemeMode::default(),
         last_hover: None,
