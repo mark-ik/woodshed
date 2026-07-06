@@ -308,6 +308,26 @@ pub fn set_from_practice(ps: &PracticeSet) -> Set {
     }
 }
 
+/// How long the rehearsal transport dwells on `card` before advancing.
+/// `None` = manual (no auto-advance). The card's own bpm wins over the
+/// transport's; `Reps` counts as bars (one rep per bar until per-rep
+/// audio lands).
+pub fn card_dwell(card: &Card, fallback_bpm: f32) -> Option<std::time::Duration> {
+    use woodshedding::rehearsal::Hold;
+    let bpm = card.timing.bpm.unwrap_or(fallback_bpm).max(30.0);
+    let bar_secs = 4.0 * 60.0 / bpm;
+    match card.timing.hold {
+        Hold::Manual => None,
+        Hold::Bars(n) => Some(std::time::Duration::from_secs_f32(
+            bar_secs * n.max(1) as f32,
+        )),
+        Hold::Seconds(s) => Some(std::time::Duration::from_secs_f32(s.max(0.5))),
+        Hold::Reps(r) => Some(std::time::Duration::from_secs_f32(
+            bar_secs * r.max(1) as f32,
+        )),
+    }
+}
+
 /// Step a rehearsal set's cursor by `dir`, honoring its loop mode.
 /// Returns false when the step hit the end with looping off.
 pub fn step_set(set: &mut Set, dir: i32) -> bool {
@@ -717,9 +737,16 @@ impl StageState {
                     .unwrap_or_default();
             }
         };
+        // Setting fidelity: a pinned fret window filters the positions to
+        // the hand position (capo + per-card tuning still deferred).
+        let window = card.setting.fret_window;
+        let in_window = |fret: u8| {
+            window.is_none_or(|w| fret >= w.start && fret <= w.start.saturating_add(w.span))
+        };
         positions
             .map(|ps| {
                 ps.into_iter()
+                    .filter(|p| in_window(p.fret))
                     .map(|p| FretDot {
                         string_index: p.string_index,
                         fret: p.fret,
@@ -957,6 +984,36 @@ mod tests {
         let c_dots: Vec<_> = s.dots().iter().map(|d| (d.string_index, d.fret)).collect();
         assert_ne!(a_dots, c_dots, "different root, different positions");
         assert_eq!(s.root_name(), "C");
+    }
+
+    #[test]
+    fn fret_window_filters_card_dots() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+        let mut card = s.card_from_lens().unwrap();
+        let all = s.dots_for_card(&card).len();
+        card.setting.fret_window = Some(woodshedding::rehearsal::FretWindow {
+            start: 5,
+            span: 4,
+        });
+        let windowed = s.dots_for_card(&card);
+        assert!(!windowed.is_empty());
+        assert!(windowed.len() < all, "window narrows the position set");
+        assert!(windowed.iter().all(|d| d.fret >= 5 && d.fret <= 9));
+    }
+
+    #[test]
+    fn card_dwell_follows_hold() {
+        use woodshedding::rehearsal::Hold;
+        let s = StageState::new();
+        let mut card = s.card_from_lens().unwrap();
+        assert!(card_dwell(&card, 120.0).is_none(), "manual by default");
+        card.timing.hold = Hold::Bars(2);
+        let d = card_dwell(&card, 120.0).unwrap();
+        assert!((d.as_secs_f32() - 4.0).abs() < 0.01, "2 bars at 120 = 4s");
+        card.timing.bpm = Some(60.0);
+        let d = card_dwell(&card, 120.0).unwrap();
+        assert!((d.as_secs_f32() - 8.0).abs() < 0.01, "card bpm wins");
     }
 
     #[test]
