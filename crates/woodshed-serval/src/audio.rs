@@ -3,10 +3,11 @@
 //! same trait over Web Audio / AudioWorklet.
 
 use woodshed_audio::{
-    InputEngine, InputEngineBuilder, SequencerEngine, SequencerPattern, Sound, Step,
-    Subdivision, TimeSignature, Track, TunerHandle,
+    Bar, ChordRef, InputEngine, InputEngineBuilder, SequencerEngine, SequencerPattern, Song,
+    SongEngine, SongEngineHandle, Sound, Step, Subdivision, TimeSignature, Track, TunerHandle,
 };
 use woodshed_core::audio::{AudioBackend, TransportState, TunerReading};
+use woodshed_core::song::SongBar;
 
 /// A 4/4 quarter-note click at `bpm`, downbeat accented.
 fn click_pattern(bpm: f32) -> SequencerPattern {
@@ -34,7 +35,38 @@ pub struct CpalBackend {
     /// reads analysis snapshots.
     _input: Option<InputEngine>,
     tuner: Option<TunerHandle>,
+    /// Song engine kept alive for its cpal stream; controlled through
+    /// the handle.
+    _song: Option<SongEngine>,
+    song: Option<SongEngineHandle>,
     error: Option<String>,
+}
+
+/// Convert the core's neutral bar description into the audio model.
+fn to_song(name: &str, bars: &[SongBar]) -> Song {
+    let mut song = Song::new();
+    song.name = name.to_string();
+    song.bars = bars
+        .iter()
+        .map(|b| Bar {
+            bpm: b.bpm,
+            time_signature: TimeSignature::new(b.beats.max(1), 4),
+            subdivision: Subdivision::QUARTER,
+            chord_ref: (b.root_freq_hz > 0.0).then(|| ChordRef {
+                formula_name: b.formula_name.clone(),
+                root_freq_hz: b.root_freq_hz,
+                pitches_hz: b.pitches_hz.clone(),
+                label: b.chord_label.clone(),
+            }),
+            audio_buffer: None,
+            label: b.label.clone(),
+            length: b.length.max(1),
+        })
+        .collect();
+    if song.bars.is_empty() {
+        song.bars.push(Bar::default());
+    }
+    song
 }
 
 impl CpalBackend {
@@ -68,11 +100,27 @@ impl CpalBackend {
                 }
             }
         };
+        let (song_engine, song) = match SongEngine::new(Song::new()) {
+            Ok(engine) => {
+                let handle = engine.handle();
+                (Some(engine), Some(handle))
+            }
+            Err(e) => {
+                let msg = format!("song engine: {e}");
+                error = Some(match error {
+                    Some(prev) => format!("{prev}; {msg}"),
+                    None => msg,
+                });
+                (None, None)
+            }
+        };
         Self {
             _sequencer: sequencer,
             handle,
             _input: input,
             tuner,
+            _song: song_engine,
+            song,
             error,
         }
     }
@@ -115,6 +163,41 @@ impl AudioBackend for CpalBackend {
             in_tune: n.in_tune,
             level,
         })
+    }
+
+    fn set_song(&mut self, name: &str, bars: &[SongBar]) {
+        if let Some(song) = self.song.as_ref() {
+            let was_playing = song.with_song(|s| s.playing);
+            song.set_song(to_song(name, bars));
+            if was_playing {
+                song.play();
+            }
+        }
+    }
+
+    fn set_song_transport(&mut self, playing: bool) {
+        let Some(song) = self.song.as_ref() else {
+            return;
+        };
+        if song.with_song(|s| s.playing) != playing {
+            if playing {
+                song.play();
+            } else {
+                song.stop();
+            }
+        }
+    }
+
+    fn song_rewind(&mut self) {
+        if let Some(song) = self.song.as_ref() {
+            song.rewind();
+        }
+    }
+
+    fn song_bar(&self) -> Option<usize> {
+        self.song
+            .as_ref()
+            .map(|song| song.with_song(|s| s.cursor.bar_idx))
     }
 
     fn error(&self) -> Option<&str> {

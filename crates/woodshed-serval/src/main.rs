@@ -70,6 +70,8 @@ struct App {
     /// The hovered node's opaque id, for `:hover` restyles on target
     /// change (not per pixel).
     last_hover: Option<u64>,
+    /// The song last pushed through the backend seam (push on change).
+    last_song: (String, Vec<woodshed_core::song::SongBar>),
 }
 
 impl App {
@@ -90,6 +92,12 @@ impl App {
             runner.update(|ui| {
                 if ui.tuner.enabled {
                     ui.tuner.reading = backend.tuner_reading();
+                    animating = true;
+                }
+                if ui.song_playing {
+                    if let Some(bar) = backend.song_bar() {
+                        ui.song_bar_live = bar;
+                    }
                     animating = true;
                 }
                 let stepping = ui.stage.arpeggio_playing || ui.stage.exercise_playing;
@@ -202,11 +210,23 @@ impl App {
         let mut persisted: Option<String> = None;
         if let Some(runner) = self.runner.as_mut() {
             let backend = self.backend.as_mut();
+            let last_song = &mut self.last_song;
             runner.update(|ui| {
                 ui.sync();
                 if let Some(backend) = backend {
                     backend.set_metronome(ui.transport);
                     backend.set_tuner_enabled(ui.tuner.enabled);
+                    if (&ui.song_name, &ui.song_bars)
+                        != (&last_song.0, &last_song.1)
+                    {
+                        backend.set_song(&ui.song_name, &ui.song_bars);
+                        *last_song = (ui.song_name.clone(), ui.song_bars.clone());
+                    }
+                    backend.set_song_transport(ui.song_playing);
+                    if ui.song_rewind_requested {
+                        backend.song_rewind();
+                        ui.song_rewind_requested = false;
+                    }
                 }
                 theme = ui.theme;
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();
@@ -419,6 +439,7 @@ fn main() {
         storage: FsStorage::new(),
         theme: ThemeMode::default(),
         last_hover: None,
+        last_song: (String::new(), Vec::new()),
     };
     event_loop.run_app(&mut app).expect("run app");
 }

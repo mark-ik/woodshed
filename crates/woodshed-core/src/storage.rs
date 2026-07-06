@@ -78,6 +78,9 @@ pub struct PersistedSession {
     pub theme: String,
     /// The rehearsal set (cards + cursor + loop mode).
     pub set: woodshedding::rehearsal::Set,
+    /// The song lane: name + timeline bars.
+    pub song_name: String,
+    pub song_bars: Vec<crate::song::SongBar>,
 }
 
 impl Default for PersistedSession {
@@ -88,6 +91,8 @@ impl Default for PersistedSession {
             120.0,
             "Slate",
             &woodshedding::rehearsal::Set::default(),
+            "",
+            &[],
         )
     }
 }
@@ -100,9 +105,13 @@ impl PersistedSession {
         bpm: f32,
         theme: &str,
         set: &woodshedding::rehearsal::Set,
+        song_name: &str,
+        song_bars: &[crate::song::SongBar],
     ) -> Self {
         Self {
             set: set.clone(),
+            song_name: song_name.to_string(),
+            song_bars: song_bars.to_vec(),
             tab,
             lens: stage.lens,
             tuning_idx: stage.tuning_idx,
@@ -158,7 +167,8 @@ mod tests {
         stage.select_progression(1);
         let mut set = woodshedding::rehearsal::Set::default();
         set.push(stage.card_from_lens().expect("arpeggio card"));
-        let snap = PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember", &set);
+        let snap =
+            PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember", &set, "", &[]);
         let json = serde_json::to_string(&snap).unwrap();
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();

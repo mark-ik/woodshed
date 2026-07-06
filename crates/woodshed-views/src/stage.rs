@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use woodshed_core::audio::{TransportState, TunerState};
 use woodshed_core::storage::{PersistedSession, Tab};
+use woodshed_core::song::{song_from_progression, SongBar};
 use woodshed_core::{set_from_practice, step_set, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{LoopMode, Recipe, Set};
 use xilem_serval::{
@@ -23,6 +24,13 @@ use crate::theme::ThemeMode;
 pub struct UiState {
     pub stage: StageState,
     pub set: Set,
+    pub song_name: String,
+    pub song_bars: Vec<SongBar>,
+    pub song_playing: bool,
+    /// Host-polled live bar cursor during playback (timeline follow).
+    pub song_bar_live: usize,
+    /// One-shot rewind request the host consumes after dispatch.
+    pub song_rewind_requested: bool,
     pub tab: Tab,
     pub theme: ThemeMode,
     pub transport: TransportState,
@@ -44,6 +52,11 @@ impl UiState {
         let stage = StageState::new();
         Self {
             set: Set::default(),
+            song_name: String::new(),
+            song_bars: Vec::new(),
+            song_playing: false,
+            song_bar_live: 0,
+            song_rewind_requested: false,
             tab: Tab::Stage,
             theme: ThemeMode::default(),
             transport: TransportState::default(),
@@ -71,6 +84,8 @@ impl UiState {
             self.transport.bpm,
             self.theme.label(),
             &self.set,
+            &self.song_name,
+            &self.song_bars,
         )
     }
 
@@ -79,6 +94,8 @@ impl UiState {
     pub fn apply_persisted(&mut self, session: &PersistedSession) {
         session.restore(&mut self.stage);
         self.set = session.set.clone();
+        self.song_name = session.song_name.clone();
+        self.song_bars = session.song_bars.clone();
         self.tab = session.tab;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
@@ -946,6 +963,131 @@ fn practice_screen(ui: &UiState) -> UiChild {
     )
 }
 
+fn song_screen(ui: &UiState) -> UiChild {
+    let from_prog_label = match ui.stage.progression_idx {
+        Some(_) => "From progression",
+        None => "From progression (pick one on Stage first)",
+    };
+    let deck: UiChild = Box::new(
+        el(
+            "div",
+            (
+                clickable(
+                    el(
+                        "div",
+                        text(if ui.song_playing { "Stop" } else { "Play" }),
+                    )
+                    .attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        if !ui.song_bars.is_empty() {
+                            ui.song_playing = !ui.song_playing;
+                        }
+                    },
+                ),
+                clickable(
+                    el("div", text("Rewind")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.song_rewind_requested = true;
+                        ui.song_bar_live = 0;
+                    },
+                ),
+                clickable(
+                    el("div", text(from_prog_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        if let Some((name, bars)) =
+                            song_from_progression(&ui.stage, ui.transport.bpm)
+                        {
+                            ui.song_name = name;
+                            ui.song_bars = bars;
+                            ui.song_playing = false;
+                            ui.song_bar_live = 0;
+                            ui.song_rewind_requested = true;
+                        }
+                    },
+                ),
+                el(
+                    "div",
+                    text(if ui.song_name.is_empty() {
+                        "no song loaded".to_string()
+                    } else {
+                        format!("{} · {} bars", ui.song_name, ui.song_bars.len())
+                    }),
+                )
+                .attr("class", "t-readout"),
+            ),
+        )
+        .attr("class", "transport"),
+    );
+    if ui.song_bars.is_empty() {
+        return Box::new(el(
+            "div",
+            (
+                deck,
+                el(
+                    "div",
+                    el(
+                        "div",
+                        text(
+                            "No bars yet. Pick a progression on Stage, then \
+                             'From progression' to lay it onto the timeline.",
+                        ),
+                    )
+                    .attr("class", "placeholder"),
+                )
+                .attr("class", "board"),
+            ),
+        ));
+    }
+    let current = ui.song_bar_live.min(ui.song_bars.len() - 1);
+    let chips: Vec<UiChild> = ui
+        .song_bars
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let class = if i == current && ui.song_playing {
+                "bar-chip bar-current"
+            } else {
+                "bar-chip"
+            };
+            Box::new(
+                el(
+                    "div",
+                    (
+                        el("div", text(b.label.clone())).attr("class", "bar-label"),
+                        el("div", text(b.chord_label.clone())).attr("class", "bar-chord"),
+                        el("div", text(format!("{:.0} bpm", b.bpm)))
+                            .attr("class", "bar-meta"),
+                    ),
+                )
+                .attr("class", class),
+            ) as UiChild
+        })
+        .collect();
+    Box::new(el(
+        "div",
+        (
+            deck,
+            el(
+                "div",
+                (
+                    el("div", chips).attr("class", "bar-lane"),
+                    el(
+                        "div",
+                        text(format!(
+                            "bar {}/{} — chords voice at each bar top; the click \
+                             follows each bar's tempo",
+                            current + 1,
+                            ui.song_bars.len()
+                        )),
+                    )
+                    .attr("class", "scale-name"),
+                ),
+            )
+            .attr("class", "board"),
+        ),
+    ))
+}
+
 fn tab_content(ui: &UiState) -> UiChild {
     match ui.tab {
         Tab::Stage => Box::new(el(
@@ -958,22 +1100,9 @@ fn tab_content(ui: &UiState) -> UiChild {
             ),
         )),
         Tab::Practice => practice_screen(ui),
+        Tab::Song => song_screen(ui),
         Tab::Rehearsal => rehearsal_screen(ui),
         Tab::Settings => settings_screen(ui),
-        other => Box::new(
-            el(
-                "div",
-                el(
-                    "div",
-                    text(format!(
-                        "The {} tab migrates from woodshed-xilem in S4.",
-                        other.label()
-                    )),
-                )
-                .attr("class", "placeholder"),
-            )
-            .attr("class", "board"),
-        ),
     }
 }
 

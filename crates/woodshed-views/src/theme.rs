@@ -221,6 +221,13 @@ pub fn stage_css(p: &Palette) -> String {
 .recipe-desc {{ color: {text_dim}; font-size: 12px; margin-bottom: 6px; }}
 .recipe-meta {{ color: {secondary}; font-size: 11px; }}
 .recipe-tile:hover {{ border: 1px solid {tertiary}; }}
+.bar-lane {{ display: flex; flex-wrap: wrap; margin-bottom: 10px; }}
+.bar-chip {{ background-color: {surface_2}; border-radius: 8px; padding: 8px 12px;
+            margin: 0 8px 8px 0; width: 110px; border: 1px solid {surface_2}; }}
+.bar-current {{ border: 1px solid {secondary}; background-color: {surface_hover}; }}
+.bar-label {{ color: {tertiary}; font-size: 11px; }}
+.bar-chord {{ color: {text}; font-size: 15px; }}
+.bar-meta {{ color: {text_dim}; font-size: 10px; }}
 .t-btn:hover {{ background-color: {surface_hover}; }}
 .pill:hover {{ color: {text}; }}
 .lens:hover {{ color: {text}; }}

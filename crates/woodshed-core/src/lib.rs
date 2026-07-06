@@ -11,6 +11,7 @@
 
 pub mod arpeggio;
 pub mod audio;
+pub mod song;
 pub mod storage;
 
 use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};

@@ -146,6 +146,25 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 7 — Song tab: timeline + engine playback. The
+  tab row is complete (no placeholders left).**
+  `woodshed_core::song::SongBar` is the neutral bar DTO (display
+  strings + pre-computed chord-tone frequencies, so backends stay
+  theory-free — the ChordRef posture); `song_from_progression`
+  materializes the selected progression as one labeled bar block per
+  chord ("Send to Song"). The audio seam grows song methods
+  (set_song / transport / rewind / live bar cursor); CpalBackend
+  converts to `woodshed_audio::Song` and runs the real `SongEngine`
+  (third cpal stream). The Song tab: transport deck (Play/Stop,
+  Rewind, From progression), bar-chip timeline (numeral, chord, bpm)
+  with the current chip ringed by the engine's live cursor on the
+  animation chain. Song name + bars persist. Driven receipt: I-IV-V
+  in A laid onto the timeline, playing, captured at bar 2/3 with the
+  IV/D chip highlighted (cursor math checks: 3.2s at 120bpm 4/4).
+  Deferred (the song editor deep end): add/remove/reorder bars,
+  per-bar chord/tempo/meter editing, sections, one-shot mode toggle,
+  click toggle, bar recording/looper — tracked for a dedicated
+  editing slice.
 - 2026-07-05: **S4 slice 6 — Practice tab (P6 recipe tiles) + `:hover`
   via a new engine feature.**
   - **Engine: `IncrementalLayout::set_interaction`** (serval

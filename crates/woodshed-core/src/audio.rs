@@ -62,6 +62,15 @@ pub trait AudioBackend {
     fn set_tuner_enabled(&mut self, enabled: bool);
     /// Latest tuner reading, `None` when disabled or no signal.
     fn tuner_reading(&self) -> Option<TunerReading>;
+    /// Load the song lane (replaces the current song; the transport
+    /// keeps its playing state).
+    fn set_song(&mut self, name: &str, bars: &[crate::song::SongBar]);
+    /// Start/stop song playback (idempotent).
+    fn set_song_transport(&mut self, playing: bool);
+    /// Snap the song cursor back to the top.
+    fn song_rewind(&mut self);
+    /// The bar block under the playback cursor (for timeline follow).
+    fn song_bar(&self) -> Option<usize>;
     /// A device/stream failure to surface in the UI, if any.
     fn error(&self) -> Option<&str>;
 }
