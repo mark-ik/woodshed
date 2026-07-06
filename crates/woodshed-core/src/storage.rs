@@ -76,18 +76,33 @@ pub struct PersistedSession {
     /// Theme name, opaque to the core (the view layer owns the theme
     /// vocabulary).
     pub theme: String,
+    /// The rehearsal set (cards + cursor + loop mode).
+    pub set: woodshedding::rehearsal::Set,
 }
 
 impl Default for PersistedSession {
     fn default() -> Self {
-        Self::capture(&StageState::new(), Tab::Stage, 120.0, "Slate")
+        Self::capture(
+            &StageState::new(),
+            Tab::Stage,
+            120.0,
+            "Slate",
+            &woodshedding::rehearsal::Set::default(),
+        )
     }
 }
 
 impl PersistedSession {
     /// Snapshot the persistable subset of the app state.
-    pub fn capture(stage: &StageState, tab: Tab, bpm: f32, theme: &str) -> Self {
+    pub fn capture(
+        stage: &StageState,
+        tab: Tab,
+        bpm: f32,
+        theme: &str,
+        set: &woodshedding::rehearsal::Set,
+    ) -> Self {
         Self {
+            set: set.clone(),
             tab,
             lens: stage.lens,
             tuning_idx: stage.tuning_idx,
@@ -141,7 +156,9 @@ mod tests {
         stage.select_arpeggio(5);
         stage.arpeggio_inversion = 2;
         stage.select_progression(1);
-        let snap = PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember");
+        let mut set = woodshedding::rehearsal::Set::default();
+        set.push(stage.card_from_lens().expect("arpeggio card"));
+        let snap = PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember", &set);
         let json = serde_json::to_string(&snap).unwrap();
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();
@@ -154,6 +171,8 @@ mod tests {
         assert_eq!(back.tab, Tab::Settings);
         assert_eq!(back.bpm, 96.0);
         assert_eq!(back.theme, "Ember");
+        assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");
+        assert_eq!(back.set.cards[0].label, "Csus4 arpeggio");
     }
 
     #[test]

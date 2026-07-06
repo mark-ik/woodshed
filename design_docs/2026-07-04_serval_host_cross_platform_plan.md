@@ -146,6 +146,28 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 5 — Rehearsal tab: R1 material portability +
+  the P5 filmstrip.** "+ Rehearse" on the Stage builds a Card from any
+  lens (`StageState::card_from_lens`: scale/chord material, arpeggio
+  touch, progression + exercise recipe provenance) into a
+  `woodshedding::rehearsal::Set` that persists with the session. The
+  Rehearsal tab is the redesign-P5 treatment: measured filmstrip (tag
+  badge, label, touch, provenance; played cards dim behind the cursor
+  via engine group opacity; current card ringed), transport deck
+  (Prev/Next honoring LoopMode, Remove, count), the cursor card's
+  material resolved on the big board. Host gains wheel scrolling
+  (`scroll_at` + element-scroll carry across rebuilds). Driven
+  receipt: four cards from four lenses, relaunch restored the set,
+  Next-Next walked to 3/4 with cards 1-2 dimmed.
+  - Pressure-cooker outcome: group opacity, outset box-shadow,
+    border+radius cards, and overflow scroll all worked first try; no
+    new engine bugs this slice. Host-side gaps noted instead: hover
+    styling (engine has `apply_interaction` /
+    `restyle_for_interaction` — the host never calls them), cursor
+    shape changes, and CSS transitions (engine gap; dim/ring changes
+    snap). Card-editor fidelity (Setting capo/window/voicing, Timing
+    dwell auto-advance, per-card sound) deferred to the next
+    Rehearsal slice.
 - 2026-07-05: **S4 slice 4 — persistence (W0.2) + Settings tab + tab
   nav + all six themes.** `woodshed_core::storage` defines the seam
   (`Storage` trait + `PersistedSession`, serde with

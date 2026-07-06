@@ -21,8 +21,12 @@ use woodshedding::exercise::{
 use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::interval::Interval;
 use woodshedding::pitch::{Pitch, Spelling};
+use woodshedding::pitch::PitchClass;
 use woodshedding::progression::{
     catalog as progression_catalog, ChordRole, Progression, RoleQuality,
+};
+use woodshedding::rehearsal::{
+    Card, LoopMode, Material, Recipe, Set, Setting, Timing, Touch,
 };
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
@@ -218,6 +222,30 @@ pub struct ArpeggioBoard {
 /// the instrument picker in S4).
 pub fn tunings() -> &'static [TuningSpec] {
     tuning_catalog()
+}
+
+/// Step a rehearsal set's cursor by `dir`, honoring its loop mode.
+/// Returns false when the step hit the end with looping off.
+pub fn step_set(set: &mut Set, dir: i32) -> bool {
+    if set.cards.is_empty() {
+        return false;
+    }
+    let n = set.cards.len() as i32;
+    let next = set.cursor as i32 + dir;
+    match set.loop_mode {
+        LoopMode::All => {
+            set.cursor = next.rem_euclid(n) as usize;
+            true
+        }
+        LoopMode::Off => {
+            if next < 0 || next >= n {
+                false
+            } else {
+                set.cursor = next as usize;
+                true
+            }
+        }
+    }
 }
 
 /// Roman-numeral label for a progression role ("I", "ii", "V7", "♭VII").
@@ -476,6 +504,149 @@ impl StageState {
             name: ex.name,
             description: ex.description,
         }
+    }
+
+    // === Rehearsal (R1 material portability) ===
+
+    /// The current lens's material as a rehearsal [`Card`] — the "+
+    /// Rehearse" action (redesign R1: rehearse from any lens). Carries the
+    /// tuning name and, for arpeggios, the touch; progression cards stamp
+    /// their recipe provenance.
+    pub fn card_from_lens(&self) -> Option<Card> {
+        let root_pc = PitchClass::new(9 + self.root_idx as u8); // A = pc 9
+        let setting = Setting {
+            instrument: String::new(),
+            tuning: Some(self.tuning().name.clone()),
+            ..Setting::default()
+        };
+        let card = match self.lens {
+            Lens::Scales => Card {
+                label: format!("{} {}", self.root_name(), self.scale().name),
+                material: Material::Scale {
+                    name: self.scale().name.to_string(),
+                    root: root_pc,
+                },
+                setting,
+                touch: Touch::Block,
+                timing: Timing::default(),
+                from: None,
+            },
+            Lens::Chords => Card {
+                label: self.material_name(),
+                material: Material::Chord {
+                    name: self.chord().name.to_string(),
+                    root: root_pc,
+                },
+                setting,
+                touch: Touch::Block,
+                timing: Timing::default(),
+                from: None,
+            },
+            Lens::Arpeggios => Card {
+                label: self.material_name(),
+                material: Material::Chord {
+                    name: self.arpeggio_chord().name.to_string(),
+                    root: root_pc,
+                },
+                setting,
+                touch: Touch::Arpeggiate {
+                    direction: self.arpeggio_direction,
+                    inversion: self.arpeggio_inversion,
+                },
+                timing: Timing::default(),
+                from: None,
+            },
+            Lens::Progressions => {
+                let board = self.progression_board()?;
+                let prog = progression_catalog().get(self.progression_idx?)?;
+                let major = scale_catalog().iter().find(|s| s.name == "Major")?;
+                let chords = prog.apply_in_key(self.root(), major).ok()?;
+                let expanded = self.progression_expanded.min(chords.len() - 1);
+                let chord = &chords[expanded];
+                Card {
+                    label: board.expanded_label.clone(),
+                    material: Material::Chord {
+                        name: chord.formula.name.to_string(),
+                        root: PitchClass::new(chord.root.pitch_class()),
+                    },
+                    setting,
+                    touch: Touch::Block,
+                    timing: Timing::default(),
+                    from: Some(Recipe::Progression {
+                        name: prog.name.to_string(),
+                        key: root_pc,
+                    }),
+                }
+            }
+            Lens::Exercises => Card {
+                label: self.exercise().name.to_string(),
+                material: Material::Riff {
+                    name: self.exercise().name.to_string(),
+                },
+                setting,
+                touch: Touch::Block,
+                timing: Timing::default(),
+                from: Some(Recipe::Exercise {
+                    name: self.exercise().name.to_string(),
+                }),
+            },
+        };
+        Some(card)
+    }
+
+    /// Resolve a card's material to fretboard dots against the current
+    /// tuning. (Setting fidelity — capo, pinned windows, per-card tuning —
+    /// arrives with the card editor; tracked in the plan.)
+    pub fn dots_for_card(&self, card: &Card) -> Vec<FretDot> {
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        let root_of = |pc: &PitchClass| Pitch::from_midi(48 + pc.value() as i32, Spelling::Sharps);
+        let positions = match &card.material {
+            Material::Scale { name, root } => scale_catalog()
+                .iter()
+                .find(|s| s.name == name.as_str())
+                .and_then(|s| board.positions_for_scale(s, root_of(root)).ok()),
+            Material::Chord { name, root } => chord_catalog()
+                .iter()
+                .find(|c| c.name == name.as_str())
+                .and_then(|c| board.positions_for_chord(c, root_of(root)).ok()),
+            Material::Riff { name } => {
+                // A riff card references an exercise; show its full
+                // position set (the step-through runs on the Exercise lens).
+                return exercise_catalog()
+                    .iter()
+                    .find(|e| e.name == name.as_str())
+                    .map(|e| {
+                        e.generate(&self.tuning(), &ExerciseParams::default())
+                            .into_iter()
+                            .map(|s| FretDot {
+                                string_index: s.string_index,
+                                fret: s.fret,
+                                is_root: false,
+                                label: if s.finger == 0 {
+                                    String::new()
+                                } else {
+                                    s.finger.to_string()
+                                },
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+            }
+        };
+        positions
+            .map(|ps| {
+                ps.into_iter()
+                    .map(|p| FretDot {
+                        string_index: p.string_index,
+                        fret: p.fret,
+                        is_root: p
+                            .interval_from_root
+                            .is_some_and(|iv| iv.semitones() == 0),
+                        label: format!("{}{}", p.pitch.name, p.pitch.accidental),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     // === Progression lens ===

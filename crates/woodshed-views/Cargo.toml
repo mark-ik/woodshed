@@ -9,5 +9,6 @@ description = "Woodshed's xilem_serval view layer: view fns + CSS sheets for the
 
 [dependencies]
 woodshed-core = { workspace = true }
+woodshedding = { workspace = true }
 xilem-serval = { workspace = true }
 tinct = { workspace = true }

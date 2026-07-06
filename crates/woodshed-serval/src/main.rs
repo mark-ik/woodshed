@@ -139,8 +139,13 @@ impl App {
                     }
                 }
                 _ => {
-                    self.layout =
-                        Some(IncrementalLayout::new(&*dom_ref, &sheets, lw, lh));
+                    let mut layout = IncrementalLayout::new(&*dom_ref, &sheets, lw, lh);
+                    // Carry element scroll (wheel positions in overflow
+                    // containers like the filmstrip) across rebuilds.
+                    if let Some(prev) = self.layout.as_ref() {
+                        layout.set_element_scroll(prev.element_scroll().clone());
+                    }
+                    self.layout = Some(layout);
                     self.layout_size = (lw, lh);
                 }
             }
@@ -335,6 +340,26 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => self.click(),
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Wheel scrolls the nearest overflow container under the
+                // cursor (the engine hit-tests, clamps, and chains).
+                let (dx, dy) = serval_winit_host::wheel_delta_from_winit(delta);
+                let (x, y) = self.cursor;
+                let scrolled = if let (Some(runner), Some(layout)) =
+                    (self.runner.as_ref(), self.layout.as_mut())
+                {
+                    let dom = runner.dom();
+                    let dom_ref = dom.borrow();
+                    layout.scroll_at(&*dom_ref, x, y, dx, dy)
+                } else {
+                    false
+                };
+                if scrolled {
+                    if let Some(window) = self.window.as_ref() {
+                        window.request_redraw();
+                    }
+                }
+            }
             WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::RedrawRequested => self.redraw(),
             _ => {}

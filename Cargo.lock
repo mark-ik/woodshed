@@ -7178,6 +7178,7 @@ version = "0.1.0"
 dependencies = [
  "tinct",
  "woodshed-core",
+ "woodshedding",
  "xilem-serval",
 ]
 

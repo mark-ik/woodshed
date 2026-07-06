@@ -204,6 +204,16 @@ pub fn stage_css(p: &Palette) -> String {
 .select-option {{ color: {text}; padding: 4px 10px; border-radius: 4px; }}
 .settings-heading {{ color: {text_header}; font-size: 15px; margin-bottom: 8px; }}
 .settings-line {{ color: {text_dim}; margin-bottom: 6px; }}
+.filmstrip {{ display: flex; overflow: scroll; margin-bottom: 14px; padding: 6px 2px; }}
+.film-card {{ background-color: {surface}; border-radius: 10px; padding: 10px 14px;
+             margin-right: 10px; width: 190px;
+             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+             border: 1px solid {surface_2}; }}
+.film-played {{ opacity: 0.45; }}
+.film-current {{ border: 1px solid {tertiary}; }}
+.film-tag {{ color: {secondary}; font-size: 11px; }}
+.film-label {{ color: {text}; font-size: 14px; margin-bottom: 4px; }}
+.film-meta {{ color: {text_dim}; font-size: 11px; }}
 "#
     )
 }
