@@ -244,7 +244,9 @@ pub fn stage_css(p: &Palette) -> String {
 .bar-chip {{ background-color: {surface_2}; border-radius: 8px; padding: 8px 12px;
             margin: 0 8px 8px 0; width: 110px; border: 1px solid {surface_2}; }}
 .bar-current {{ border: 1px solid {secondary}; background-color: {surface_hover}; }}
-.bar-label {{ color: {tertiary}; font-size: 11px; }}
+.bar-edit {{ border: 1px solid {tertiary}; }}
+.bar-chip:hover {{ border: 1px solid {text_dim}; }}
+.bar-label {{ color: {tertiary}; font-size: 11px; height: 13px; }}
 .bar-chord {{ color: {text}; font-size: 15px; }}
 .bar-meta {{ color: {text_dim}; font-size: 10px; }}
 .t-btn:hover {{ background-color: {surface_hover}; }}

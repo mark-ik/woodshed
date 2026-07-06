@@ -64,7 +64,7 @@ pub trait AudioBackend {
     fn tuner_reading(&self) -> Option<TunerReading>;
     /// Load the song lane (replaces the current song; the transport
     /// keeps its playing state).
-    fn set_song(&mut self, name: &str, bars: &[crate::song::SongBar]);
+    fn set_song(&mut self, doc: &crate::song::SongDoc);
     /// Start/stop song playback (idempotent).
     fn set_song_transport(&mut self, playing: bool);
     /// Snap the song cursor back to the top.
