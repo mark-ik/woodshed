@@ -7,7 +7,7 @@ use woodshed_audio::{
     SongEngine, SongEngineHandle, Sound, Step, Subdivision, TimeSignature, Track, TunerHandle,
 };
 use woodshed_core::audio::{AudioBackend, TransportState, TunerReading};
-use woodshed_core::song::SongBar;
+use woodshed_core::song::SongDoc;
 
 /// A 4/4 quarter-note click at `bpm`, downbeat accented.
 fn click_pattern(bpm: f32) -> SequencerPattern {
@@ -42,11 +42,14 @@ pub struct CpalBackend {
     error: Option<String>,
 }
 
-/// Convert the core's neutral bar description into the audio model.
-fn to_song(name: &str, bars: &[SongBar]) -> Song {
+/// Convert the core's neutral song document into the audio model.
+fn to_song(doc: &SongDoc) -> Song {
     let mut song = Song::new();
-    song.name = name.to_string();
-    song.bars = bars
+    song.name = doc.name.clone();
+    song.one_shot = doc.one_shot;
+    song.click_enabled = doc.click;
+    song.bars = doc
+        .bars
         .iter()
         .map(|b| Bar {
             bpm: b.bpm,
@@ -165,10 +168,10 @@ impl AudioBackend for CpalBackend {
         })
     }
 
-    fn set_song(&mut self, name: &str, bars: &[SongBar]) {
+    fn set_song(&mut self, doc: &SongDoc) {
         if let Some(song) = self.song.as_ref() {
             let was_playing = song.with_song(|s| s.playing);
-            song.set_song(to_song(name, bars));
+            song.set_song(to_song(doc));
             if was_playing {
                 song.play();
             }

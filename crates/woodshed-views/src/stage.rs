@@ -1393,6 +1393,7 @@ fn song_screen(ui: &UiState) -> UiChild {
             "div",
             (
                 deck,
+                song_bar_ops(ui),
                 el(
                     "div",
                     el(

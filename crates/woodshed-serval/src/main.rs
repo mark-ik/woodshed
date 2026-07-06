@@ -75,7 +75,7 @@ struct App {
     /// The focused node's opaque id (same discipline for `:focus`).
     last_focus: Option<u64>,
     /// The song last pushed through the backend seam (push on change).
-    last_song: (String, Vec<woodshed_core::song::SongBar>),
+    last_song: woodshed_core::song::SongDoc,
     /// Set by the chrome close button; drives event-loop exit.
     close_requested: bool,
 }
@@ -271,11 +271,9 @@ impl App {
                 if let Some(backend) = backend {
                     backend.set_metronome(ui.transport);
                     backend.set_tuner_enabled(ui.tuner.enabled);
-                    if (&ui.song_name, &ui.song_bars)
-                        != (&last_song.0, &last_song.1)
-                    {
-                        backend.set_song(&ui.song_name, &ui.song_bars);
-                        *last_song = (ui.song_name.clone(), ui.song_bars.clone());
+                    if ui.song != *last_song {
+                        backend.set_song(&ui.song);
+                        *last_song = ui.song.clone();
                     }
                     backend.set_song_transport(ui.song_playing);
                     if ui.song_rewind_requested {
@@ -567,7 +565,7 @@ fn main() {
         theme: ThemeMode::default(),
         last_hover: None,
         last_focus: None,
-        last_song: (String::new(), Vec::new()),
+        last_song: woodshed_core::song::SongDoc::default(),
         close_requested: false,
     };
     event_loop.run_app(&mut app).expect("run app");

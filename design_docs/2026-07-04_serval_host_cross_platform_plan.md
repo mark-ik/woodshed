@@ -146,6 +146,25 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-06: **S4 slice 10 — the song editor.** The song lane is now a
+  first-class core `SongDoc { name, bars, one_shot, click }` (replacing
+  the split `song_name`/`song_bars` fields, which also un-grew the
+  `capture` arg list). `SongBar` gained `root_pc` + the edit verbs
+  (`revoice`, `cycle_root`/`cycle_formula`/`toggle_silent`, `nudge_bpm`,
+  `cycle_beats`, `cycle_length`); `SongDoc` the structural verbs
+  (`add_bar_after`/`duplicate`/`remove`/`move_bar`). The Song tab:
+  transport deck (adds Once/Loop + Click toggles), bar-ops row (+ Bar /
+  Dup / Remove / Move ◀▶), selectable timeline chips (edit cursor ringed
+  tertiary, play cursor secondary), and a per-bar editor row (root,
+  chord, silent, tempo ±, meter, length, section-label cycle). Bars are
+  built from scratch OR laid down from a progression; the whole doc
+  persists. Driven receipt: three bars added from empty, bar 1 edited to
+  a D Minor "Verse" (chip + editor updated live), song survived
+  relaunch (persist), Play voiced it (deck showed Stop). Backend
+  `set_song(&SongDoc)` now carries `one_shot`/`click` into the engine.
+  - Bug caught + fixed in-slice: the empty-state hid the `+ Bar` button
+    (it lived only in the non-empty ops row) — the placeholder pointed
+    at a control that wasn't there; the ops row now shows on empty too.
 - 2026-07-06: **S4 slice 9 — the card editor + dwell transport.**
   Rehearsal's editor strip edits the cursor card in place (persisted
   with the set): touch cycle (block → arp up-down → up → down), hold
