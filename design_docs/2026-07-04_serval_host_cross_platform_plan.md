@@ -146,6 +146,27 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 6 — Practice tab (P6 recipe tiles) + `:hover`
+  via a new engine feature.**
+  - **Engine: `IncrementalLayout::set_interaction`** (serval
+    `b4e0edc051f`) — the cascade had `restyle_for_interaction` but the
+    retained session had no way to reach it, so no host had ever wired
+    `:hover`. The new method lands on the same paths as `apply`
+    (RepaintOnly for color-tier rules, full relayout for geometry,
+    Unchanged when nothing matched); woodshed-serval is the first
+    consumer (CursorMoved → hit test → restyle on target change).
+    Hover rules added across the app's sheets.
+  - **Practice tab**: the P6 treatment — `woodshedding::practice`
+    recipes as a CSS **grid** of tiles (name, blurb, card count),
+    one tap fills the rehearsal set (`set_from_practice`: cards with
+    PracticeSet provenance + pinned fret windows, loop-all) and jumps
+    to Rehearsal.
+  - Driven receipts: 3-column grid rendered first try (taffy grid
+    through the cascade); hovered tile shows its gold border while
+    others stay flat; one tap on "Major — all 12 keys" produced 12
+    provenance-stamped cards in Rehearsal with the filmstrip
+    overflowing (wheel-scroll receipt over the overflowing strip still
+    to drive).
 - 2026-07-05: **S4 slice 5 — Rehearsal tab: R1 material portability +
   the P5 filmstrip.** "+ Rehearse" on the Stage builds a Card from any
   lens (`StageState::card_from_lens`: scale/chord material, arpeggio

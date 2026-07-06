@@ -28,7 +28,9 @@ use woodshed_views::theme::ThemeMode;
 
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
-use serval_layout::{IncrementalLayout, ScrollOffsets};
+use serval_layout::{
+    Applied, IncrementalLayout, InteractionState, ScrollOffsets, SourceNodeId,
+};
 use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
@@ -65,6 +67,9 @@ struct App {
     storage: FsStorage,
     /// Theme the current sheet was generated from; a change re-skins.
     theme: ThemeMode,
+    /// The hovered node's opaque id, for `:hover` restyles on target
+    /// change (not per pixel).
+    last_hover: Option<u64>,
 }
 
 impl App {
@@ -222,6 +227,35 @@ impl App {
         }
     }
 
+    /// Drive `:hover` restyles on pointer-target change (engine
+    /// `set_interaction`; `Unchanged` when nothing hover-sensitive
+    /// matched, so idle mouse movement stays free).
+    fn hover(&mut self) {
+        let (Some(runner), Some(layout)) = (self.runner.as_ref(), self.layout.as_mut()) else {
+            return;
+        };
+        let (x, y) = self.cursor;
+        let dom = runner.dom();
+        let dom_ref = dom.borrow();
+        let hovered = layout
+            .hit_test(&*dom_ref, x, y, &ScrollOffsets::default())
+            .map(|n| layout_dom_api::LayoutDom::opaque_id(&*dom_ref, n));
+        if hovered == self.last_hover {
+            return;
+        }
+        self.last_hover = hovered;
+        let state = InteractionState {
+            hovered: hovered.map(SourceNodeId),
+            ..Default::default()
+        };
+        if layout.set_interaction(&*dom_ref, &state) != Applied::Unchanged {
+            drop(dom_ref);
+            if let Some(window) = self.window.as_ref() {
+                window.request_redraw();
+            }
+        }
+    }
+
     fn click(&mut self) {
         let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
             return;
@@ -334,6 +368,7 @@ impl ApplicationHandler for App {
                     (position.x / scale) as f32,
                     (position.y / scale) as f32,
                 );
+                self.hover();
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -383,6 +418,7 @@ fn main() {
         last_arp_step: None,
         storage: FsStorage::new(),
         theme: ThemeMode::default(),
+        last_hover: None,
     };
     event_loop.run_app(&mut app).expect("run app");
 }

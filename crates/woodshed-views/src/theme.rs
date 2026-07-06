@@ -214,6 +214,21 @@ pub fn stage_css(p: &Palette) -> String {
 .film-tag {{ color: {secondary}; font-size: 11px; }}
 .film-label {{ color: {text}; font-size: 14px; margin-bottom: 4px; }}
 .film-meta {{ color: {text_dim}; font-size: 11px; }}
+.recipe-grid {{ display: grid; grid-template-columns: repeat(3, 260px); gap: 12px; }}
+.recipe-tile {{ background-color: {surface_2}; border-radius: 10px; padding: 12px 14px;
+               border: 1px solid {surface_2}; }}
+.recipe-name {{ color: {text_header}; font-size: 15px; margin-bottom: 4px; }}
+.recipe-desc {{ color: {text_dim}; font-size: 12px; margin-bottom: 6px; }}
+.recipe-meta {{ color: {secondary}; font-size: 11px; }}
+.recipe-tile:hover {{ border: 1px solid {tertiary}; }}
+.t-btn:hover {{ background-color: {surface_hover}; }}
+.pill:hover {{ color: {text}; }}
+.lens:hover {{ color: {text}; }}
+.side-item:hover {{ background-color: {surface}; color: {text}; }}
+.select-box:hover {{ background-color: {surface_hover}; }}
+.select-option:hover {{ background-color: {surface_hover}; }}
+.film-card:hover {{ border: 1px solid {secondary}; }}
+.prog-card:hover {{ background-color: {surface_hover}; }}
 "#
     )
 }

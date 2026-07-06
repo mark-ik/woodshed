@@ -25,8 +25,9 @@ use woodshedding::pitch::PitchClass;
 use woodshedding::progression::{
     catalog as progression_catalog, ChordRole, Progression, RoleQuality,
 };
+use woodshedding::practice::{PracticeItem, PracticeSet};
 use woodshedding::rehearsal::{
-    Card, LoopMode, Material, Recipe, Set, Setting, Timing, Touch,
+    Card, FretWindow, LoopMode, Material, Recipe, Set, Setting, Timing, Touch,
 };
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
@@ -222,6 +223,88 @@ pub struct ArpeggioBoard {
 /// the instrument picker in S4).
 pub fn tunings() -> &'static [TuningSpec] {
     tuning_catalog()
+}
+
+/// One practice item as a rehearsal card, stamped with its recipe (the
+/// P6 "Fill set" conversion). The item's hand position pins the card's
+/// fret window.
+pub fn card_from_practice_item(item: &PracticeItem, set_name: &str) -> Card {
+    let recipe = Some(Recipe::PracticeSet {
+        name: set_name.to_string(),
+    });
+    let window = |position: u8| {
+        Some(FretWindow {
+            start: position,
+            span: 4,
+        })
+    };
+    match item {
+        PracticeItem::Scale {
+            formula,
+            root,
+            position,
+        } => Card {
+            label: item.label(),
+            material: Material::Scale {
+                name: formula.name.to_string(),
+                root: PitchClass::new(root.pitch_class()),
+            },
+            setting: Setting {
+                fret_window: window(*position),
+                ..Setting::default()
+            },
+            touch: Touch::Block,
+            timing: Timing::default(),
+            from: recipe,
+        },
+        PracticeItem::Chord {
+            formula,
+            root,
+            position,
+        } => Card {
+            label: item.label(),
+            material: Material::Chord {
+                name: formula.name.to_string(),
+                root: PitchClass::new(root.pitch_class()),
+            },
+            setting: Setting {
+                fret_window: window(*position),
+                ..Setting::default()
+            },
+            touch: Touch::Block,
+            timing: Timing::default(),
+            from: recipe,
+        },
+        PracticeItem::Exercise {
+            exercise,
+            starting_fret,
+        } => Card {
+            label: item.label(),
+            material: Material::Riff {
+                name: exercise.name.to_string(),
+            },
+            setting: Setting {
+                fret_window: window(*starting_fret),
+                ..Setting::default()
+            },
+            touch: Touch::Block,
+            timing: Timing::default(),
+            from: recipe,
+        },
+    }
+}
+
+/// Materialize a practice set as a rehearsal [`Set`] (cursor at the top).
+pub fn set_from_practice(ps: &PracticeSet) -> Set {
+    Set {
+        cards: ps
+            .items
+            .iter()
+            .map(|item| card_from_practice_item(item, &ps.name))
+            .collect(),
+        cursor: 0,
+        loop_mode: LoopMode::All,
+    }
 }
 
 /// Step a rehearsal set's cursor by `dir`, honoring its loop mode.
@@ -873,6 +956,23 @@ mod tests {
         let c_dots: Vec<_> = s.dots().iter().map(|d| (d.string_index, d.fret)).collect();
         assert_ne!(a_dots, c_dots, "different root, different positions");
         assert_eq!(s.root_name(), "C");
+    }
+
+    #[test]
+    fn practice_sets_fill_rehearsal_sets() {
+        let catalog = woodshedding::practice::catalog();
+        assert!(!catalog.is_empty());
+        let ps = &catalog[0];
+        let set = set_from_practice(ps);
+        assert_eq!(set.cards.len(), ps.items.len());
+        assert!(set.cards.iter().all(|c| matches!(
+            c.from,
+            Some(Recipe::PracticeSet { .. })
+        )));
+        assert!(set.cards.iter().all(|c| c.setting.fret_window.is_some()));
+        // Every card resolves on the board.
+        let s = StageState::new();
+        assert!(set.cards.iter().all(|c| !s.dots_for_card(c).is_empty()));
     }
 
     #[test]

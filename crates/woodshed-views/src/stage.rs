@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use woodshed_core::audio::{TransportState, TunerState};
 use woodshed_core::storage::{PersistedSession, Tab};
-use woodshed_core::{step_set, tunings, Lens, StageState, ROOT_NAMES};
+use woodshed_core::{set_from_practice, step_set, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{LoopMode, Recipe, Set};
 use xilem_serval::{
     clickable, el, map_state, select, text, AnyView, SelectState, ServalCtx, ServalElement,
@@ -908,6 +908,44 @@ fn board(ui: &UiState) -> UiChild {
     )
 }
 
+fn practice_screen(ui: &UiState) -> UiChild {
+    let tiles: Vec<UiChild> = woodshedding::practice::catalog()
+        .into_iter()
+        .enumerate()
+        .map(|(i, ps)| {
+            let meta = format!("{} cards · tap to fill the set", ps.items.len());
+            let name = ps.name.clone();
+            let desc = ps.description.clone();
+            let _ = i;
+            Box::new(clickable(
+                el(
+                    "div",
+                    (
+                        el("div", text(name)).attr("class", "recipe-name"),
+                        el("div", text(desc)).attr("class", "recipe-desc"),
+                        el("div", text(meta)).attr("class", "recipe-meta"),
+                    ),
+                )
+                .attr("class", "recipe-tile"),
+                move |ui: &mut UiState, _| {
+                    ui.set = set_from_practice(&ps);
+                    ui.tab = Tab::Rehearsal;
+                },
+            )) as UiChild
+        })
+        .collect();
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Recipes")).attr("class", "settings-heading"),
+                el("div", tiles).attr("class", "recipe-grid"),
+            ),
+        )
+        .attr("class", "board"),
+    )
+}
+
 fn tab_content(ui: &UiState) -> UiChild {
     match ui.tab {
         Tab::Stage => Box::new(el(
@@ -919,6 +957,7 @@ fn tab_content(ui: &UiState) -> UiChild {
                 el("div", (sidebar(ui), board(ui))).attr("class", "body"),
             ),
         )),
+        Tab::Practice => practice_screen(ui),
         Tab::Rehearsal => rehearsal_screen(ui),
         Tab::Settings => settings_screen(ui),
         other => Box::new(
