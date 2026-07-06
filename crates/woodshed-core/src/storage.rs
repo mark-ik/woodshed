@@ -76,6 +76,8 @@ pub struct PersistedSession {
     /// Theme name, opaque to the core (the view layer owns the theme
     /// vocabulary).
     pub theme: String,
+    /// Fretboard layout name (redesign P4), opaque like `theme`.
+    pub board_layout: String,
     /// The rehearsal set (cards + cursor + loop mode).
     pub set: woodshedding::rehearsal::Set,
     /// The song lane: name + timeline bars.
@@ -90,6 +92,7 @@ impl Default for PersistedSession {
             Tab::Stage,
             120.0,
             "Slate",
+            "Two pane",
             &woodshedding::rehearsal::Set::default(),
             "",
             &[],
@@ -104,11 +107,13 @@ impl PersistedSession {
         tab: Tab,
         bpm: f32,
         theme: &str,
+        board_layout: &str,
         set: &woodshedding::rehearsal::Set,
         song_name: &str,
         song_bars: &[crate::song::SongBar],
     ) -> Self {
         Self {
+            board_layout: board_layout.to_string(),
             set: set.clone(),
             song_name: song_name.to_string(),
             song_bars: song_bars.to_vec(),
@@ -167,8 +172,16 @@ mod tests {
         stage.select_progression(1);
         let mut set = woodshedding::rehearsal::Set::default();
         set.push(stage.card_from_lens().expect("arpeggio card"));
-        let snap =
-            PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember", &set, "", &[]);
+        let snap = PersistedSession::capture(
+            &stage,
+            Tab::Settings,
+            96.0,
+            "Ember",
+            "Hero",
+            &set,
+            "",
+            &[],
+        );
         let json = serde_json::to_string(&snap).unwrap();
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();

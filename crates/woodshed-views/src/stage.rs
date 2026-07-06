@@ -20,6 +20,48 @@ use xilem_serval::{
 
 use crate::theme::ThemeMode;
 
+/// Fretboard layout (redesign P4): how the Stage arranges catalog and
+/// neck. All three render the same resolved positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BoardLayout {
+    /// Catalog sidebar beside the neck (the classic).
+    #[default]
+    TwoPane,
+    /// Full-width neck up top, catalog as a wrapping strip beneath.
+    Hero,
+    /// The neck alone, enlarged; the catalog stays on the other layouts.
+    FullCanvas,
+}
+
+impl BoardLayout {
+    pub const ALL: [BoardLayout; 3] = [
+        BoardLayout::TwoPane,
+        BoardLayout::Hero,
+        BoardLayout::FullCanvas,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BoardLayout::TwoPane => "Two pane",
+            BoardLayout::Hero => "Hero",
+            BoardLayout::FullCanvas => "Full canvas",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|l| l.label() == name)
+    }
+
+    /// Root class suffix; descendant CSS keys sizing off it.
+    fn class(self) -> &'static str {
+        match self {
+            BoardLayout::TwoPane => "layout-two-pane",
+            BoardLayout::Hero => "layout-hero",
+            BoardLayout::FullCanvas => "layout-canvas",
+        }
+    }
+}
+
 /// Runner state: the portable core slice plus view-layer widget state.
 pub struct UiState {
     pub stage: StageState,
@@ -33,6 +75,12 @@ pub struct UiState {
     pub song_rewind_requested: bool,
     pub tab: Tab,
     pub theme: ThemeMode,
+    pub board_layout: BoardLayout,
+    /// Window-chrome requests the host consumes after dispatch (CSD).
+    pub chrome_minimize: bool,
+    pub chrome_maximize: bool,
+    pub chrome_close: bool,
+    pub chrome_drag: bool,
     pub transport: TransportState,
     pub tuner: TunerState,
     /// A device/stream failure reported by the host's audio backend.
@@ -59,6 +107,11 @@ impl UiState {
             song_rewind_requested: false,
             tab: Tab::Stage,
             theme: ThemeMode::default(),
+            board_layout: BoardLayout::default(),
+            chrome_minimize: false,
+            chrome_maximize: false,
+            chrome_close: false,
+            chrome_drag: false,
             transport: TransportState::default(),
             tuner: TunerState::default(),
             audio_error: None,
@@ -83,6 +136,7 @@ impl UiState {
             self.tab,
             self.transport.bpm,
             self.theme.label(),
+            self.board_layout.label(),
             &self.set,
             &self.song_name,
             &self.song_bars,
@@ -99,6 +153,8 @@ impl UiState {
         self.tab = session.tab;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
+        self.board_layout =
+            BoardLayout::from_name(&session.board_layout).unwrap_or_default();
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
     }
@@ -136,6 +192,22 @@ fn settings_screen(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
+    let layouts: Vec<UiChild> = BoardLayout::ALL
+        .iter()
+        .map(|&layout| {
+            let class = if layout == ui.board_layout {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
+            Box::new(clickable(
+                el("div", text(layout.label())).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.board_layout = layout;
+                },
+            )) as UiChild
+        })
+        .collect();
     let audio_line = match &ui.audio_error {
         Some(err) => format!("Audio: {err}"),
         None => "Audio: output and input streams open.".to_string(),
@@ -149,6 +221,9 @@ fn settings_screen(ui: &UiState) -> UiChild {
                     (
                         el("div", text("Theme")).attr("class", "settings-heading"),
                         el("div", themes),
+                        el("div", text("Fretboard layout"))
+                            .attr("class", "settings-heading settings-gap"),
+                        el("div", layouts),
                     ),
                 )
                 .attr("class", "side"),
@@ -1088,17 +1163,65 @@ fn song_screen(ui: &UiState) -> UiChild {
     ))
 }
 
-fn tab_content(ui: &UiState) -> UiChild {
-    match ui.tab {
-        Tab::Stage => Box::new(el(
+/// The window chrome (CSD): title, drag surface, window buttons. The
+/// host consumes the request flags after dispatch.
+fn chrome(_ui: &UiState) -> UiChild {
+    Box::new(
+        el(
             "div",
             (
-                header(ui),
-                transport(ui),
-                lens_strip(ui),
-                el("div", (sidebar(ui), board(ui))).attr("class", "body"),
+                el("div", text("Woodshed")).attr("class", "chrome-title"),
+                clickable(el("div", ()).attr("class", "chrome-drag"), |ui: &mut UiState,
+                                                                       _| {
+                    ui.chrome_drag = true;
+                }),
+                clickable(
+                    el("div", text("–")).attr("class", "chrome-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.chrome_minimize = true;
+                    },
+                ),
+                clickable(
+                    el("div", text("□")).attr("class", "chrome-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.chrome_maximize = true;
+                    },
+                ),
+                clickable(
+                    el("div", text("×")).attr("class", "chrome-btn chrome-close"),
+                    |ui: &mut UiState, _| {
+                        ui.chrome_close = true;
+                    },
+                ),
+            ),
+        )
+        .attr("class", "chrome"),
+    )
+}
+
+fn stage_screen(ui: &UiState) -> UiChild {
+    let body: UiChild = match ui.board_layout {
+        BoardLayout::TwoPane => {
+            Box::new(el("div", (sidebar(ui), board(ui))).attr("class", "body"))
+        }
+        BoardLayout::Hero => Box::new(el(
+            "div",
+            (
+                board(ui),
+                el("div", (sidebar(ui),)).attr("class", "side-strip"),
             ),
         )),
+        BoardLayout::FullCanvas => board(ui),
+    };
+    Box::new(el(
+        "div",
+        (header(ui), transport(ui), lens_strip(ui), body),
+    ))
+}
+
+fn tab_content(ui: &UiState) -> UiChild {
+    match ui.tab {
+        Tab::Stage => stage_screen(ui),
         Tab::Practice => practice_screen(ui),
         Tab::Song => song_screen(ui),
         Tab::Rehearsal => rehearsal_screen(ui),
@@ -1117,11 +1240,11 @@ pub fn stage_root(ui: &UiState) -> UiChild {
         el(
             "div",
             (
-                el("div", text("Woodshed")).attr("class", "title"),
+                chrome(ui),
                 el("div", pills).attr("class", "pills"),
                 tab_content(ui),
             ),
         )
-        .attr("class", "root"),
+        .attr("class", format!("root {}", ui.board_layout.class())),
     )
 }

@@ -70,8 +70,34 @@ struct App {
     /// The hovered node's opaque id, for `:hover` restyles on target
     /// change (not per pixel).
     last_hover: Option<u64>,
+    /// The focused node's opaque id (same discipline for `:focus`).
+    last_focus: Option<u64>,
     /// The song last pushed through the backend seam (push on change).
     last_song: (String, Vec<woodshed_core::song::SongBar>),
+    /// Set by the chrome close button; drives event-loop exit.
+    close_requested: bool,
+}
+
+/// Which resize edge a point near the window border maps to, in logical
+/// coordinates with a 6px grab margin. `None` in the interior.
+fn resize_edge(x: f32, y: f32, w: f32, h: f32) -> Option<winit::window::ResizeDirection> {
+    use winit::window::ResizeDirection as R;
+    const M: f32 = 6.0;
+    let left = x <= M;
+    let right = x >= w - M;
+    let top = y <= M;
+    let bottom = y >= h - M;
+    match (left, right, top, bottom) {
+        (true, _, true, _) => Some(R::NorthWest),
+        (_, true, true, _) => Some(R::NorthEast),
+        (true, _, _, true) => Some(R::SouthWest),
+        (_, true, _, true) => Some(R::SouthEast),
+        (true, ..) => Some(R::West),
+        (_, true, ..) => Some(R::East),
+        (_, _, true, _) => Some(R::North),
+        (_, _, _, true) => Some(R::South),
+        _ => None,
+    }
 }
 
 impl App {
@@ -232,6 +258,33 @@ impl App {
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();
             });
         }
+        // Window-chrome requests (CSD). drag_window must run while the
+        // press that requested it is still down — dispatch happens on
+        // Pressed, so this is in-window.
+        if let (Some(window), Some(runner)) = (self.window.as_ref(), self.runner.as_mut()) {
+            let mut minimize = false;
+            let mut maximize = false;
+            let mut close = false;
+            let mut drag = false;
+            runner.update(|ui| {
+                minimize = std::mem::take(&mut ui.chrome_minimize);
+                maximize = std::mem::take(&mut ui.chrome_maximize);
+                close = std::mem::take(&mut ui.chrome_close);
+                drag = std::mem::take(&mut ui.chrome_drag);
+            });
+            if minimize {
+                window.set_minimized(true);
+            }
+            if maximize {
+                window.set_maximized(!window.is_maximized());
+            }
+            if close {
+                self.close_requested = true;
+            }
+            if drag {
+                let _ = window.drag_window();
+            }
+        }
         if theme != self.theme {
             self.theme = theme;
             self.sheet = theme.css();
@@ -247,9 +300,9 @@ impl App {
         }
     }
 
-    /// Drive `:hover` restyles on pointer-target change (engine
-    /// `set_interaction`; `Unchanged` when nothing hover-sensitive
-    /// matched, so idle mouse movement stays free).
+    /// Drive `:hover` / `:focus` restyles on target change (engine
+    /// `set_interaction`; `Unchanged` when nothing interaction-sensitive
+    /// matched, so idle movement stays free).
     fn hover(&mut self) {
         let (Some(runner), Some(layout)) = (self.runner.as_ref(), self.layout.as_mut()) else {
             return;
@@ -260,12 +313,17 @@ impl App {
         let hovered = layout
             .hit_test(&*dom_ref, x, y, &ScrollOffsets::default())
             .map(|n| layout_dom_api::LayoutDom::opaque_id(&*dom_ref, n));
-        if hovered == self.last_hover {
+        let focused = runner
+            .focus()
+            .map(|n| layout_dom_api::LayoutDom::opaque_id(&*dom_ref, n));
+        if (hovered, focused) == (self.last_hover, self.last_focus) {
             return;
         }
         self.last_hover = hovered;
+        self.last_focus = focused;
         let state = InteractionState {
             hovered: hovered.map(SourceNodeId),
+            focused: focused.map(SourceNodeId),
             ..Default::default()
         };
         if layout.set_interaction(&*dom_ref, &state) != Applied::Unchanged {
@@ -307,6 +365,16 @@ impl App {
         if let WinitKey::Named(WinitNamedKey::Tab) = event.logical_key {
             runner.focus_traverse(!self.modifiers.shift_key());
             self.after_dispatch();
+            self.hover(); // focus changed → refresh :focus styling
+            return;
+        }
+        if let WinitKey::Named(WinitNamedKey::Escape) = event.logical_key {
+            // Close any open dropdown.
+            runner.update(|ui| {
+                ui.tuning_dd.open = false;
+                ui.root_dd.open = false;
+            });
+            self.after_dispatch();
             return;
         }
         let mods = modifiers_from_winit(self.modifiers);
@@ -326,7 +394,10 @@ impl ApplicationHandler for App {
             event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title("Woodshed (serval host)")
+                        .with_title("Woodshed")
+                        // CSD: the app draws its own chrome (title row,
+                        // window buttons, drag surface, edge resize).
+                        .with_decorations(false)
                         .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 720.0)),
                 )
                 .expect("create window"),
@@ -394,7 +465,30 @@ impl ApplicationHandler for App {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
                 ..
-            } => self.click(),
+            } => {
+                // Edge grab beats content when the window is floating.
+                let edge = self.window.as_ref().and_then(|w| {
+                    if w.is_maximized() {
+                        return None;
+                    }
+                    let size = w.inner_size();
+                    let scale = w.scale_factor() as f32;
+                    resize_edge(
+                        self.cursor.0,
+                        self.cursor.1,
+                        size.width as f32 / scale,
+                        size.height as f32 / scale,
+                    )
+                });
+                match edge {
+                    Some(dir) => {
+                        if let Some(w) = self.window.as_ref() {
+                            let _ = w.drag_resize_window(dir);
+                        }
+                    }
+                    None => self.click(),
+                }
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel scrolls the nearest overflow container under the
                 // cursor (the engine hit-tests, clamps, and chains).
@@ -419,6 +513,9 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => self.redraw(),
             _ => {}
         }
+        if self.close_requested {
+            event_loop.exit();
+        }
     }
 }
 
@@ -439,7 +536,9 @@ fn main() {
         storage: FsStorage::new(),
         theme: ThemeMode::default(),
         last_hover: None,
+        last_focus: None,
         last_song: (String::new(), Vec::new()),
+        close_requested: false,
     };
     event_loop.run_app(&mut app).expect("run app");
 }

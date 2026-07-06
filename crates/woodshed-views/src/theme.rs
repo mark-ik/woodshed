@@ -155,11 +155,18 @@ pub fn stage_css(p: &Palette) -> String {
     let on_secondary = color_to_hex(p.on_secondary);
     let tertiary = color_to_hex(p.tertiary);
     let on_tertiary = color_to_hex(p.on_tertiary);
+    let danger = color_to_hex(p.danger);
     format!(
         r#"
 .root {{ width: 100%; height: 100%; background-color: {bg}; color: {text};
-        font-family: sans-serif; font-size: 14px; padding: 16px; }}
-.title {{ font-size: 18px; color: {text_header}; margin-bottom: 12px; }}
+        font-family: sans-serif; font-size: 14px; padding: 8px 16px 16px 16px; }}
+.chrome {{ display: flex; margin-bottom: 10px; }}
+.chrome-title {{ color: {text_header}; font-size: 15px; padding: 4px 8px 4px 0; }}
+.chrome-drag {{ flex-grow: 1; height: 26px; }}
+.chrome-btn {{ color: {text_dim}; padding: 2px 12px; border-radius: 6px;
+              font-size: 15px; }}
+.chrome-btn:hover {{ background-color: {surface_2}; color: {text}; }}
+.chrome-close:hover {{ background-color: {danger}; color: {on_primary}; }}
 .header-row {{ display: flex; margin-bottom: 12px; }}
 .header-label {{ color: {text_dim}; padding: 4px 6px 4px 0; }}
 .header-gap {{ width: 18px; }}
@@ -179,7 +186,19 @@ pub fn stage_css(p: &Palette) -> String {
 .fret {{ width: 46px; height: 28px; }}
 .nut-gap {{ margin-right: 8px; }}
 .dot {{ width: 24px; height: 24px; border-radius: 12px; background-color: {primary};
-       color: {on_primary}; font-size: 10px; text-align: center; }}
+       color: {on_primary}; font-size: 10px; text-align: center;
+       line-height: 24px; }}
+.layout-canvas .fret {{ width: 64px; height: 42px; }}
+.layout-canvas .dot {{ width: 36px; height: 36px; border-radius: 18px;
+                      font-size: 13px; line-height: 36px; }}
+.side-strip {{ margin-top: 12px; }}
+.side-strip .side {{ width: 100%; display: flex; flex-wrap: wrap; margin-right: 0; }}
+.side-strip .side-item {{ margin-right: 6px; margin-bottom: 6px; }}
+.settings-gap {{ margin-top: 16px; }}
+.t-btn:focus {{ background-color: {surface_hover}; color: {tertiary}; }}
+.side-item:focus {{ background-color: {surface}; }}
+.lens:focus {{ color: {text}; }}
+.pill:focus {{ color: {text}; }}
 .root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
 .step-dot {{ background-color: {secondary}; color: {on_secondary}; }}
 .trail-dot {{ background-color: {surface_hover}; color: {text_dim}; }}

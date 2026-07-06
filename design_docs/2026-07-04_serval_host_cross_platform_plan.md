@@ -146,6 +146,26 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-05: **S4 slice 8 — P4 fretboard layouts + CSD chrome + polish
+  batch.**
+  - **P4**: `BoardLayout` (Two pane / Hero / Full canvas) as a Settings
+    picker, persisted. Structure branches in `stage_screen`; sizing
+    rides descendant CSS off a root class (`.layout-canvas .dot {...}`),
+    so every lens board gets the treatment without touching the grid
+    renderers. All three render the same resolved positions. Driven:
+    Full canvas (sidebar gone, 36px dots); Hero's branch shares the
+    machinery but hasn't been screenshot-driven yet.
+  - **CSD chrome**: undecorated window; our own chrome row (title,
+    drag surface, minimize / maximize-toggle / close with danger
+    hover), host consumes request flags after dispatch
+    (`drag_window` while the press is live), 8-direction edge resize
+    with a 6px grab margin. The old red OS title bar is gone.
+  - **Polish**: dot labels vertically centered (line-height); Escape
+    closes open selects; `:focus` styling wired (focused travels in
+    the InteractionState with hover, refreshed after Tab).
+  - Known nits: the × button clips slightly at the right edge
+    (chrome row padding); chrome buttons + drag + edge resize not yet
+    synthetically driven; Hero layout needs its receipt.
 - 2026-07-05: **S4 slice 7 — Song tab: timeline + engine playback. The
   tab row is complete (no placeholders left).**
   `woodshed_core::song::SongBar` is the neutral bar DTO (display
