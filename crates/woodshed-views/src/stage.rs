@@ -10,12 +10,14 @@
 use std::collections::HashMap;
 
 use woodshed_core::audio::{TransportState, TunerState};
+use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::storage::{PersistedSession, Tab};
 use woodshed_core::song::{song_from_progression, SongDoc, SECTION_LABELS};
 use woodshed_core::{set_from_practice, step_set, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{FretWindow, Hold, LoopMode, Recipe, Set, Touch};
 use xilem_serval::{
-    clickable, el, map_state, select, text, AnyView, SelectState, ServalCtx, ServalElement,
+    clickable, el, map_state, select, text, text_field, AnyView, SelectState, ServalCtx,
+    ServalElement, TextInput,
 };
 
 use crate::theme::ThemeMode;
@@ -90,6 +92,8 @@ pub struct UiState {
     pub audio_error: Option<String>,
     pub tuning_dd: SelectState,
     pub root_dd: SelectState,
+    /// Corpus search field (a small always-available field in the nav row).
+    pub search: TextInput,
 }
 
 impl Default for UiState {
@@ -121,8 +125,54 @@ impl UiState {
             audio_error: None,
             tuning_dd: SelectState::new(stage.tuning_idx),
             root_dd: SelectState::new(stage.root_idx),
+            search: TextInput::new(""),
             stage,
         }
+    }
+
+    /// Jump to a search result: focus the target lens/tab (or fill the
+    /// set, or swap the tuning), then clear the field so the dropdown
+    /// closes.
+    fn apply_search_hit(&mut self, hit: SearchHit) {
+        match hit {
+            SearchHit::Scale(i) => {
+                self.stage.set_lens(Lens::Scales);
+                self.stage.select_scale(i);
+                self.tab = Tab::Stage;
+            }
+            SearchHit::Chord(i) => {
+                self.stage.set_lens(Lens::Chords);
+                self.stage.select_chord(i);
+                self.tab = Tab::Stage;
+            }
+            SearchHit::Arpeggio(i) => {
+                self.stage.set_lens(Lens::Arpeggios);
+                self.stage.select_arpeggio(i);
+                self.tab = Tab::Stage;
+            }
+            SearchHit::Progression(i) => {
+                self.stage.set_lens(Lens::Progressions);
+                self.stage.select_progression(i);
+                self.tab = Tab::Stage;
+            }
+            SearchHit::Exercise(i) => {
+                self.stage.set_lens(Lens::Exercises);
+                self.stage.select_exercise(i);
+                self.tab = Tab::Stage;
+            }
+            SearchHit::Recipe(i) => {
+                if let Some(ps) = woodshedding::practice::catalog().get(i) {
+                    self.set = set_from_practice(ps);
+                    self.tab = Tab::Rehearsal;
+                }
+            }
+            SearchHit::Tuning(i) => {
+                self.stage.set_tuning(i);
+                self.tuning_dd = SelectState::new(self.stage.tuning_idx);
+                self.tab = Tab::Stage;
+            }
+        }
+        self.search = TextInput::new("");
     }
 
     /// Mirror dropdown picks into the core state. Hosts call this after
@@ -1547,19 +1597,57 @@ fn tab_content(ui: &UiState) -> UiChild {
     }
 }
 
+/// The corpus search field + its results dropdown — a small always-on
+/// field in the nav row (no toolbar reorganization). Typing recomputes
+/// the results; clicking one jumps to its lens/tab.
+fn search_view(ui: &UiState) -> UiChild {
+    let field = map_state(text_field(&ui.search), |ui: &mut UiState| &mut ui.search);
+    let query = ui.search.text().to_string();
+    let results = search_corpus(&query, 8);
+    let list = (!results.is_empty()).then(|| {
+        let items: Vec<UiChild> = results
+            .into_iter()
+            .map(|r| {
+                let hit = r.hit;
+                Box::new(clickable(
+                    el(
+                        "div",
+                        (
+                            el("span", text(r.label)).attr("class", "search-label"),
+                            el("span", text(r.kind)).attr("class", "search-kind"),
+                        ),
+                    )
+                    .attr("class", "search-item"),
+                    move |ui: &mut UiState, _| ui.apply_search_hit(hit),
+                )) as UiChild
+            })
+            .collect();
+        el("div", items)
+            .attr("class", "search-list")
+            .attr("style", "position: absolute; top: 100%; right: 0;")
+    });
+    Box::new(
+        el("div", (field, list))
+            .attr("class", "search-wrap")
+            .attr("style", "position: relative;"),
+    )
+}
+
 /// The app root. Boxed so hosts can name the runner's view type on
 /// stable Rust (`fn(&UiState) -> UiChild`).
 pub fn stage_root(ui: &UiState) -> UiChild {
-    let pills: Vec<UiChild> = Tab::ALL
+    let mut nav: Vec<UiChild> = Tab::ALL
         .iter()
         .map(|&t| pill(t, t == ui.tab))
         .collect();
+    nav.push(Box::new(el("div", ()).attr("class", "nav-spacer")));
+    nav.push(search_view(ui));
     Box::new(
         el(
             "div",
             (
                 chrome(ui),
-                el("div", pills).attr("class", "pills"),
+                el("div", nav).attr("class", "pills"),
                 tab_content(ui),
             ),
         )

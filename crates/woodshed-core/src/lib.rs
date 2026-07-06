@@ -11,6 +11,7 @@
 
 pub mod arpeggio;
 pub mod audio;
+pub mod search;
 pub mod song;
 pub mod storage;
 

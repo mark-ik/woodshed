@@ -173,6 +173,19 @@ pub fn stage_css(p: &Palette) -> String {
 .pills {{ display: flex; margin-bottom: 12px; }}
 .pill {{ padding: 6px 14px; margin-right: 6px; border-radius: 14px; color: {text_dim}; }}
 .pill-active {{ background-color: {surface_2}; color: {tertiary}; }}
+.nav-spacer {{ flex-grow: 1; }}
+.search-wrap {{ width: 240px; margin-right: 8px; box-sizing: border-box; }}
+.search-wrap input {{ display: block; width: 240px; box-sizing: border-box;
+                     background-color: {surface_2}; color: {text}; padding: 6px 12px;
+                     border-radius: 14px; border: 1px solid {surface_2}; font-size: 13px; }}
+.search-wrap input:focus {{ border: 1px solid {tertiary}; }}
+.search-list {{ background-color: {surface_2}; border-radius: 8px; padding: 4px;
+               width: 240px; box-sizing: border-box;
+               box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }}
+.search-item {{ display: flex; padding: 5px 10px; border-radius: 6px; }}
+.search-item:hover {{ background-color: {surface_hover}; }}
+.search-label {{ color: {text}; flex-grow: 1; font-size: 13px; }}
+.search-kind {{ color: {text_dim}; font-size: 11px; padding: 2px 0 0 8px; }}
 .lens-strip {{ display: flex; margin-bottom: 16px; }}
 .lens {{ padding: 4px 12px; margin-right: 6px; border-radius: 12px; color: {text_dim};
         font-size: 13px; }}

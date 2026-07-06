@@ -146,6 +146,29 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-06: **S4 slice 11 — corpus search field (serval text input
+  dogfood).** A small always-on search field in the nav row (right of
+  the tabs, no toolbar reorg). `woodshed_core::search::search_corpus`
+  ranks one query (exact → prefix → word-start → substring) across every
+  named catalog: scales, chords, arpeggios, progressions, exercises,
+  practice recipes, tunings (`SearchHit` names the target). The view is
+  xilem_serval's real `text_field` over a `TextInput` in `UiState`;
+  results drop down as a positioned overlay; clicking one runs
+  `apply_search_hit` (jump to the lens/tab, or fill the set for a
+  recipe, or swap the tuning) and clears the field. Driven receipts:
+  typed "dorian" → ranked list (exact Dorian first) → clicked → landed
+  on Stage/Scales/A Dorian; "caged" → three recipe hits. 5 core tests.
+  - **Serval dogfood outcomes**: real text input works end to end
+    (caret, key routing to the focused field, focus-on-click). Two
+    engine-behavior lessons for any serval UI: `<input>` is `inline` in
+    serval's UA sheet (Stylo default) so it needs `display: block` to
+    take a width (meerkat sets this too); and `width` is content-box, so
+    a padded field wants `box-sizing: border-box` or its border-box
+    overflows the wrap (was clipping at the window edge). Both are host
+    CSS, not engine gaps.
+  - Note: the CSD chrome (our own title/buttons, no OS red frame) already
+    shipped in slice 8 — visible in every screenshot since. The frame is
+    already ours; further chrome refinement stays in the polish tail.
 - 2026-07-06: **S4 slice 10 — the song editor.** The song lane is now a
   first-class core `SongDoc { name, bars, one_shot, click }` (replacing
   the split `song_name`/`song_bars` fields, which also un-grew the
