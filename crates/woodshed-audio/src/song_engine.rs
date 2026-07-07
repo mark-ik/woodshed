@@ -255,15 +255,31 @@ impl SongEngineHandle {
         let sr = s.sample_rate_hz as u32;
         let params = ChordRender::block(vec![freq_hz], duration_secs.max(0.05));
         let buf = render_chord(&params, sr);
-        let start = s.oneshot_clock;
-        s.oneshot_voices
-            .push(Voice::new(Sound::sample_with_buffer("step-note", buf), false, start));
-        // Don't let stale voices accumulate if something pushes faster
-        // than they decay.
-        if s.oneshot_voices.len() > 16 {
-            let drop_n = s.oneshot_voices.len() - 16;
-            s.oneshot_voices.drain(0..drop_n);
+        push_oneshot(&mut s, buf, "step-note");
+    }
+
+    /// Play a set of pitches as one strummed one-shot voice, regardless
+    /// of transport — the "hear this chord / scale" preview. `strum_ms`
+    /// staggers note onsets: 0 = block chord, ~18 = a gentle strum,
+    /// larger = an arpeggiated cascade (a scale run). Zero-or-negative
+    /// pitches are dropped; an all-empty set is a no-op. Mixed on the
+    /// one-shot clock like [`Self::play_note_now`], so it sounds while
+    /// the song is stopped.
+    pub fn play_chord_now(&self, pitches_hz: &[f32], duration_secs: f32, strum_ms: f32) {
+        let pitches: Vec<f32> = pitches_hz.iter().copied().filter(|f| *f > 0.0).collect();
+        if pitches.is_empty() {
+            return;
         }
+        let mut s = self.inner.lock().unwrap();
+        let sr = s.sample_rate_hz as u32;
+        let params = ChordRender {
+            pitches_hz: pitches,
+            duration_seconds: duration_secs.max(0.1),
+            strum_offset_ms: strum_ms.max(0.0),
+            ..ChordRender::default()
+        };
+        let buf = render_chord(&params, sr);
+        push_oneshot(&mut s, buf, "preview-chord");
     }
 }
 
@@ -562,6 +578,21 @@ fn process_song_buffer(s: &mut SongEngineInternals, output: &mut [f32]) {
     }
 }
 
+/// Push a rendered buffer as a one-shot preview voice, trimming the
+/// backlog so rapid triggers don't pile up. Shared by
+/// [`SongEngineHandle::play_note_now`] and [`SongEngineHandle::play_chord_now`].
+fn push_oneshot(s: &mut SongEngineInternals, buf: SampleBuffer, id: &str) {
+    let start = s.oneshot_clock;
+    s.oneshot_voices
+        .push(Voice::new(Sound::sample_with_buffer(id, buf), false, start));
+    // Don't let stale voices accumulate if something pushes faster than
+    // they decay.
+    if s.oneshot_voices.len() > 16 {
+        let drop_n = s.oneshot_voices.len() - 16;
+        s.oneshot_voices.drain(0..drop_n);
+    }
+}
+
 /// Render this bar's chord into the cache if not already, then return
 /// a clone of the cached buffer (`SampleBuffer` clones are cheap —
 /// the PCM data is `Arc`-shared).
@@ -709,6 +740,38 @@ mod tests {
         let mut buf = vec![0.0_f32; total_samples + 1000];
         process_song_buffer(&mut state, &mut buf);
         assert!(!state.song.playing, "one-shot should stop at end");
+    }
+
+    #[test]
+    fn play_chord_now_sounds_while_stopped() {
+        let internals =
+            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
+        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        // A C-major triad preview.
+        handle.play_chord_now(&[261.63, 329.63, 392.00], 0.5, 18.0);
+        assert!(
+            !internals.lock().unwrap().oneshot_voices.is_empty(),
+            "preview should queue a one-shot voice"
+        );
+        // The song is stopped, so the one-shot mixes on its own clock.
+        let mut s = internals.lock().unwrap();
+        let mut buf = vec![0.0_f32; 2048];
+        process_song_buffer(&mut s, &mut buf);
+        let peak = buf.iter().map(|x| x.abs()).fold(0.0_f32, f32::max);
+        assert!(peak > 0.0, "preview chord should sound while stopped");
+    }
+
+    #[test]
+    fn play_chord_now_ignores_empty_and_silent_pitches() {
+        let internals =
+            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
+        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        handle.play_chord_now(&[], 0.5, 0.0);
+        handle.play_chord_now(&[0.0, -20.0], 0.5, 0.0);
+        assert!(
+            internals.lock().unwrap().oneshot_voices.is_empty(),
+            "no voiceable pitches → no voice"
+        );
     }
 
     #[test]

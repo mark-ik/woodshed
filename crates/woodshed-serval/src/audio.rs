@@ -203,6 +203,18 @@ impl AudioBackend for CpalBackend {
             .map(|song| song.with_song(|s| s.cursor.bar_idx))
     }
 
+    fn preview_pitches(&mut self, pitches_hz: &[f32], duration_secs: f32, strum_ms: f32) {
+        if let Some(song) = self.song.as_ref() {
+            song.play_chord_now(pitches_hz, duration_secs, strum_ms);
+        }
+    }
+
+    fn preview_note(&mut self, freq_hz: f32, duration_secs: f32) {
+        if let Some(song) = self.song.as_ref() {
+            song.play_note_now(freq_hz, duration_secs);
+        }
+    }
+
     fn error(&self) -> Option<&str> {
         self.error.as_deref()
     }

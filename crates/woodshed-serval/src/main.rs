@@ -114,7 +114,7 @@ impl App {
         // runs, advance a step each beat at the transport bpm. Either keeps
         // frames coming.
         let mut animating = false;
-        if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_ref()) {
+        if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_mut()) {
             let now = std::time::Instant::now();
             let last_arp = &mut self.last_arp_step;
             let last_rehearsal = &mut self.last_rehearsal_step;
@@ -138,7 +138,16 @@ impl App {
                         Some(dwell) => {
                             match last_rehearsal {
                                 Some(t) if now.duration_since(*t) >= dwell => {
-                                    if !woodshed_core::step_set(&mut ui.set, 1) {
+                                    if woodshed_core::step_set(&mut ui.set, 1) {
+                                        // Landed on a new card — voice its
+                                        // material ("hear it as you land").
+                                        let c = ui.set.cursor.min(ui.set.cards.len() - 1);
+                                        let (pitches, d, strum) =
+                                            ui.stage.card_voicing(&ui.set.cards[c]);
+                                        if !pitches.is_empty() {
+                                            backend.preview_pitches(&pitches, d, strum);
+                                        }
+                                    } else {
                                         // End of set, loop off: stop.
                                         ui.rehearsal_running = false;
                                     }
@@ -162,11 +171,20 @@ impl App {
                     );
                     match last_arp {
                         Some(t) if now.duration_since(*t) >= beat => {
+                            // Sonify the step we land on — the arpeggio
+                            // climbs audibly, the exercise plays its notes.
+                            let note_secs = beat.as_secs_f32() * 0.85;
                             if ui.stage.arpeggio_playing {
                                 ui.stage.arpeggio_advance();
+                                if let Some(freq) = ui.stage.arpeggio_current_pitch_hz() {
+                                    backend.preview_note(freq, note_secs);
+                                }
                             }
                             if ui.stage.exercise_playing {
                                 ui.stage.exercise_advance();
+                                if let Some(freq) = ui.stage.exercise_current_pitch_hz() {
+                                    backend.preview_note(freq, note_secs);
+                                }
                             }
                             *last_arp = Some(now);
                         }
@@ -279,6 +297,13 @@ impl App {
                     if ui.song_rewind_requested {
                         backend.song_rewind();
                         ui.song_rewind_requested = false;
+                    }
+                    if ui.preview_requested {
+                        ui.preview_requested = false;
+                        let (pitches, dur, strum) = ui.preview_voicing();
+                        if !pitches.is_empty() {
+                            backend.preview_pitches(&pitches, dur, strum);
+                        }
                     }
                 }
                 theme = ui.theme;

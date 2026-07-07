@@ -94,6 +94,9 @@ pub struct UiState {
     pub root_dd: SelectState,
     /// Corpus search field (a small always-available field in the nav row).
     pub search: TextInput,
+    /// One-shot "♪ Hear" request the host consumes after dispatch: voice
+    /// the current lens (or rehearsal card) through the audio backend.
+    pub preview_requested: bool,
 }
 
 impl Default for UiState {
@@ -126,6 +129,7 @@ impl UiState {
             tuning_dd: SelectState::new(stage.tuning_idx),
             root_dd: SelectState::new(stage.root_idx),
             search: TextInput::new(""),
+            preview_requested: false,
             stage,
         }
     }
@@ -181,6 +185,18 @@ impl UiState {
     pub fn sync(&mut self) {
         self.stage.set_tuning(self.tuning_dd.selected);
         self.stage.set_root(self.root_dd.selected);
+    }
+
+    /// Pitches + shape for the on-demand "♪ Hear" preview, resolved from
+    /// context: the current rehearsal card on the Rehearsal tab, else the
+    /// active Stage lens. Empty pitches = nothing to voice. The host
+    /// consumes [`Self::preview_requested`] and calls this.
+    pub fn preview_voicing(&self) -> (Vec<f32>, f32, f32) {
+        if self.tab == Tab::Rehearsal && !self.set.cards.is_empty() {
+            let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+            return self.stage.card_voicing(&self.set.cards[cursor]);
+        }
+        self.stage.voicing_preview()
     }
 
     /// Snapshot the persistable subset (the W0.2 seam's payload).
@@ -369,6 +385,10 @@ fn transport(ui: &UiState) -> UiChild {
                     el("div", text("+")).attr("class", "t-btn t-narrow"),
                     |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
                 ),
+                clickable(
+                    el("div", text("♪ Hear")).attr("class", "t-btn t-hear"),
+                    |ui: &mut UiState, _| ui.preview_requested = true,
+                ),
                 el("span", ()).attr("class", "header-gap"),
                 clickable(
                     el("div", text(tuner_label)).attr("class", "t-btn"),
@@ -450,6 +470,10 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                     |ui: &mut UiState, _| {
                         step_set(&mut ui.set, 1);
                     },
+                ),
+                clickable(
+                    el("div", text("♪ Hear")).attr("class", "t-btn t-hear"),
+                    |ui: &mut UiState, _| ui.preview_requested = true,
                 ),
                 clickable(
                     el("div", text(loop_label)).attr("class", "t-btn"),

@@ -71,6 +71,17 @@ pub trait AudioBackend {
     fn song_rewind(&mut self);
     /// The bar block under the playback cursor (for timeline follow).
     fn song_bar(&self) -> Option<usize>;
+    /// Voice a set of chord / scale tones on demand — the "hear it"
+    /// preview — independent of transport. `strum_ms` staggers note
+    /// onsets: 0 = block chord, ~18 = a gentle strum, larger = an
+    /// arpeggiated cascade (a scale run). Default no-op so a backend
+    /// that can't voice previews stays silent rather than being forced
+    /// to implement it.
+    fn preview_pitches(&mut self, _pitches_hz: &[f32], _duration_secs: f32, _strum_ms: f32) {}
+    /// Voice a single pitched note on demand — the arpeggio / exercise
+    /// step-through sonification. Default no-op (see
+    /// [`preview_pitches`](Self::preview_pitches)).
+    fn preview_note(&mut self, _freq_hz: f32, _duration_secs: f32) {}
     /// A device/stream failure to surface in the UI, if any.
     fn error(&self) -> Option<&str>;
 }

@@ -406,6 +406,17 @@ pub fn format_role(role: &ChordRole) -> String {
     format!("{}{numeral}{suffix}", role.alteration.symbol())
 }
 
+/// Voicing shape for `count` tones as `(duration secs, strum offset ms)`.
+/// A scale becomes an ascending cascade (a wide per-note offset, so you
+/// hear it climb); a chord strums tight (all tones near-together).
+fn voicing_shape(count: usize, scale_like: bool) -> (f32, f32) {
+    if scale_like {
+        ((count as f32 * 0.13 + 0.4).min(3.0), 130.0)
+    } else {
+        (1.4, 18.0)
+    }
+}
+
 impl Default for StageState {
     fn default() -> Self {
         Self::new()
@@ -938,6 +949,126 @@ impl StageState {
             .map(|ps| ps.into_iter().map(FretDot::from_position).collect())
             .unwrap_or_default()
     }
+
+    // === Voicing (S4 slice 12: "hear the theory") ===
+
+    /// The chord / scale tones of the active lens as frequencies (Hz),
+    /// lowest first — the raw material for the "♪ Hear" preview. Empty
+    /// for the Exercise lens (a fingering pattern, not one voiceable
+    /// chord) and before a progression is picked.
+    pub fn voicing_pitches(&self) -> Vec<f32> {
+        fn to_hz(ps: Vec<Pitch>) -> Vec<f32> {
+            ps.iter().map(|p| p.frequency() as f32).collect()
+        }
+        match self.lens {
+            Lens::Scales => self.scale().apply_to(self.root()).map(to_hz).unwrap_or_default(),
+            Lens::Chords => self.chord().apply_to(self.root()).map(to_hz).unwrap_or_default(),
+            Lens::Arpeggios => {
+                self.arpeggio_chord().apply_to(self.root()).map(to_hz).unwrap_or_default()
+            }
+            Lens::Progressions => self.progression_expanded_pitches().unwrap_or_default(),
+            Lens::Exercises => Vec::new(),
+        }
+    }
+
+    /// The active lens's material as an on-demand preview: `(pitches Hz,
+    /// duration secs, strum offset ms)`. Empty pitches = nothing to voice.
+    pub fn voicing_preview(&self) -> (Vec<f32>, f32, f32) {
+        let pitches = self.voicing_pitches();
+        if pitches.is_empty() {
+            return (pitches, 0.0, 0.0);
+        }
+        let (dur, strum) = voicing_shape(pitches.len(), self.lens == Lens::Scales);
+        (pitches, dur, strum)
+    }
+
+    /// Tones of the expanded progression chord (Hz) — the Progression
+    /// arm of [`Self::voicing_pitches`].
+    fn progression_expanded_pitches(&self) -> Option<Vec<f32>> {
+        let idx = self.progression_idx?;
+        let prog = progression_catalog().get(idx)?;
+        let major = scale_catalog().iter().find(|s| s.name == "Major")?;
+        let chords = prog.apply_in_key(self.root(), major).ok()?;
+        if chords.is_empty() {
+            return None;
+        }
+        let expanded = self.progression_expanded.min(chords.len() - 1);
+        let chord = &chords[expanded];
+        let ps = chord.formula.apply_to(chord.root).ok()?;
+        Some(ps.iter().map(|p| p.frequency() as f32).collect())
+    }
+
+    /// A rehearsal card's material as a preview `(pitches Hz, duration
+    /// secs, strum offset ms)` — the Rehearsal-tab counterpart to
+    /// [`Self::voicing_preview`]. Riff cards don't voice (empty).
+    pub fn card_voicing(&self, card: &Card) -> (Vec<f32>, f32, f32) {
+        fn to_hz(ps: Vec<Pitch>) -> Vec<f32> {
+            ps.iter().map(|p| p.frequency() as f32).collect()
+        }
+        let root_of =
+            |pc: &PitchClass| Pitch::from_midi(48 + pc.value() as i32, Spelling::Sharps);
+        let (pitches, scale_like) = match &card.material {
+            Material::Scale { name, root } => (
+                scale_catalog()
+                    .iter()
+                    .find(|s| s.name == name.as_str())
+                    .and_then(|s| s.apply_to(root_of(root)).ok())
+                    .map(to_hz)
+                    .unwrap_or_default(),
+                true,
+            ),
+            Material::Chord { name, root } => (
+                chord_catalog()
+                    .iter()
+                    .find(|c| c.name == name.as_str())
+                    .and_then(|c| c.apply_to(root_of(root)).ok())
+                    .map(to_hz)
+                    .unwrap_or_default(),
+                false,
+            ),
+            Material::Riff { .. } => (Vec::new(), false),
+        };
+        if pitches.is_empty() {
+            return (pitches, 0.0, 0.0);
+        }
+        let (dur, strum) = voicing_shape(pitches.len(), scale_like);
+        (pitches, dur, strum)
+    }
+
+    /// Frequency (Hz) of the arpeggio step-through's current tone — the
+    /// step-sonification source. `None` if the walk is empty.
+    pub fn arpeggio_current_pitch_hz(&self) -> Option<f32> {
+        let formula = self.arpeggio_chord();
+        let bass = self.arpeggio_bass();
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        let shapes = generate_shapes(&board, formula, self.root(), bass);
+        if shapes.is_empty() {
+            return None;
+        }
+        let position_idx = self.arpeggio_position_idx.min(shapes.len() - 1);
+        let shape = &shapes[position_idx];
+        let run = ArpeggioRun::new(&shape.positions, bass, self.arpeggio_direction);
+        let current = run.position_at(self.arpeggio_step_idx)?;
+        shape.positions.get(current).map(|p| p.pitch.frequency() as f32)
+    }
+
+    /// Frequency (Hz) of the exercise step-through's current note.
+    /// `None` if the exercise generates no steps.
+    pub fn exercise_current_pitch_hz(&self) -> Option<f32> {
+        let ex = self.exercise();
+        let params = ExerciseParams {
+            starting_fret: self.exercise_starting_fret,
+            ..ExerciseParams::default()
+        };
+        let steps = ex.generate(&self.tuning(), &params);
+        if steps.is_empty() {
+            return None;
+        }
+        let step = self.exercise_step_idx % steps.len();
+        let s = &steps[step];
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        Some(board.pitch_at(s.string_index, s.fret).frequency() as f32)
+    }
 }
 
 #[cfg(test)]
@@ -1120,5 +1251,83 @@ mod tests {
         s.arpeggio_cycle_inversion();
         let b2 = s.arpeggio_board();
         assert_eq!(b2.step, 0, "inversion change resets the transport");
+    }
+
+    #[test]
+    fn voicing_pitches_per_lens() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+        assert!(s.voicing_pitches().len() >= 5, "scale tones voiced");
+        assert!(
+            s.voicing_pitches().iter().all(|f| *f > 20.0 && *f < 5000.0),
+            "frequencies in audible range"
+        );
+        s.set_lens(Lens::Chords);
+        assert!(s.voicing_pitches().len() >= 3, "chord tones voiced");
+        s.set_lens(Lens::Arpeggios);
+        assert!(s.voicing_pitches().len() >= 3, "arpeggio tones voiced");
+        s.set_lens(Lens::Exercises);
+        assert!(s.voicing_pitches().is_empty(), "exercises don't voice a chord");
+    }
+
+    #[test]
+    fn voicing_preview_shapes_scale_vs_chord() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+        let (p, dur, strum) = s.voicing_preview();
+        assert!(!p.is_empty() && dur > 0.0);
+        assert!(strum > 100.0, "scale cascades with a wide strum offset");
+        s.set_lens(Lens::Chords);
+        let (_p, _dur, strum) = s.voicing_preview();
+        assert!(strum < 50.0, "chord strums tight");
+    }
+
+    #[test]
+    fn progression_voicing_after_selection() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Progressions);
+        assert!(s.voicing_pitches().is_empty(), "cold start, nothing to voice");
+        s.select_progression(0);
+        assert!(s.voicing_pitches().len() >= 2, "expanded chord voiced");
+    }
+
+    #[test]
+    fn arpeggio_step_pitch_tracks_transport() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Arpeggios);
+        let p0 = s.arpeggio_current_pitch_hz().expect("a current tone");
+        assert!(p0 > 20.0);
+        let mut seen_change = false;
+        for _ in 0..8 {
+            s.arpeggio_advance();
+            if let Some(p) = s.arpeggio_current_pitch_hz() {
+                if (p - p0).abs() > 0.1 {
+                    seen_change = true;
+                }
+            }
+        }
+        assert!(seen_change, "arpeggio walk visits multiple pitches");
+    }
+
+    #[test]
+    fn card_voicing_matches_material() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Chords);
+        let card = s.card_from_lens().unwrap();
+        let (pitches, dur, strum) = s.card_voicing(&card);
+        assert!(pitches.len() >= 3, "chord card voices its tones");
+        assert!(dur > 0.0 && strum < 50.0);
+        // A riff (exercise) card doesn't voice.
+        s.set_lens(Lens::Exercises);
+        let riff = s.card_from_lens().unwrap();
+        assert!(s.card_voicing(&riff).0.is_empty());
+    }
+
+    #[test]
+    fn exercise_step_pitch_available() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Exercises);
+        let p = s.exercise_current_pitch_hz().expect("exercise has notes");
+        assert!(p > 20.0 && p < 5000.0);
     }
 }

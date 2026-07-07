@@ -146,6 +146,41 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-07: **S4 slice 12 — hear the theory (audio depth I).** The
+  fretboard now sounds. A "♪ Hear" button on the Stage transport row
+  voices the active lens's material; the same button on the Rehearsal
+  deck voices the current card. Running an arpeggio or exercise sonifies
+  each step as the transport lands on it (the arpeggio climbs audibly);
+  a running rehearsal voices each card as it comes up.
+  - **The engine already had most of it.** `woodshed-audio` carried a
+    complete one-shot voice path (`SongEngineHandle::play_note_now`,
+    `oneshot_voices`/`oneshot_clock`, mixed while the song is stopped)
+    plus `chord_audio::render_chord` (additive synth, strum/block, ADSR)
+    — but the serval host's thin `AudioBackend` seam only exposed
+    metronome + tuner + song, so none of it was reachable. This slice
+    widens the seam, it doesn't write DSP.
+  - Engine: added `play_chord_now(pitches, dur, strum_ms)` beside
+    `play_note_now` (strum offset = block / gentle strum / arpeggiated
+    cascade), factoring the shared one-shot push. 2 tests.
+  - Core seam: `AudioBackend::preview_pitches` + `preview_note` (default
+    no-op, so a backend that can't voice stays silent — the web host
+    fills these over Web Audio later). Core `StageState` gained
+    `voicing_pitches` / `voicing_preview` / `card_voicing` (chord+scale
+    tones via `ScaleFormula`/`ChordFormula::apply_to` → `Pitch::frequency`)
+    and `arpeggio_current_pitch_hz` / `exercise_current_pitch_hz` for the
+    step-through. 6 core tests (31 total green).
+  - Host: `CpalBackend` forwards the two preview calls to the song
+    engine; `main.rs` sonifies the arpeggio/exercise step on advance and
+    voices the rehearsal card on land (redraw), and consumes a
+    `preview_requested` flag after dispatch (the same host-flag idiom as
+    rewind / chrome). Views add the "♪ Hear" control (accent-tinted, no
+    toolbar reorg) + `UiState::preview_voicing` (Rehearsal card vs. Stage
+    lens by tab). Receipt: Stage renders with ♪ Hear inline on the
+    transport row, launches clean (no panic). Audible confirmation is
+    Mark's by ear — click ♪ Hear or run an arpeggio.
+  - Deferred (audio depth II+): MIDI in/out, calibration/timing, the
+    bar-aligned looper — all still built-and-tested in `woodshed-audio`,
+    waiting on the same seam-widening pattern.
 - 2026-07-06: **S4 slice 11 — corpus search field (serval text input
   dogfood).** A small always-on search field in the nav row (right of
   the tabs, no toolbar reorg). `woodshed_core::search::search_corpus`
