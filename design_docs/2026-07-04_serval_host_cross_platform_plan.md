@@ -146,6 +146,27 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-07: **S4 slice 13 — MIDI in/out (audio depth II).** Woodshed
+  talks to your rig. A MIDI panel in Settings: input/output port pickers,
+  "Sync to clock" (slave the transport BPM to an incoming MIDI clock),
+  "Send clock" (emit 24-PPQN clock + Start/Stop so external gear follows
+  Woodshed's tempo), a status line + live event readout, and Refresh.
+  - The engine layer (`woodshed_audio::midi` — byte parse, clock-sync
+    BPM derivation, `MidiIn`/`MidiOut` over `midir`) was built + tested
+    but never consumed by any app (the old xilem app only ever mentioned
+    "future MIDI pickers"); this wires it. New
+    `woodshed_core::midi::MidiBackend` seam (parallel to
+    AudioBackend/Storage); desktop `MidiHost` over `midir`. Input is a
+    connected `MidiIn` (its reader thread queues events + the clock-sync
+    derives BPM, host-polled); output is a dedicated clock-generator
+    thread that owns the connection, so no `midir` handle crosses a
+    thread boundary. The host polls clock BPM in redraw (slaving the
+    transport and pushing `set_metronome`), reflects the event readout,
+    and connects per the dropdowns after dispatch. Transient (not
+    persisted — port availability is session-dependent). Receipt: the
+    panel renders on a no-MIDI machine (In/Out "None", "no clock"); build
+    green, 126 audio + 31 core tests pass. The clock sync itself is
+    Mark's to confirm with gear.
 - 2026-07-07: **S4 slice 12 — hear the theory (audio depth I).** The
   fretboard now sounds. A "♪ Hear" button on the Stage transport row
   voices the active lens's material; the same button on the Rehearsal

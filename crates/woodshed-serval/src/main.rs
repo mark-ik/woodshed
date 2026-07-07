@@ -14,6 +14,7 @@
 //! the core state.
 
 mod audio;
+mod midi;
 mod storage;
 
 use std::cell::RefCell;
@@ -21,8 +22,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use audio::CpalBackend;
+use midi::MidiHost;
 use storage::FsStorage;
 use woodshed_core::audio::AudioBackend;
+use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::storage::Storage as _;
 use woodshed_views::theme::ThemeMode;
 
@@ -60,6 +63,8 @@ struct App {
     modifiers: ModifiersState,
     /// The W0.1 audio seam: cpal on desktop, Web Audio on the web host.
     backend: Option<CpalBackend>,
+    /// The MIDI seam: midir on desktop, Web MIDI on the web host.
+    midi: MidiHost,
     /// Last arpeggio auto-advance instant (the step clock while the
     /// arpeggio transport runs).
     last_arp_step: Option<std::time::Instant>,
@@ -78,6 +83,16 @@ struct App {
     last_song: woodshed_core::song::SongDoc,
     /// Set by the chrome close button; drives event-loop exit.
     close_requested: bool,
+}
+
+/// Resolve a MIDI port dropdown selection to a connect target: index 0
+/// = "None" (disconnect), else `ports[idx - 1]`.
+fn midi_port_at(ports: &[String], selected: usize) -> Option<String> {
+    if selected == 0 {
+        None
+    } else {
+        ports.get(selected - 1).cloned()
+    }
 }
 
 /// Which resize edge a point near the window border maps to, in logical
@@ -114,6 +129,14 @@ impl App {
         // runs, advance a step each beat at the transport bpm. Either keeps
         // frames coming.
         let mut animating = false;
+        // Poll the MIDI seam (immutable) before borrowing runner/backend.
+        let midi_in_connected = self.midi.connected_input().is_some();
+        let midi_clock_bpm = self.midi.clock_bpm();
+        let midi_events = self.midi.recent_events();
+        // Clock-out master values, captured inside the update, pushed after.
+        let mut clock_out_enabled = false;
+        let mut clock_out_playing = false;
+        let mut clock_out_bpm = 120.0_f32;
         if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_mut()) {
             let now = std::time::Instant::now();
             let last_arp = &mut self.last_arp_step;
@@ -195,8 +218,32 @@ impl App {
                 } else {
                     *last_arp = None;
                 }
+                // MIDI: reflect polled state; slave the transport to
+                // incoming clock; capture the clock-out master values.
+                ui.midi.clock_bpm = midi_clock_bpm;
+                ui.midi.events = midi_events.clone();
+                if midi_in_connected
+                    && (ui.midi.clock_slave
+                        || ui.tab == woodshed_core::storage::Tab::Settings)
+                {
+                    animating = true;
+                }
+                if midi_in_connected && ui.midi.clock_slave {
+                    if let Some(bpm) = midi_clock_bpm {
+                        let bpm = bpm.clamp(30.0, 300.0);
+                        if (ui.transport.bpm - bpm).abs() > 0.3 {
+                            ui.transport.bpm = bpm;
+                            backend.set_metronome(ui.transport);
+                        }
+                    }
+                }
+                clock_out_enabled = ui.midi.clock_out;
+                clock_out_playing = ui.transport.playing;
+                clock_out_bpm = ui.transport.bpm;
             });
         }
+        self.midi
+            .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
         let tuner_live = animating;
         let (Some(window), Some(host), Some(runner)) =
             (self.window.as_ref(), self.host.as_ref(), self.runner.as_ref())
@@ -336,6 +383,28 @@ impl App {
             if drag {
                 let _ = window.drag_window();
             }
+        }
+        // MIDI device sync: connect / disconnect per the dropdowns, and
+        // re-scan the port lists on request.
+        if let Some(runner) = self.runner.as_mut() {
+            let midi = &mut self.midi;
+            runner.update(|ui| {
+                if std::mem::take(&mut ui.midi.refresh_requested) {
+                    ui.midi.input_ports = midi.input_ports();
+                    ui.midi.output_ports = midi.output_ports();
+                }
+                let in_target = midi_port_at(&ui.midi.input_ports, ui.midi.input_dd.selected);
+                if midi.connected_input() != in_target.as_deref() {
+                    midi.connect_input(in_target.as_deref());
+                }
+                let out_target =
+                    midi_port_at(&ui.midi.output_ports, ui.midi.output_dd.selected);
+                if midi.connected_output() != out_target.as_deref() {
+                    midi.connect_output(out_target.as_deref());
+                }
+                ui.midi.connected_in = midi.connected_input().map(str::to_string);
+                ui.midi.connected_out = midi.connected_output().map(str::to_string);
+            });
         }
         if theme != self.theme {
             self.theme = theme;
@@ -478,6 +547,9 @@ impl ApplicationHandler for App {
         }
         self.theme = ui.theme;
         self.sheet = ui.theme.css();
+        // Populate the MIDI port pickers with what's plugged in now.
+        ui.midi.input_ports = self.midi.input_ports();
+        ui.midi.output_ports = self.midi.output_ports();
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
         let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, ui);
         self.window = Some(window);
@@ -584,6 +656,7 @@ fn main() {
         cursor: (0.0, 0.0),
         modifiers: ModifiersState::empty(),
         backend: None,
+        midi: MidiHost::new(),
         last_arp_step: None,
         last_rehearsal_step: None,
         storage: FsStorage::new(),

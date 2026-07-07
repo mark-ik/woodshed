@@ -64,6 +64,56 @@ impl BoardLayout {
     }
 }
 
+/// MIDI panel state (audio-depth slice 13). Port lists + connection
+/// status are host-populated; selections + toggles are view-owned and
+/// the host realizes them through the `MidiBackend` seam. Transient (not
+/// persisted — port availability is session-dependent).
+pub struct MidiUiState {
+    /// Available ports, host-populated on startup + refresh.
+    pub input_ports: Vec<String>,
+    pub output_ports: Vec<String>,
+    /// Dropdown selection: index 0 = "None", else `ports[idx - 1]`.
+    pub input_dd: SelectState,
+    pub output_dd: SelectState,
+    /// Slave the transport BPM to incoming MIDI clock.
+    pub clock_slave: bool,
+    /// Send 24-PPQN clock + Start/Stop to the connected output.
+    pub clock_out: bool,
+    /// Host-polled readout: BPM derived from incoming clock.
+    pub clock_bpm: Option<f32>,
+    /// Host-populated connection status.
+    pub connected_in: Option<String>,
+    pub connected_out: Option<String>,
+    /// Host-polled recent-events readout (newest last).
+    pub events: Vec<String>,
+    /// One-shot: re-scan the port lists. Host consumes after dispatch.
+    pub refresh_requested: bool,
+}
+
+impl MidiUiState {
+    pub fn new() -> Self {
+        Self {
+            input_ports: Vec::new(),
+            output_ports: Vec::new(),
+            input_dd: SelectState::new(0),
+            output_dd: SelectState::new(0),
+            clock_slave: false,
+            clock_out: false,
+            clock_bpm: None,
+            connected_in: None,
+            connected_out: None,
+            events: Vec::new(),
+            refresh_requested: false,
+        }
+    }
+}
+
+impl Default for MidiUiState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Runner state: the portable core slice plus view-layer widget state.
 pub struct UiState {
     pub stage: StageState,
@@ -97,6 +147,8 @@ pub struct UiState {
     /// One-shot "♪ Hear" request the host consumes after dispatch: voice
     /// the current lens (or rehearsal card) through the audio backend.
     pub preview_requested: bool,
+    /// MIDI panel state (Settings tab).
+    pub midi: MidiUiState,
 }
 
 impl Default for UiState {
@@ -130,6 +182,7 @@ impl UiState {
             root_dd: SelectState::new(stage.root_idx),
             search: TextInput::new(""),
             preview_requested: false,
+            midi: MidiUiState::new(),
             stage,
         }
     }
@@ -243,6 +296,87 @@ fn pill(tab: Tab, active: bool) -> UiChild {
     ))
 }
 
+/// MIDI device panel (audio-depth slice 13): port pickers, clock-slave /
+/// clock-master toggles, and a live status + event readout. The host
+/// realizes the selections through the `MidiBackend` seam.
+fn midi_panel(ui: &UiState) -> UiChild {
+    let in_opts: Vec<&str> = std::iter::once("None")
+        .chain(ui.midi.input_ports.iter().map(|s| s.as_str()))
+        .collect();
+    let out_opts: Vec<&str> = std::iter::once("None")
+        .chain(ui.midi.output_ports.iter().map(|s| s.as_str()))
+        .collect();
+    let input_dd = map_state(select(&ui.midi.input_dd, &in_opts), |ui: &mut UiState| {
+        &mut ui.midi.input_dd
+    });
+    let output_dd = map_state(select(&ui.midi.output_dd, &out_opts), |ui: &mut UiState| {
+        &mut ui.midi.output_dd
+    });
+    let slave_label = if ui.midi.clock_slave {
+        "Sync to clock: on"
+    } else {
+        "Sync to clock: off"
+    };
+    let out_label = if ui.midi.clock_out {
+        "Send clock: on"
+    } else {
+        "Send clock: off"
+    };
+    let clock = ui
+        .midi
+        .clock_bpm
+        .map(|b| format!("clock {b:.1} bpm"))
+        .unwrap_or_else(|| "no clock".to_string());
+    let status = format!(
+        "in: {} · out: {} · {clock}",
+        ui.midi.connected_in.as_deref().unwrap_or("—"),
+        ui.midi.connected_out.as_deref().unwrap_or("—"),
+    );
+    let events_line = if ui.midi.events.is_empty() {
+        "(no events)".to_string()
+    } else {
+        ui.midi.events.join("    ")
+    };
+    Box::new(el(
+        "div",
+        (
+            el("div", text("MIDI"))
+                .attr("class", "settings-heading settings-gap"),
+            el(
+                "div",
+                (
+                    el("span", text("In")).attr("class", "header-label"),
+                    input_dd,
+                    el("span", ()).attr("class", "header-gap"),
+                    el("span", text("Out")).attr("class", "header-label"),
+                    output_dd,
+                ),
+            )
+            .attr("class", "header-row"),
+            el(
+                "div",
+                (
+                    clickable(
+                        el("div", text(slave_label)).attr("class", "t-btn"),
+                        |ui: &mut UiState, _| ui.midi.clock_slave = !ui.midi.clock_slave,
+                    ),
+                    clickable(
+                        el("div", text(out_label)).attr("class", "t-btn"),
+                        |ui: &mut UiState, _| ui.midi.clock_out = !ui.midi.clock_out,
+                    ),
+                    clickable(
+                        el("div", text("Refresh ports")).attr("class", "t-btn"),
+                        |ui: &mut UiState, _| ui.midi.refresh_requested = true,
+                    ),
+                ),
+            )
+            .attr("class", "transport"),
+            el("div", text(status)).attr("class", "settings-line"),
+            el("div", text(events_line)).attr("class", "settings-line midi-events"),
+        ),
+    ))
+}
+
 fn settings_screen(ui: &UiState) -> UiChild {
     let themes: Vec<UiChild> = ThemeMode::ALL
         .iter()
@@ -308,6 +442,7 @@ fn settings_screen(ui: &UiState) -> UiChild {
                             ),
                         )
                         .attr("class", "settings-line"),
+                        midi_panel(ui),
                     ),
                 )
                 .attr("class", "board"),

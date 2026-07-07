@@ -237,6 +237,7 @@ pub fn stage_css(p: &Palette) -> String {
 .select-option {{ color: {text}; padding: 4px 10px; border-radius: 4px; }}
 .settings-heading {{ color: {text_header}; font-size: 15px; margin-bottom: 8px; }}
 .settings-line {{ color: {text_dim}; margin-bottom: 6px; }}
+.midi-events {{ font-size: 11px; color: {text_disabled}; }}
 .filmstrip {{ display: flex; overflow: scroll; margin-bottom: 14px; padding: 6px 2px; }}
 .film-card {{ background-color: {surface}; border-radius: 10px; padding: 10px 14px;
              margin-right: 10px; width: 190px;
