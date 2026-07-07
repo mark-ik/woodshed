@@ -42,6 +42,22 @@ impl TransportState {
     }
 }
 
+/// Neutral snapshot of a round-trip latency calibration run, for the UI
+/// (audio-depth slice 14). Latencies are in milliseconds.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CalibrationStatus {
+    /// No run in progress.
+    Idle,
+    /// Playing clicks and listening for the player's taps.
+    Running { clicks_fired: usize, total: usize },
+    /// Finished — a measured round-trip latency to accept.
+    Success { latency_ms: f32, matched: usize, total: usize },
+    /// Finished but too few hits matched; offer a retry.
+    Insufficient { matched: usize, total: usize },
+    /// The audio engines aren't available (no mic, etc.).
+    Unavailable,
+}
+
 /// Whether the tuner is listening, and the latest reading a host polled.
 #[derive(Clone, Debug, Default)]
 pub struct TunerState {
@@ -82,6 +98,42 @@ pub trait AudioBackend {
     /// step-through sonification. Default no-op (see
     /// [`preview_pitches`](Self::preview_pitches)).
     fn preview_note(&mut self, _freq_hz: f32, _duration_secs: f32) {}
+    /// Start a round-trip latency calibration run: play a lead of clicks
+    /// the player taps along to; the onset detector times the hits.
+    /// No-op default: a backend without input calibration stays idle.
+    fn calibration_start(&mut self) {}
+    /// Poll a running calibration; returns a neutral status snapshot.
+    fn calibration_poll(&mut self) -> CalibrationStatus {
+        CalibrationStatus::Idle
+    }
+    /// Cancel a running calibration and restore the metronome.
+    fn calibration_cancel(&mut self) {}
+    /// The active input→output latency compensation (ms), if calibrated.
+    fn latency_ms(&self) -> Option<f32> {
+        None
+    }
+    /// Set or clear the active latency compensation (ms) — the user
+    /// accepting a calibration result, or clearing it.
+    fn set_latency_ms(&mut self, _ms: Option<f32>) {}
+    /// Arm song-mode loop recording for the bar at `bar_idx` — capture
+    /// begins when playback next reaches that bar. No-op default.
+    fn song_arm_record(&mut self, _bar_idx: usize) {}
+    /// Stop song-mode loop recording.
+    fn song_stop_record(&mut self) {}
+    /// Clear (erase) the recorded loop on the bar at `bar_idx`.
+    fn song_clear_loop(&mut self, _bar_idx: usize) {}
+    /// Recording mode: `true` = replace the bar's audio each pass,
+    /// `false` = overdub (sum) onto it.
+    fn song_set_record_replace(&mut self, _replace: bool) {}
+    /// Whether the song engine is currently capturing input into a bar.
+    fn song_recording(&self) -> bool {
+        false
+    }
+    /// Per-bar flags: does each bar hold a recorded loop? Empty when the
+    /// backend has no song engine.
+    fn song_loop_bars(&self) -> Vec<bool> {
+        Vec::new()
+    }
     /// A device/stream failure to surface in the UI, if any.
     fn error(&self) -> Option<&str>;
 }

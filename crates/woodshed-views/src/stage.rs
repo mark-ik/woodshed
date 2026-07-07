@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use woodshed_core::audio::{TransportState, TunerState};
+use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::storage::{PersistedSession, Tab};
 use woodshed_core::song::{song_from_progression, SongDoc, SECTION_LABELS};
@@ -149,6 +149,23 @@ pub struct UiState {
     pub preview_requested: bool,
     /// MIDI panel state (Settings tab).
     pub midi: MidiUiState,
+    /// Latency-calibration state (Settings tab). `calib_active` drives
+    /// host polling; the request flags are consumed after dispatch.
+    pub calib_status: CalibrationStatus,
+    pub calib_active: bool,
+    pub calib_start_requested: bool,
+    pub calib_cancel_requested: bool,
+    pub calib_accept_requested: bool,
+    /// Accepted round-trip latency (ms), host-reflected.
+    pub latency_ms: Option<f32>,
+    /// Looper (song-mode record) state. Recording status + per-bar loop
+    /// flags are host-reflected; the toggle/clear requests are consumed
+    /// after dispatch; `song_record_replace` is a view-owned toggle.
+    pub song_recording: bool,
+    pub song_loop_bars: Vec<bool>,
+    pub song_record_replace: bool,
+    pub song_record_toggle_requested: bool,
+    pub song_clear_loop_requested: bool,
 }
 
 impl Default for UiState {
@@ -183,6 +200,17 @@ impl UiState {
             search: TextInput::new(""),
             preview_requested: false,
             midi: MidiUiState::new(),
+            calib_status: CalibrationStatus::Idle,
+            calib_active: false,
+            calib_start_requested: false,
+            calib_cancel_requested: false,
+            calib_accept_requested: false,
+            latency_ms: None,
+            song_recording: false,
+            song_loop_bars: Vec::new(),
+            song_record_replace: false,
+            song_record_toggle_requested: false,
+            song_clear_loop_requested: false,
             stage,
         }
     }
@@ -377,6 +405,66 @@ fn midi_panel(ui: &UiState) -> UiChild {
     ))
 }
 
+/// Latency-calibration panel (audio-depth slice 14): measure the
+/// input→output round-trip lag by playing clicks the player taps along
+/// to. The host drives the `CalibrationSession` through the audio seam.
+fn calibration_panel(ui: &UiState) -> UiChild {
+    let latency_line = match ui.latency_ms {
+        Some(ms) => format!("Latency: {ms:.0} ms round-trip"),
+        None => "Latency: uncalibrated".to_string(),
+    };
+    let start_btn = |label: &str| {
+        Box::new(clickable(
+            el("div", text(label.to_string())).attr("class", "t-btn"),
+            |ui: &mut UiState, _| ui.calib_start_requested = true,
+        )) as UiChild
+    };
+    let readout = |s: String| Box::new(el("div", text(s)).attr("class", "t-readout")) as UiChild;
+    let controls: Vec<UiChild> = match ui.calib_status {
+        CalibrationStatus::Idle => vec![Box::new(clickable(
+            el("div", text("Calibrate")).attr("class", "t-btn t-hear"),
+            |ui: &mut UiState, _| ui.calib_start_requested = true,
+        )) as UiChild],
+        CalibrationStatus::Running { clicks_fired, total } => vec![
+            readout(format!("Tap along… {clicks_fired}/{total}")),
+            Box::new(clickable(
+                el("div", text("Cancel")).attr("class", "t-btn"),
+                |ui: &mut UiState, _| ui.calib_cancel_requested = true,
+            )) as UiChild,
+        ],
+        CalibrationStatus::Success { latency_ms, matched, total } => vec![
+            readout(format!("{latency_ms:.0} ms · {matched}/{total} hits")),
+            Box::new(clickable(
+                el("div", text("Accept")).attr("class", "t-btn t-hear"),
+                |ui: &mut UiState, _| ui.calib_accept_requested = true,
+            )) as UiChild,
+            start_btn("Retry"),
+        ],
+        CalibrationStatus::Insufficient { matched, total } => vec![
+            readout(format!("only {matched}/{total} hits caught")),
+            start_btn("Retry"),
+        ],
+        CalibrationStatus::Unavailable => vec![readout("no input device".to_string())],
+    };
+    Box::new(el(
+        "div",
+        (
+            el("div", text("Latency calibration"))
+                .attr("class", "settings-heading settings-gap"),
+            el("div", text(latency_line)).attr("class", "settings-line"),
+            el("div", controls).attr("class", "transport"),
+            el(
+                "div",
+                text(
+                    "Plays a lead of clicks — tap your guitar with each one \
+                     so Woodshed can measure the round-trip lag.",
+                ),
+            )
+            .attr("class", "settings-line midi-events"),
+        ),
+    ))
+}
+
 fn settings_screen(ui: &UiState) -> UiChild {
     let themes: Vec<UiChild> = ThemeMode::ALL
         .iter()
@@ -443,6 +531,7 @@ fn settings_screen(ui: &UiState) -> UiChild {
                         )
                         .attr("class", "settings-line"),
                         midi_panel(ui),
+                        calibration_panel(ui),
                     ),
                 )
                 .attr("class", "board"),
@@ -1514,6 +1603,46 @@ fn song_bar_ops(_ui: &UiState) -> UiChild {
     )
 }
 
+/// Looper controls (audio-depth slice 15): record your part into the
+/// selected bar as the song loops past it, overdub or replace, and clear.
+/// The engine records live input into the bar's audio buffer; these drive
+/// it through the audio seam.
+fn song_loop_ops(ui: &UiState) -> UiChild {
+    let rec_label = if ui.song_recording { "● Recording" } else { "● Rec bar" };
+    let rec_class = if ui.song_recording { "t-btn rec-on" } else { "t-btn" };
+    let mode_label = if ui.song_record_replace { "Replace" } else { "Overdub" };
+    Box::new(
+        el(
+            "div",
+            (
+                clickable(
+                    el("div", text(rec_label)).attr("class", rec_class),
+                    |ui: &mut UiState, _| ui.song_record_toggle_requested = true,
+                ),
+                clickable(
+                    el("div", text(mode_label)).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.song_record_replace = !ui.song_record_replace
+                    },
+                ),
+                clickable(
+                    el("div", text("Clear loop")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.song_clear_loop_requested = true,
+                ),
+                el(
+                    "div",
+                    text(
+                        "play the song, then Rec to capture your part into \
+                         the selected bar as it loops past",
+                    ),
+                )
+                .attr("class", "t-readout"),
+            ),
+        )
+        .attr("class", "transport"),
+    )
+}
+
 /// Per-bar chord / tempo / meter / section editor for the cursor bar.
 fn song_bar_editor(ui: &UiState) -> UiChild {
     let cursor = ui.song_edit_cursor.min(ui.song.bars.len().saturating_sub(1));
@@ -1643,6 +1772,7 @@ fn song_screen(ui: &UiState) -> UiChild {
             } else {
                 b.chord_label.clone()
             };
+            let looped = ui.song_loop_bars.get(i).copied().unwrap_or(false);
             Box::new(clickable(
                 el(
                     "div",
@@ -1651,7 +1781,12 @@ fn song_screen(ui: &UiState) -> UiChild {
                         el("div", text(chord)).attr("class", "bar-chord"),
                         el(
                             "div",
-                            text(format!("{:.0} · {}/4", b.bpm, b.beats)),
+                            text(format!(
+                                "{:.0} · {}/4{}",
+                                b.bpm,
+                                b.beats,
+                                if looped { " ⟳" } else { "" }
+                            )),
                         )
                         .attr("class", "bar-meta"),
                     ),
@@ -1668,6 +1803,7 @@ fn song_screen(ui: &UiState) -> UiChild {
         (
             deck,
             song_bar_ops(ui),
+            song_loop_ops(ui),
             el(
                 "div",
                 (

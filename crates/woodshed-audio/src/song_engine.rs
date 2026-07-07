@@ -164,6 +164,31 @@ impl SongEngineHandle {
         self.inner.lock().unwrap().song.clone()
     }
 
+    /// The playback cursor's current bar index. Read-only — unlike
+    /// [`Self::with_song`] it doesn't resync the chord cache, so it's
+    /// cheap to poll every frame (timeline follow).
+    pub fn cursor_bar(&self) -> usize {
+        self.inner.lock().unwrap().song.cursor.bar_idx
+    }
+
+    /// Whether the engine is currently capturing input into a bar
+    /// (read-only, no resync).
+    pub fn is_recording(&self) -> bool {
+        self.inner.lock().unwrap().song.recording
+    }
+
+    /// Per-bar recorded-loop presence (read-only, no resync).
+    pub fn loop_flags(&self) -> Vec<bool> {
+        self.inner
+            .lock()
+            .unwrap()
+            .song
+            .bars
+            .iter()
+            .map(|b| b.audio_buffer.is_some())
+            .collect()
+    }
+
     /// Output sample rate the engine is running at. Lets the UI turn
     /// `cursor.sample_in_bar` into a within-bar fraction for the
     /// playhead.

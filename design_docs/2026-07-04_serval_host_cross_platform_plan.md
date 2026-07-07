@@ -146,6 +146,37 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-07: **S4 slice 15 — the looper (audio depth IV).** Record your
+  part into a song bar as it loops past — overdub or replace — and clear
+  it. The Song screen gains a Rec / Overdub-Replace / Clear-loop row and
+  a ⟳ marker on looped bars. The song engine already recorded live input
+  into per-bar audio buffers (draining the looper-capture ring while
+  `recording`); this slice wires that ring to the input engine (the same
+  onset+capture registration slice 14 added), exposes arm / stop / clear
+  / mode plus recording-state + per-bar-loop reflection through the audio
+  seam, and drives it from the host: arm the edit-cursor bar
+  (`PendingChange::StartRecording` + enable capture); on the SR-16 model
+  it records when the loop reaches the armed bar. Recorded loops now
+  survive song edits (carried across `set_song` by bar index). Also
+  removed a pre-existing per-frame chord-cache resync during playback
+  (read-only `SongEngineHandle` accessors instead of `with_song`).
+  Receipt: the Song screen renders the loop controls over a 6-bar
+  progression; build green. Recording itself is Mark's to confirm with a
+  mic.
+- 2026-07-07: **S4 slice 14 — latency calibration (audio depth III).**
+  Measure the real input→output round-trip lag: play a lead of clicks,
+  tap along, read the number. A Settings panel (Calibrate → "Tap along
+  N/M" → Accept / Retry) drives the built-and-tested `CalibrationSession`
+  (correlates click times against detected onsets, takes the median).
+  The input engine now registers the onset analyzer (plus the
+  looper-capture analyzer, shared with slice 15) beside pitch;
+  calibration owns the metronome engine during a run (the host gates
+  `set_metronome`) and restores the click after. New `CalibrationStatus`
+  plus five `AudioBackend` methods; the accepted latency is stored as the
+  active compensation (the onset-timing feedback widget that consumes it
+  is the natural follow-up). Receipt: the panel renders in Settings
+  ("Latency: uncalibrated" / Calibrate); build green, 31 core + 126 audio
+  tests pass. The measurement itself is Mark's to run with a mic.
 - 2026-07-07: **S4 slice 13 — MIDI in/out (audio depth II).** Woodshed
   talks to your rig. A MIDI panel in Settings: input/output port pickers,
   "Sync to clock" (slave the transport BPM to an incoming MIDI clock),

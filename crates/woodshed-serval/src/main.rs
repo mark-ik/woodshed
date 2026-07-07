@@ -24,7 +24,7 @@ use std::sync::Arc;
 use audio::CpalBackend;
 use midi::MidiHost;
 use storage::FsStorage;
-use woodshed_core::audio::AudioBackend;
+use woodshed_core::audio::{AudioBackend, CalibrationStatus};
 use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::storage::Storage as _;
 use woodshed_views::theme::ThemeMode;
@@ -150,6 +150,8 @@ impl App {
                     if let Some(bar) = backend.song_bar() {
                         ui.song_bar_live = bar;
                     }
+                    ui.song_recording = backend.song_recording();
+                    ui.song_loop_bars = backend.song_loop_bars();
                     animating = true;
                 }
                 if ui.rehearsal_running && !ui.set.cards.is_empty() {
@@ -237,6 +239,17 @@ impl App {
                         }
                     }
                 }
+                // Latency calibration: poll while a run is active; drop
+                // out of active on any terminal status.
+                if ui.calib_active {
+                    let status = backend.calibration_poll();
+                    ui.calib_status = status;
+                    animating = true;
+                    if !matches!(status, CalibrationStatus::Running { .. }) {
+                        ui.calib_active = false;
+                    }
+                }
+                ui.latency_ms = backend.latency_ms();
                 clock_out_enabled = ui.midi.clock_out;
                 clock_out_playing = ui.transport.playing;
                 clock_out_bpm = ui.transport.bpm;
@@ -334,7 +347,10 @@ impl App {
             runner.update(|ui| {
                 ui.sync();
                 if let Some(backend) = backend {
-                    backend.set_metronome(ui.transport);
+                    // Calibration owns the metronome engine during a run.
+                    if !ui.calib_active {
+                        backend.set_metronome(ui.transport);
+                    }
                     backend.set_tuner_enabled(ui.tuner.enabled);
                     if ui.song != *last_song {
                         backend.set_song(&ui.song);
@@ -352,6 +368,39 @@ impl App {
                             backend.preview_pitches(&pitches, dur, strum);
                         }
                     }
+                    // Latency-calibration requests.
+                    if std::mem::take(&mut ui.calib_start_requested) {
+                        backend.calibration_start();
+                        ui.calib_active = true;
+                        ui.calib_status =
+                            CalibrationStatus::Running { clicks_fired: 0, total: 6 };
+                    }
+                    if std::mem::take(&mut ui.calib_cancel_requested) {
+                        backend.calibration_cancel();
+                        ui.calib_active = false;
+                        ui.calib_status = CalibrationStatus::Idle;
+                    }
+                    if std::mem::take(&mut ui.calib_accept_requested) {
+                        if let CalibrationStatus::Success { latency_ms, .. } = ui.calib_status {
+                            backend.set_latency_ms(Some(latency_ms));
+                        }
+                        ui.calib_status = CalibrationStatus::Idle;
+                    }
+                    ui.latency_ms = backend.latency_ms();
+                    // Looper (song-mode record) requests.
+                    if std::mem::take(&mut ui.song_record_toggle_requested) {
+                        if ui.song_recording {
+                            backend.song_stop_record();
+                        } else {
+                            backend.song_arm_record(ui.song_edit_cursor);
+                        }
+                    }
+                    if std::mem::take(&mut ui.song_clear_loop_requested) {
+                        backend.song_clear_loop(ui.song_edit_cursor);
+                    }
+                    backend.song_set_record_replace(ui.song_record_replace);
+                    ui.song_recording = backend.song_recording();
+                    ui.song_loop_bars = backend.song_loop_bars();
                 }
                 theme = ui.theme;
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();

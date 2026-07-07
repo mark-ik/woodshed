@@ -229,6 +229,7 @@ pub fn stage_css(p: &Palette) -> String {
          margin-right: 6px; border-radius: 6px; }}
 .t-narrow {{ padding: 4px 9px; }}
 .t-hear {{ color: {tertiary}; }}
+.rec-on {{ background-color: {danger}; color: {on_primary}; }}
 .t-readout {{ color: {text_dim}; padding: 4px 10px 4px 0; }}
 .select-box {{ background-color: {surface_2}; color: {text}; padding: 4px 12px;
               border-radius: 6px; }}
