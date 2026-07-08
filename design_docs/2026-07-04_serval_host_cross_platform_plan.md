@@ -146,6 +146,41 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-08: **S5 parity cut (woodshed half) — woodshed-xilem deleted.**
+  The old Masonry app is gone (`git rm`); woodshed-serval is now THE
+  woodshed app. The mark-ik/xilem fork stays for now: audio-widgets +
+  xilem-components (Masonry-coupled shared crates) are still consumed by
+  Strophe, and because they're woodshed members their `workspace = true`
+  fork deps resolve against woodshed's workspace — so the fork can't leave
+  woodshed without relocating them, and Strophe still needs it. Full
+  retirement is a family-wide move: refactor Strophe onto `xilem_serval`
+  and reincarnate the widget work as chisel leaves (audio-widgets is pure
+  custom paint — a canonical chisel-leaf fit; xilem-components is mostly
+  reactive structure that `xilem_serval` does natively, so it dissolves).
+  Deferred to that Strophe refactor. Manifest housekeeping: synced
+  woodshed's `[patch.crates-io] stylo`/`stylo_atoms` mirror to serval's
+  fork (`mark-ik/stylo`, `mark-ik/servo-media-features` branch — serval
+  moved stylo there); build woodshed **from its own cwd** so the
+  local-serval `[patch]` applies (Code-root + `--manifest-path` falls back
+  to the pinned git serval, which lacks the newer transition API).
+- 2026-07-08: **Polish tail — window fixes, CSS transitions, Hero receipt.**
+  - Right-edge clip fixed (`.root` was `width:100%` + 32px padding in
+    content-box, so it rendered wider than the window and the search field
+    and CSD × spilled off the right and clipped): `box-sizing: border-box`.
+    The off-screen × had also caused a mis-aimed click to hit another window.
+  - Resize-arrow cursors on border hover (undecorated CSD windows get none
+    from the OS): `edge_cursor` + `update_resize_cursor`, 8px grab margin.
+    Shipped with the clip fix + a default-window shrink (720→664 logical,
+    top-anchored, so it clears the taskbar on a 720-tall laptop screen) as
+    `c7044fe`.
+  - CSS transitions on serval's new `transition_events` / `tick_animations`:
+    subtle hover/active fades on buttons, tabs, lenses, and cards. The host
+    ticks serval's animation clock each frame (in redraw before `apply`,
+    and in hover before `set_interaction`, so a flip runs from *now* not a
+    stale idle clock) and requests frames only while
+    `has_active_animations()`, so idle surfaces stay idle.
+  - Hero-layout receipt captured (fretboard full-width on top, catalog a
+    wrapping strip beneath).
 - 2026-07-07: **S4 slice 15 — the looper (audio depth IV).** Record your
   part into a song bar as it loops past — overdub or replace — and clear
   it. The Song screen gains a Rec / Overdub-Replace / Clear-loop row and

@@ -85,6 +85,9 @@ struct App {
     close_requested: bool,
     /// Last resize-edge the cursor was over, to dedup `set_cursor` calls.
     resize_hint: Option<winit::window::ResizeDirection>,
+    /// Monotonic base for the CSS-transition animation clock (seconds
+    /// since app start).
+    anim_base: std::time::Instant,
 }
 
 /// Resolve a MIDI port dropdown selection to a connect target: index 0
@@ -308,7 +311,8 @@ impl App {
         let scale = window.scale_factor() as f32;
         let (lw, lh) = (pw as f32 / scale, ph as f32 / scale);
 
-        let scene = {
+        let now_s = self.anim_base.elapsed().as_secs_f64();
+        let (scene, anim_active) = {
             let dom = runner.dom();
             let mut muts: Vec<DomMutation<NodeId>> = Vec::new();
             dom.borrow_mut().drain_mutations(&mut muts);
@@ -320,6 +324,11 @@ impl App {
             let size_changed = self.layout_size != (lw, lh);
             match self.layout.as_mut() {
                 Some(layout) if !structural && !size_changed => {
+                    // Advance the CSS-transition clock to now (interpolating
+                    // any in-flight transitions), then apply this frame's
+                    // mutations — so a transition a class-swap starts runs
+                    // from *now*, not a stale idle-frozen clock.
+                    let _ = layout.tick_animations(&*dom_ref, now_s);
                     if !muts.is_empty() {
                         let _ = layout.apply(&*dom_ref, &sheets, &muts);
                     }
@@ -336,6 +345,7 @@ impl App {
                 }
             }
             let layout = self.layout.as_ref().expect("layout just ensured");
+            let anim_active = layout.has_active_animations();
             let list = layout.emit_paint_list(
                 &*dom_ref,
                 &ScrollOffsets::default(),
@@ -347,7 +357,7 @@ impl App {
                 list.fonts(),
                 list.images(),
             );
-            translated.scene
+            (translated.scene, anim_active)
         };
 
         let (_tex, view) = host.core().rasterize_scaled(
@@ -370,7 +380,7 @@ impl App {
             ExternalTexturePlacement::new([0.0, 0.0, pw as f32, ph as f32]),
         );
         frame.present();
-        if tuner_live {
+        if tuner_live || anim_active {
             window.request_redraw();
         }
     }
@@ -531,6 +541,11 @@ impl App {
         }
         self.last_hover = hovered;
         self.last_focus = focused;
+        // Bring the transition clock to now before the flip, so a
+        // hover/focus transition runs from now rather than a stale
+        // idle-frozen clock (same reason as the redraw tick).
+        let now_s = self.anim_base.elapsed().as_secs_f64();
+        let _ = layout.tick_animations(&*dom_ref, now_s);
         let state = InteractionState {
             hovered: hovered.map(SourceNodeId),
             focused: focused.map(SourceNodeId),
@@ -761,6 +776,7 @@ fn main() {
         last_song: woodshed_core::song::SongDoc::default(),
         close_requested: false,
         resize_hint: None,
+        anim_base: std::time::Instant::now(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }

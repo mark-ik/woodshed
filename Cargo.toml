@@ -4,9 +4,14 @@ members = [
     "crates/woodshedding",
     "crates/woodshed-audio",
     "crates/audio-primitives",
+    # xilem-components + audio-widgets are the Masonry-coupled shared
+    # crates (consumed by Strophe). They — and the mark-ik/xilem fork
+    # below — retire when Strophe refactors onto xilem_serval and the
+    # widget work becomes chisel leaves. The old Masonry app
+    # (woodshed-xilem) was deleted at the S5 parity cut; woodshed-serval
+    # is now the woodshed app.
     "crates/xilem-components",
     "crates/audio-widgets",
-    "crates/woodshed-xilem",
     "crates/woodshed-core",
     "crates/woodshed-views",
     "crates/woodshed-serval",
@@ -38,30 +43,24 @@ audio-primitives = { path = "crates/audio-primitives", version = "0.1.0" }
 xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # (pitch-detection is declared further down under "Audio".)
 
-# UI — Xilem (decision locked 2026-05-18; iced retired).
-# Woodshed rides its own lean fork branch: `woodshed-theme` on
-# github.com/mark-ik/xilem = `upstream/main` + the single PR #1822 commit
-# `WindowView::with_default_properties` (no-restart retheme). Masonry's
-# `set_default_properties` (PR #1821) is already upstream, so no masonry patch
-# is carried; this also rides upstream's wgpu-28/vello-0.8 rather than the
-# mere/serval `mere-wgpu-29-vello-0-9` fork.
-#
-# GIT deps (not path) so woodshed-xilem builds on any machine (Win/macOS/Linux)
-# without the local `crates/xilem-woodshed` worktree. Cargo.lock pins the exact
-# commit, so builds stay reproducible; `cargo update -p xilem` re-locks to the
-# branch tip. To iterate on the fork locally, override these with the worktree
-# via a machine-local `paths = [...]` in a parent `.cargo/config.toml` (e.g.
-# `crates/../.cargo/config.toml`) — don't edit this file for that. Switch to
-# crates.io once #1822 lands and a masonry release ships. Keep default features
-# (incl. `imaging_vello`); disabling them panics the Masonry imaging layer with
-# "a renderer backend feature is required" at first paint.
+# UI — Xilem/Masonry fork (`woodshed-theme` on github.com/mark-ik/xilem).
+# The old Masonry woodshed app (woodshed-xilem) was deleted at the S5 parity
+# cut; these deps now serve ONLY the shared crates xilem-components +
+# audio-widgets (consumed by Strophe). They retire family-wide when Strophe
+# refactors onto xilem_serval and the widget work becomes chisel leaves —
+# tracked in design_docs. Until then the wgpu-28/vello-0.8 Masonry tree
+# coexists with the serval stack's wgpu-29/vello-0.9.
+# Keep default features (incl. `imaging_vello`); disabling them panics the
+# Masonry imaging layer with "a renderer backend feature is required" at
+# first paint.
 xilem = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
 masonry = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
 masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
 winit = "0.30"
 
-# UI — serval host (2026-07-04 serval-host plan; retires the xilem fork at
-# the S5 parity cut). GIT deps on the owned repos so any machine resolves;
+# UI — serval host (2026-07-04 serval-host plan). The woodshed app now
+# rides this stack exclusively. GIT deps on the owned repos so any machine
+# resolves;
 # local checkouts are picked up via the gitignored .cargo/config.toml
 # source-specific [patch] overrides (the mere pattern). serval's internal
 # path deps (layout-dom-api, xilem-core, ...) resolve inside its git
@@ -77,7 +76,7 @@ paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "m
 paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # wgpu for host-side surface/compose types only; backend features come from
 # netrender's own per-target manifest split. The serval stack is wgpu 29;
-# woodshed-xilem's wgpu 28 tree coexists until the S5 parity cut.
+# the shared Masonry crates' wgpu 28 tree coexists until the Strophe refactor.
 wgpu = { version = "29", default-features = false, features = ["std"] }
 
 # Theming: pure OKLCH seed-to-palette derivation (Strophos-family shared
@@ -118,12 +117,14 @@ serde_json = "1.0"
 # taffy + ipc-channel are vendored inside the serval repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
-# stylo_taffy names crates.io stylo/stylo_atoms ^0.18; serval pins the
-# same crates from the servo/stylo git rev (the v0.18.0 release tag), and
-# stylo declares links = "servo_style_crate" (one Stylo per graph), so
-# redirect to the same rev to unify.
-stylo = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
-stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
+# stylo_taffy names crates.io stylo/stylo_atoms ^0.18; serval now pins the
+# same crates from the mark-ik/stylo fork (`mark-ik/servo-media-features`
+# branch, Servo-mode capabilities), and stylo declares
+# links = "servo_style_crate" (one Stylo per graph), so mirror serval's
+# patch to the same fork branch to unify. (Was servo/stylo@8bde0e96 until
+# serval moved to the fork.)
+stylo = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
+stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
 # serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's
 # vendored float-layout fork, not on crates.io).
 taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }

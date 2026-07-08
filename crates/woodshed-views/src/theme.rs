@@ -274,6 +274,14 @@ pub fn stage_css(p: &Palette) -> String {
 .select-option:hover {{ background-color: {surface_hover}; }}
 .film-card:hover {{ border: 1px solid {secondary}; }}
 .prog-card:hover {{ background-color: {surface_hover}; }}
+/* CSS transitions (serval transition_events): subtle hover/active fades
+   on the interactive chrome. The host ticks the animation clock each
+   frame while any transition runs. */
+.t-btn, .chrome-btn, .side-item, .select-box, .select-option,
+.search-item, .prog-card {{ transition: background-color 0.12s ease, color 0.12s ease; }}
+.pill, .lens {{ transition: background-color 0.14s ease, color 0.14s ease; }}
+.film-card, .recipe-tile, .bar-chip {{ transition: border-color 0.14s ease, background-color 0.14s ease; }}
+.search-wrap input {{ transition: border-color 0.12s ease; }}
 "#
     )
 }
