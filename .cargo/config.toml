@@ -1,3 +1,13 @@
+# Local dev overrides, intentionally uncommitted (machine paths).
+#
+# NO override for the mark-ik/xilem fork: woodshed-xilem rides its git dep.
+# The old global `paths = [".../xilem-woodshed"]` override matched by package
+# NAME across the whole graph, so the fork's `xilem_core` hijacked serval's
+# vendored `xilem_core` (surfaced 2026-07-05 when serval's copy grew
+# ElementSplice::hoist_pending); and a source-keyed [patch] can't work either,
+# because two PATH-sourced `xilem_core v0.4.0` collide in the lockfile. If
+# fork iteration resumes, prefer pushing to the fork branch and re-locking.
+
 # Xilem's deeply-nested generic view types blow the Windows PDB
 # symbol limit on dev builds (LNK4319). The linker has a "truncate
 # long symbol names rather than fail" mode that solves this without
@@ -7,3 +17,25 @@
 # Only applied on Windows MSVC; no-op on Linux/macOS toolchains.
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
+
+# Local serval/netrender checkouts (the mere pattern: source-specific
+# [patch] entries, not `paths`, so dependency-list changes in the sibling
+# checkouts don't trigger the path-override warning storm). Lists component
+# dirs but NOT serval's support/patches/* so it never collides with the
+# committed [patch.crates-io] taffy/ipc-channel redirects.
+[patch."https://github.com/mark-ik/serval.git"]
+"layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
+"serval-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-layout" }
+"serval-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-scripted-dom" }
+"serval-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-winit-host" }
+"xilem-serval" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
+xilem_core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
+
+[patch."https://github.com/mark-ik/tinct"]
+tinct = { path = "C:/Users/mark_/Code/repos/tincture" }
+
+[patch."https://github.com/mark-ik/netrender.git"]
+netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }
+netrender_device = { path = "C:/Users/mark_/Code/repos/netrender/netrender_device" }
+paint_list_api = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_api" }
+paint_list_render = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_render" }

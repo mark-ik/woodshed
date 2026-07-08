@@ -15,6 +15,9 @@ members = [
     "crates/woodshed-core",
     "crates/woodshed-views",
     "crates/woodshed-serval",
+    # The chartulary substrate's first real consumer (G3): woodshed's theory
+    # catalog as a content graph. Folded in from its own repo 2026-07-08.
+    "crates/woodshed-graph",
 ]
 
 [workspace.package]
