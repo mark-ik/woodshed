@@ -83,6 +83,8 @@ struct App {
     last_song: woodshed_core::song::SongDoc,
     /// Set by the chrome close button; drives event-loop exit.
     close_requested: bool,
+    /// Last resize-edge the cursor was over, to dedup `set_cursor` calls.
+    resize_hint: Option<winit::window::ResizeDirection>,
 }
 
 /// Resolve a MIDI port dropdown selection to a connect target: index 0
@@ -96,10 +98,10 @@ fn midi_port_at(ports: &[String], selected: usize) -> Option<String> {
 }
 
 /// Which resize edge a point near the window border maps to, in logical
-/// coordinates with a 6px grab margin. `None` in the interior.
+/// coordinates with an 8px grab margin. `None` in the interior.
 fn resize_edge(x: f32, y: f32, w: f32, h: f32) -> Option<winit::window::ResizeDirection> {
     use winit::window::ResizeDirection as R;
-    const M: f32 = 6.0;
+    const M: f32 = 8.0;
     let left = x <= M;
     let right = x >= w - M;
     let top = y <= M;
@@ -117,9 +119,47 @@ fn resize_edge(x: f32, y: f32, w: f32, h: f32) -> Option<winit::window::ResizeDi
     }
 }
 
+/// The resize cursor icon for a border direction — an undecorated (CSD)
+/// window gets no OS resize cursors, so the app supplies the affordance.
+fn edge_cursor(dir: winit::window::ResizeDirection) -> winit::window::CursorIcon {
+    use winit::window::{CursorIcon as C, ResizeDirection as R};
+    match dir {
+        R::East | R::West => C::EwResize,
+        R::North | R::South => C::NsResize,
+        R::NorthEast | R::SouthWest => C::NeswResize,
+        R::NorthWest | R::SouthEast => C::NwseResize,
+    }
+}
+
 impl App {
     fn scale_factor(&self) -> f64 {
         self.window.as_ref().map_or(1.0, |w| w.scale_factor())
+    }
+
+    /// Show the matching resize arrow near a floating window's border, the
+    /// default cursor elsewhere. An undecorated (CSD) window gets no OS
+    /// resize cursors, so we supply the affordance ourselves. Deduped via
+    /// `resize_hint` so we only touch the cursor on a transition.
+    fn update_resize_cursor(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let dir = if window.is_maximized() {
+            None
+        } else {
+            let size = window.inner_size();
+            let s = window.scale_factor() as f32;
+            resize_edge(
+                self.cursor.0,
+                self.cursor.1,
+                size.width as f32 / s,
+                size.height as f32 / s,
+            )
+        };
+        if dir != self.resize_hint {
+            self.resize_hint = dir;
+            window.set_cursor(dir.map(edge_cursor).unwrap_or(winit::window::CursorIcon::Default));
+        }
     }
 
     fn redraw(&mut self) {
@@ -568,7 +608,12 @@ impl ApplicationHandler for App {
                         // CSD: the app draws its own chrome (title row,
                         // window buttons, drag surface, edge resize).
                         .with_decorations(false)
-                        .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 720.0)),
+                        // Top-anchored and short enough to clear the taskbar
+                        // on a 720-logical-tall laptop screen (664 fits a
+                        // ~672 work area); the OS/compositor may override the
+                        // position (e.g. Wayland), which is fine.
+                        .with_position(winit::dpi::LogicalPosition::new(40.0, 8.0))
+                        .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 664.0)),
                 )
                 .expect("create window"),
         );
@@ -632,6 +677,7 @@ impl ApplicationHandler for App {
                     (position.x / scale) as f32,
                     (position.y / scale) as f32,
                 );
+                self.update_resize_cursor();
                 self.hover();
             }
             WindowEvent::MouseInput {
@@ -714,6 +760,7 @@ fn main() {
         last_focus: None,
         last_song: woodshed_core::song::SongDoc::default(),
         close_requested: false,
+        resize_hint: None,
     };
     event_loop.run_app(&mut app).expect("run app");
 }

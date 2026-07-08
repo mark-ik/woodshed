@@ -158,7 +158,8 @@ pub fn stage_css(p: &Palette) -> String {
     let danger = color_to_hex(p.danger);
     format!(
         r#"
-.root {{ width: 100%; height: 100%; background-color: {bg}; color: {text};
+.root {{ width: 100%; height: 100%; box-sizing: border-box;
+        background-color: {bg}; color: {text};
         font-family: sans-serif; font-size: 14px; padding: 8px 16px 16px 16px; }}
 .chrome {{ display: flex; margin-bottom: 10px; }}
 .chrome-title {{ color: {text_header}; font-size: 15px; padding: 4px 8px 4px 0; }}
