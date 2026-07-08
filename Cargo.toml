@@ -4,14 +4,6 @@ members = [
     "crates/woodshedding",
     "crates/woodshed-audio",
     "crates/audio-primitives",
-    # xilem-components + audio-widgets are the Masonry-coupled shared
-    # crates (consumed by Strophe). They — and the mark-ik/xilem fork
-    # below — retire when Strophe refactors onto xilem_serval and the
-    # widget work becomes chisel leaves. The old Masonry app
-    # (woodshed-xilem) was deleted at the S5 parity cut; woodshed-serval
-    # is now the woodshed app.
-    "crates/xilem-components",
-    "crates/audio-widgets",
     "crates/woodshed-core",
     "crates/woodshed-views",
     "crates/woodshed-serval",
@@ -33,32 +25,16 @@ woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
 # Portable state/logic core for the serval-host stack (W1.1 split).
 woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
-# Shared audio widgets (waveform, …) — also consumed cross-repo by
-# Strophe via path-dep; the first `audio-widgets` extraction.
-audio-widgets = { path = "crates/audio-widgets", version = "0.1.0" }
 # Shared pure-DSP primitives (click synth, onset/tempo, latency) — the
 # `audio-primitives` extraction. Pure std; consumed by woodshed-audio
 # here and cross-repo by strophe-engine via path-dep.
 audio-primitives = { path = "crates/audio-primitives", version = "0.1.0" }
-# Domain-neutral reusable UI components (combobox, …) — the generic
-# design-system layer shared by all three Xilem apps (Woodshed,
-# Strophe, Mere). audio-widgets sits one layer above this.
-xilem-components = { path = "crates/xilem-components", version = "0.1.0" }
 # (pitch-detection is declared further down under "Audio".)
 
-# UI — Xilem/Masonry fork (`woodshed-theme` on github.com/mark-ik/xilem).
-# The old Masonry woodshed app (woodshed-xilem) was deleted at the S5 parity
-# cut; these deps now serve ONLY the shared crates xilem-components +
-# audio-widgets (consumed by Strophe). They retire family-wide when Strophe
-# refactors onto xilem_serval and the widget work becomes chisel leaves —
-# tracked in design_docs. Until then the wgpu-28/vello-0.8 Masonry tree
-# coexists with the serval stack's wgpu-29/vello-0.9.
-# Keep default features (incl. `imaging_vello`); disabling them panics the
-# Masonry imaging layer with "a renderer backend feature is required" at
-# first paint.
-xilem = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
-masonry = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
-masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
+# The mark-ik/xilem Masonry fork is fully retired (2026-07-08): its last
+# consumers — the shared xilem-components + audio-widgets crates, used by
+# Strophe's Masonry app — are gone now Strophe runs on xilem_serval with
+# chisel leaves. woodshed itself has been serval-only since the S5 cut.
 winit = "0.30"
 
 # UI — serval host (2026-07-04 serval-host plan). The woodshed app now
