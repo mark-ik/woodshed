@@ -10,6 +10,11 @@ description = "Woodshed's portable state/logic core: app state over the woodshed
 [dependencies]
 woodshedding = { workspace = true }
 serde = { workspace = true }
+# Persona-keyed encrypt-at-rest for the private practice session — the woodshed
+# pole of the personae suite adoption (one persona, many devices, sealed state).
+# Sibling repo, like woodshed-graph's chartulary path dep.
+personae = { path = "../../../personae" }
+hex = "0.4"
 
 [dev-dependencies]
 serde_json = { workspace = true }
