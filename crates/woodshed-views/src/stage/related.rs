@@ -5,7 +5,7 @@ use super::{UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 pub(super) fn panel(ui: &UiState) -> UiChild {
     let suggestions = ui.stage.related_material_configured(
         &ui.practice_history,
-        &ui.related,
+        &ui.app_settings.stage.related,
         5,
     );
     let rows: Vec<UiChild> = suggestions
@@ -50,8 +50,9 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                                 clickable(
                                     el("div", text("Hide")).attr("class", "related-hide"),
                                     move |ui: &mut UiState, _| {
-                                        if !ui.related.dismissed_ids.contains(&dismiss_id) {
-                                            ui.related.dismissed_ids.push(dismiss_id.clone());
+                                        let related = &mut ui.app_settings.stage.related;
+                                        if !related.dismissed_ids.contains(&dismiss_id) {
+                                            related.dismissed_ids.push(dismiss_id.clone());
                                         }
                                     },
                                 ),
@@ -109,7 +110,7 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
             .attr("class", "related-history"),
         )
     };
-    let graph: UiChild = if ui.related.show_neighborhood {
+    let graph: UiChild = if ui.app_settings.stage.related.show_neighborhood {
         Box::new(
             el(
                 "div",

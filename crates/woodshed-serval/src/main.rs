@@ -191,7 +191,7 @@ impl App {
             .stage
             .neighborhood_snapshot(
                 &runner.state().practice_history,
-                &runner.state().related,
+                &runner.state().app_settings.stage.related,
                 8,
             );
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -421,7 +421,7 @@ impl App {
                     if let Some(bpm) = midi_clock_bpm {
                         let bpm = bpm.clamp(30.0, 300.0);
                         if (ui.transport.bpm - bpm).abs() > 0.3 {
-                            ui.transport.bpm = bpm;
+                            ui.set_bpm(bpm);
                             backend.set_metronome(ui.transport);
                         }
                     }
@@ -613,7 +613,7 @@ impl App {
                     ui.song_recording = backend.song_recording();
                     ui.song_loop_bars = backend.song_loop_bars();
                 }
-                theme = ui.theme;
+                theme = ui.theme();
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();
             });
         }
@@ -835,8 +835,8 @@ impl ApplicationHandler for App {
                 Err(e) => eprintln!("[woodshed-serval] ignoring corrupt session: {e}"),
             }
         }
-        self.theme = ui.theme;
-        self.sheet = ui.theme.css();
+        self.theme = ui.theme();
+        self.sheet = ui.theme().css();
         // Populate the MIDI port pickers with what's plugged in now.
         ui.midi.input_ports = self.midi.input_ports();
         ui.midi.output_ports = self.midi.output_ports();

@@ -351,3 +351,12 @@ receipts are recorded before those platforms are advertised.
   round-trip coverage. The nested Settings page is now a core enum and restores
   with the session. P2 remains partial until contextual controls bind directly
   to `AppSettings` and the currently empty subsections gain real runtime knobs.
+- **2026-07-11, contextual settings binding:** `UiState` now owns one
+  `AppSettings`; theme, fretboard layout, tuning, Related/history behavior,
+  metronome tempo, and the active Settings page read and write it directly.
+  Transient transport playback still lives in `TransportState`, with tempo
+  mutation routed through `UiState` so the durable metronome setting stays in
+  sync. `PersistedSession` snapshots the canonical model instead of rebuilding
+  a parallel settings copy. Verified 39 core tests and checks for views and the
+  desktop host. P2 now remains open only for real settings in the empty
+  Instrument, Tuner, Rehearsal, Looper, Audio/MIDI, and Accessibility sections.

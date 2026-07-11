@@ -46,13 +46,13 @@ fn metronome(ui: &UiState) -> UiChild {
                         ),
                         clickable(
                             el("div", text("-5")).attr("class", "t-btn"),
-                            |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
+                            |ui: &mut UiState, _| ui.nudge_bpm(-5.0),
                         ),
                         el("div", text(format!("{:.0} bpm", ui.transport.bpm)))
                             .attr("class", "t-readout"),
                         clickable(
                             el("div", text("+5")).attr("class", "t-btn"),
-                            |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
+                            |ui: &mut UiState, _| ui.nudge_bpm(5.0),
                         ),
                     ),
                 )

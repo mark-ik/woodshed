@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use crate::arpeggio::ArpeggioDirection;
 pub use crate::settings::RelatedSettings;
 use crate::settings::AppSettings;
-use crate::settings::SettingsPage;
 use crate::{Lens, StageState};
 
 /// The host-supplied persistence realization.
@@ -94,14 +93,10 @@ impl Default for PersistedSession {
         Self::capture(
             &StageState::new(),
             AppSection::Stage,
-            SettingsPage::General,
-            120.0,
-            "Slate",
-            "Two pane",
+            &AppSettings::default(),
             &woodshedding::rehearsal::Set::default(),
             &crate::song::SongDoc::default(),
             &crate::history::PracticeHistory::default(),
-            &RelatedSettings::default(),
         )
     }
 }
@@ -111,33 +106,13 @@ impl PersistedSession {
     pub fn capture(
         stage: &StageState,
         section: AppSection,
-        settings_page: SettingsPage,
-        bpm: f32,
-        theme: &str,
-        board_layout: &str,
+        settings: &AppSettings,
         set: &woodshedding::rehearsal::Set,
         song: &crate::song::SongDoc,
         practice_history: &crate::history::PracticeHistory,
-        related: &RelatedSettings,
     ) -> Self {
         Self {
-            settings: AppSettings {
-                page: settings_page,
-                appearance: crate::settings::AppearanceSettings {
-                    theme: theme.to_string(),
-                },
-                tuning: crate::settings::TuningSettings {
-                    tuning_idx: stage.tuning_idx,
-                },
-                stage: crate::settings::StageSettings {
-                    related: related.clone(),
-                },
-                fretboard: crate::settings::FretboardSettings {
-                    board_layout: board_layout.to_string(),
-                },
-                metronome: crate::settings::MetronomeSettings { bpm },
-                ..AppSettings::default()
-            },
+            settings: settings.clone(),
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
@@ -265,18 +240,29 @@ mod tests {
             show_neighborhood: false,
             dismissed_ids: vec![woodshed_graph::chord_id("Minor 7")],
         };
+        let settings = AppSettings {
+            page: crate::settings::SettingsPage::Tuning,
+            appearance: crate::settings::AppearanceSettings {
+                theme: "Ember".into(),
+            },
+            tuning: crate::settings::TuningSettings { tuning_idx: 3 },
+            stage: crate::settings::StageSettings {
+                related: related.clone(),
+            },
+            fretboard: crate::settings::FretboardSettings {
+                board_layout: "Hero".into(),
+            },
+            metronome: crate::settings::MetronomeSettings { bpm: 96.0 },
+            ..AppSettings::default()
+        };
         let snap =
             PersistedSession::capture(
                 &stage,
                 AppSection::Settings,
-                SettingsPage::Tuning,
-                96.0,
-                "Ember",
-                "Hero",
+                &settings,
                 &set,
                 &song,
                 &history,
-                &related,
             );
         let json = serde_json::to_string(&snap).unwrap();
         let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -294,7 +280,7 @@ mod tests {
         assert_eq!(restored.arpeggio_inversion, 2);
         assert_eq!(restored.progression_idx, Some(1));
         assert_eq!(back.section, AppSection::Settings);
-        assert_eq!(back.settings.page, SettingsPage::Tuning);
+        assert_eq!(back.settings.page, crate::settings::SettingsPage::Tuning);
         assert_eq!(back.settings.metronome.bpm, 96.0);
         assert_eq!(back.settings.appearance.theme, "Ember");
         assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");

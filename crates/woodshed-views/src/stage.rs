@@ -12,9 +12,9 @@ use std::collections::HashMap;
 use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
-use woodshed_core::settings::SettingsPage;
+use woodshed_core::settings::{AppSettings, SettingsPage};
 use woodshed_core::song::SongDoc;
-use woodshed_core::storage::{AppSection, PersistedSession, RelatedSettings};
+use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::Set;
 use xilem_serval::{
@@ -177,7 +177,7 @@ pub struct UiState {
     pub stage: StageState,
     pub set: Set,
     pub practice_history: PracticeHistory,
-    pub related: RelatedSettings,
+    pub app_settings: AppSettings,
     /// Rehearsal dwell transport running (transient).
     pub rehearsal_running: bool,
     pub song: SongDoc,
@@ -191,9 +191,6 @@ pub struct UiState {
     pub section: AppSection,
     pub stage_page: StagePage,
     pub tool_page: ToolPage,
-    pub settings_page: SettingsPage,
-    pub theme: ThemeMode,
-    pub board_layout: BoardLayout,
     /// Host-observed width band. This is transient rather than a user setting.
     pub viewport: ViewportClass,
     /// Window-chrome requests the host consumes after dispatch (CSD).
@@ -245,7 +242,7 @@ impl UiState {
         Self {
             set: Set::default(),
             practice_history: PracticeHistory::default(),
-            related: RelatedSettings::default(),
+            app_settings: AppSettings::default(),
             rehearsal_running: false,
             song: SongDoc::default(),
             song_playing: false,
@@ -255,9 +252,6 @@ impl UiState {
             section: AppSection::Stage,
             stage_page: StagePage::default(),
             tool_page: ToolPage::default(),
-            settings_page: SettingsPage::default(),
-            theme: ThemeMode::default(),
-            board_layout: BoardLayout::default(),
             viewport: ViewportClass::default(),
             chrome_minimize: false,
             chrome_maximize: false,
@@ -329,6 +323,7 @@ impl UiState {
             }
             SearchHit::Tuning(i) => {
                 self.stage.set_tuning(i);
+                self.app_settings.tuning.tuning_idx = self.stage.tuning_idx;
                 self.tuning_dd = SelectState::new(self.stage.tuning_idx);
                 self.section = AppSection::Stage;
             }
@@ -341,7 +336,34 @@ impl UiState {
     /// `SelectState`).
     pub fn sync(&mut self) {
         self.stage.set_tuning(self.tuning_dd.selected);
+        self.app_settings.tuning.tuning_idx = self.stage.tuning_idx;
         self.stage.set_root(self.root_dd.selected);
+    }
+
+    pub fn theme(&self) -> ThemeMode {
+        ThemeMode::from_name(&self.app_settings.appearance.theme).unwrap_or_default()
+    }
+
+    pub fn set_theme(&mut self, theme: ThemeMode) {
+        self.app_settings.appearance.theme = theme.label().to_string();
+    }
+
+    pub fn board_layout(&self) -> BoardLayout {
+        BoardLayout::from_name(&self.app_settings.fretboard.board_layout).unwrap_or_default()
+    }
+
+    pub fn set_board_layout(&mut self, layout: BoardLayout) {
+        self.app_settings.fretboard.board_layout = layout.label().to_string();
+    }
+
+    pub fn nudge_bpm(&mut self, delta: f32) {
+        self.transport.nudge_bpm(delta);
+        self.app_settings.metronome.bpm = self.transport.bpm;
+    }
+
+    pub fn set_bpm(&mut self, bpm: f32) {
+        self.transport.bpm = bpm.clamp(30.0, 300.0);
+        self.app_settings.metronome.bpm = self.transport.bpm;
     }
 
     /// Update the transient layout band after a host resize. Returns whether a
@@ -422,14 +444,10 @@ impl UiState {
         PersistedSession::capture(
             &self.stage,
             self.section,
-            self.settings_page,
-            self.transport.bpm,
-            self.theme.label(),
-            self.board_layout.label(),
+            &self.app_settings,
             &self.set,
             &self.song,
             &self.practice_history,
-            &self.related,
         )
     }
 
@@ -440,13 +458,9 @@ impl UiState {
         self.set = session.set.clone();
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
-        self.related = session.settings.stage.related.clone();
+        self.app_settings = session.settings.clone();
         self.section = session.section;
-        self.settings_page = session.settings.page;
         self.transport.bpm = session.settings.metronome.bpm.clamp(30.0, 300.0);
-        self.theme = ThemeMode::from_name(&session.settings.appearance.theme).unwrap_or_default();
-        self.board_layout = BoardLayout::from_name(&session.settings.fretboard.board_layout)
-            .unwrap_or_default();
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
     }
@@ -524,12 +538,12 @@ fn transport(ui: &UiState) -> UiChild {
                 ),
                 clickable(
                     el("div", text("-")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
+                    |ui: &mut UiState, _| ui.nudge_bpm(-5.0),
                 ),
                 el("div", text(format!("{:.0} bpm", ui.transport.bpm))).attr("class", "t-readout"),
                 clickable(
                     el("div", text("+")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
+                    |ui: &mut UiState, _| ui.nudge_bpm(5.0),
                 ),
                 clickable(
                     el("div", text("♪ Hear")).attr("class", "t-btn t-hear"),
@@ -1066,7 +1080,7 @@ fn stage_screen(ui: &UiState) -> UiChild {
     if ui.stage_page == StagePage::Templates {
         return Box::new(el("div", (header(ui), lens_strip(ui), templates::screen(ui))));
     }
-    let body: UiChild = match (ui.board_layout, ui.viewport) {
+    let body: UiChild = match (ui.board_layout(), ui.viewport) {
         (BoardLayout::TwoPane, ViewportClass::Wide) => {
             Box::new(el("div", (sidebar(ui), board(ui), related::panel(ui))).attr("class", "body"))
         }
@@ -1146,7 +1160,7 @@ pub fn stage_root(ui: &UiState) -> UiChild {
         )
         .attr(
             "class",
-            format!("root {} {}", ui.board_layout.class(), ui.viewport.class()),
+            format!("root {} {}", ui.board_layout().class(), ui.viewport.class()),
         ),
     )
 }

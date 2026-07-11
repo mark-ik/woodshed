@@ -154,14 +154,14 @@ fn page_nav(ui: &UiState) -> UiChild {
     let items: Vec<UiChild> = SettingsPage::ALL
         .iter()
         .map(|&(page, label)| {
-            let class = if page == ui.settings_page {
+            let class = if page == ui.app_settings.page {
                 "side-item side-active"
             } else {
                 "side-item"
             };
             Box::new(clickable(
                 el("div", text(label)).attr("class", class),
-                move |ui: &mut UiState, _| ui.settings_page = page,
+                move |ui: &mut UiState, _| ui.app_settings.page = page,
             )) as UiChild
         })
         .collect();
@@ -199,14 +199,14 @@ fn appearance_page(ui: &UiState) -> UiChild {
     let themes: Vec<UiChild> = ThemeMode::ALL
         .iter()
         .map(|&mode| {
-            let class = if mode == ui.theme {
+            let class = if mode == ui.theme() {
                 "side-item side-active"
             } else {
                 "side-item"
             };
             Box::new(clickable(
                 el("div", text(mode.label())).attr("class", class),
-                move |ui: &mut UiState, _| ui.theme = mode,
+                move |ui: &mut UiState, _| ui.set_theme(mode),
             )) as UiChild
         })
         .collect();
@@ -270,17 +270,17 @@ fn tuning_page(ui: &UiState) -> UiChild {
 }
 
 fn stage_page(ui: &UiState) -> UiChild {
-    let history_label = if ui.related.use_history {
+    let history_label = if ui.app_settings.stage.related.use_history {
         "History ranking: on"
     } else {
         "History ranking: off"
     };
-    let graph_label = if ui.related.show_neighborhood {
+    let graph_label = if ui.app_settings.stage.related.show_neighborhood {
         "Neighborhood graph: on"
     } else {
         "Neighborhood graph: off"
     };
-    let hidden_count = ui.related.dismissed_ids.len();
+    let hidden_count = ui.app_settings.stage.related.dismissed_ids.len();
     Box::new(
         el(
             "div",
@@ -288,18 +288,24 @@ fn stage_page(ui: &UiState) -> UiChild {
                 el("div", text("Stage")).attr("class", "settings-heading"),
                 clickable(
                     el("div", text(history_label)).attr("class", "side-item"),
-                    |ui: &mut UiState, _| ui.related.use_history = !ui.related.use_history,
+                    |ui: &mut UiState, _| {
+                        let related = &mut ui.app_settings.stage.related;
+                        related.use_history = !related.use_history;
+                    },
                 ),
                 clickable(
                     el("div", text(graph_label)).attr("class", "side-item"),
                     |ui: &mut UiState, _| {
-                        ui.related.show_neighborhood = !ui.related.show_neighborhood;
+                        let related = &mut ui.app_settings.stage.related;
+                        related.show_neighborhood = !related.show_neighborhood;
                     },
                 ),
                 clickable(
                     el("div", text(format!("Restore hidden ({hidden_count})")))
                         .attr("class", "side-item"),
-                    |ui: &mut UiState, _| ui.related.dismissed_ids.clear(),
+                    |ui: &mut UiState, _| {
+                        ui.app_settings.stage.related.dismissed_ids.clear();
+                    },
                 ),
             ),
         )
@@ -311,14 +317,14 @@ fn fretboard_page(ui: &UiState) -> UiChild {
     let layouts: Vec<UiChild> = BoardLayout::ALL
         .iter()
         .map(|&layout| {
-            let class = if layout == ui.board_layout {
+            let class = if layout == ui.board_layout() {
                 "side-item side-active"
             } else {
                 "side-item"
             };
             Box::new(clickable(
                 el("div", text(layout.label())).attr("class", class),
-                move |ui: &mut UiState, _| ui.board_layout = layout,
+                move |ui: &mut UiState, _| ui.set_board_layout(layout),
             )) as UiChild
         })
         .collect();
@@ -345,13 +351,13 @@ fn metronome_page(ui: &UiState) -> UiChild {
                     (
                         clickable(
                             el("div", text("-5")).attr("class", "t-btn"),
-                            |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
+                            |ui: &mut UiState, _| ui.nudge_bpm(-5.0),
                         ),
                         el("div", text(format!("{:.0} bpm", ui.transport.bpm)))
                             .attr("class", "t-readout"),
                         clickable(
                             el("div", text("+5")).attr("class", "t-btn"),
-                            |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
+                            |ui: &mut UiState, _| ui.nudge_bpm(5.0),
                         ),
                     ),
                 )
@@ -468,7 +474,7 @@ fn accessibility_page(_ui: &UiState) -> UiChild {
 }
 
 pub(super) fn screen(ui: &UiState) -> UiChild {
-    let page = match ui.settings_page {
+    let page = match ui.app_settings.page {
         SettingsPage::General => general_page(ui),
         SettingsPage::Appearance => appearance_page(ui),
         SettingsPage::Instrument => instrument_page(ui),
