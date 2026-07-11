@@ -40,15 +40,28 @@ pub fn click_sample(t: f32, freq_hz: f32, duration_s: f32, amplitude: f32) -> Op
     Some(phase.sin() * envelope * amplitude)
 }
 
-/// Render one bar of metronome clicks into a mono `Vec<f32>` at
-/// `sample_rate`.
+/// Integer audio frames in one beat of `beat_unit` at `bpm`.
 ///
-/// The bar is `beats_per_bar` beats long at `bpm`; beat 0 is accented
-/// (`accent_freq_hz`), the rest use `base_freq_hz`. Each click is a
-/// `duration_s` burst; the gaps between clicks are silence. The
-/// returned buffer is exactly one bar long (`samples_per_beat *
-/// beats_per_bar`), so it loops seamlessly when fed to a looping
-/// sampler.
+/// BPM is expressed as quarter notes per minute, so a beat in 3/8 is half as
+/// long as a beat in 3/4 at the same BPM. Rounding happens once per beat and
+/// every caller derives a bar from this result, keeping click boundaries and
+/// capture lengths in lockstep.
+pub fn frames_per_beat(sample_rate: u32, bpm: f32, beat_unit: u8) -> usize {
+    let bpm = if bpm.is_finite() { bpm.max(1.0) } else { 1.0 };
+    let beat_unit = beat_unit.max(1);
+    (sample_rate as f64 * 60.0 * 4.0 / (f64::from(bpm) * f64::from(beat_unit))).round() as usize
+}
+
+/// Integer audio frames in one bar at the specified meter.
+pub fn frames_per_bar(sample_rate: u32, bpm: f32, beats_per_bar: u8, beat_unit: u8) -> usize {
+    frames_per_beat(sample_rate, bpm, beat_unit).saturating_mul(beats_per_bar as usize)
+}
+
+/// Render one bar of metronome clicks into a mono `Vec<f32>` at
+/// `sample_rate`, treating the beat unit as a quarter note.
+///
+/// Kept as a convenience wrapper for existing 4/4 callers. New consumers that
+/// carry a full time signature should use [`render_click_bar_in_meter`].
 pub fn render_click_bar(
     sample_rate: u32,
     bpm: f32,
@@ -58,13 +71,48 @@ pub fn render_click_bar(
     duration_s: f32,
     amplitude: f32,
 ) -> Vec<f32> {
+    render_click_bar_in_meter(
+        sample_rate,
+        bpm,
+        beats_per_bar,
+        4,
+        base_freq_hz,
+        accent_freq_hz,
+        duration_s,
+        amplitude,
+    )
+}
+
+/// Render one bar of metronome clicks into a mono `Vec<f32>` at a full time
+/// signature.
+///
+/// The bar is `beats_per_bar` beats long at `bpm`; beat 0 is accented
+/// (`accent_freq_hz`), the rest use `base_freq_hz`. Each click is a
+/// `duration_s` burst; the gaps between clicks are silence. The
+/// returned buffer is exactly one bar long (`samples_per_beat *
+/// beats_per_bar`), so it loops seamlessly when fed to a looping
+/// sampler.
+pub fn render_click_bar_in_meter(
+    sample_rate: u32,
+    bpm: f32,
+    beats_per_bar: u8,
+    beat_unit: u8,
+    base_freq_hz: f32,
+    accent_freq_hz: f32,
+    duration_s: f32,
+    amplitude: f32,
+) -> Vec<f32> {
     let sr = sample_rate as f32;
-    let samples_per_beat = (sr * 60.0 / bpm) as usize;
-    let total_samples = samples_per_beat * beats_per_bar as usize;
+    let samples_per_beat = frames_per_beat(sample_rate, bpm, beat_unit);
+    let total_samples = frames_per_bar(sample_rate, bpm, beats_per_bar, beat_unit);
     let mut buf = vec![0.0_f32; total_samples];
 
     for beat in 0..beats_per_bar as usize {
-        let freq = if beat == 0 { accent_freq_hz } else { base_freq_hz };
+        let freq = if beat == 0 {
+            accent_freq_hz
+        } else {
+            base_freq_hz
+        };
         let beat_start = beat * samples_per_beat;
         // Walk samples within this beat until the click envelope ends
         // (click_sample returns None) or we run out of beat.
@@ -112,6 +160,13 @@ mod tests {
         // 120 BPM, 4 beats, 48 kHz: 24000 samples/beat * 4 = 96000.
         let buf = render_click_bar(48_000, 120.0, 4, 800.0, 1200.0, 0.05, 0.4);
         assert_eq!(buf.len(), 96_000);
+    }
+
+    #[test]
+    fn meter_aware_bar_length_honors_the_beat_unit() {
+        assert_eq!(frames_per_bar(48_000, 120.0, 3, 8), 36_000);
+        let buf = render_click_bar_in_meter(48_000, 120.0, 3, 8, 800.0, 1200.0, 0.05, 0.4);
+        assert_eq!(buf.len(), 36_000);
     }
 
     #[test]

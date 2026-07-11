@@ -58,7 +58,7 @@ paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch =
 # the shared Masonry crates' wgpu 28 tree coexists until the Strophe refactor.
 wgpu = { version = "29", default-features = false, features = ["std"] }
 
-# Theming: pure OKLCH seed-to-palette derivation (Strophos-family shared
+# Theming: pure OKLCH seed-to-palette derivation (Merely-family shared
 # crate; repo dir is `tincture`, package is `tinct`). Replaces reaching
 # into audio-widgets' masonry-coupled theme module.
 tinct = { git = "https://github.com/mark-ik/tinct", branch = "main" }

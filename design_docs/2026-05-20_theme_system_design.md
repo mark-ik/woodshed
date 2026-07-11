@@ -1,6 +1,6 @@
 # Theme system design — seed-derived palettes + theme management
 
-Proposal for the shared theming model used across the Strophos family
+Proposal for the shared theming model used across the Merely family
 (Woodshed, Strophe, Mere) via `audio_widgets::theme`. Answers two
 questions: (1) a **formula** for mapping a few seed colors → the full UI
 palette, and (2) the **management** model (built-in vs user themes; edit /

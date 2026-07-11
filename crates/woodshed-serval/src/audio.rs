@@ -4,13 +4,11 @@
 
 use woodshed_audio::{
     Bar, CalibrationOutcome, CalibrationSession, ChordRef, InputEngine, InputEngineBuilder,
-    LooperCaptureHandle, OnsetAnalyzer, OnsetHandle, PendingChange, SampleBuffer,
-    SequencerEngine, SequencerPattern, Song, SongEngine, SongEngineHandle, Sound, Step,
-    Subdivision, TimeSignature, Track, TunerHandle,
+    LooperCaptureHandle, OnsetAnalyzer, OnsetHandle, PendingChange, SampleBuffer, SequencerEngine,
+    SequencerPattern, Song, SongEngine, SongEngineHandle, Sound, Step, Subdivision, TimeSignature,
+    Track, TunerHandle,
 };
-use woodshed_core::audio::{
-    AudioBackend, CalibrationStatus, TransportState, TunerReading,
-};
+use woodshed_core::audio::{AudioBackend, CalibrationStatus, TransportState, TunerReading};
 use woodshed_core::song::SongDoc;
 
 /// A 4/4 quarter-note click at `bpm`, downbeat accented.
@@ -289,10 +287,18 @@ impl AudioBackend for CpalBackend {
             return CalibrationStatus::Unavailable;
         };
         match self.calib.poll(&h, &o) {
-            CalibrationOutcome::InProgress { clicks_fired, total_clicks } => {
-                CalibrationStatus::Running { clicks_fired, total: total_clicks }
-            }
-            CalibrationOutcome::Success { latency, matched_pairs, total_clicks } => {
+            CalibrationOutcome::InProgress {
+                clicks_fired,
+                total_clicks,
+            } => CalibrationStatus::Running {
+                clicks_fired,
+                total: total_clicks,
+            },
+            CalibrationOutcome::Success {
+                latency,
+                matched_pairs,
+                total_clicks,
+            } => {
                 self.end_calibration();
                 CalibrationStatus::Success {
                     latency_ms: latency.as_secs_f32() * 1000.0,
@@ -300,7 +306,10 @@ impl AudioBackend for CpalBackend {
                     total: total_clicks,
                 }
             }
-            CalibrationOutcome::InsufficientPairs { matched_pairs, total_clicks } => {
+            CalibrationOutcome::InsufficientPairs {
+                matched_pairs,
+                total_clicks,
+            } => {
                 self.end_calibration();
                 CalibrationStatus::Insufficient {
                     matched: matched_pairs,
@@ -360,11 +369,17 @@ impl AudioBackend for CpalBackend {
     }
 
     fn song_recording(&self) -> bool {
-        self.song.as_ref().map(|s| s.is_recording()).unwrap_or(false)
+        self.song
+            .as_ref()
+            .map(|s| s.is_recording())
+            .unwrap_or(false)
     }
 
     fn song_loop_bars(&self) -> Vec<bool> {
-        self.song.as_ref().map(|s| s.loop_flags()).unwrap_or_default()
+        self.song
+            .as_ref()
+            .map(|s| s.loop_flags())
+            .unwrap_or_default()
     }
 
     fn error(&self) -> Option<&str> {

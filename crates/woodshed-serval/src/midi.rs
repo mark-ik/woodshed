@@ -13,9 +13,7 @@ use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use woodshed_audio::{
-    list_midi_input_ports, list_midi_output_ports, MidiEvent, MidiIn, MidiOut,
-};
+use woodshed_audio::{list_midi_input_ports, list_midi_output_ports, MidiEvent, MidiIn, MidiOut};
 use woodshed_core::midi::MidiBackend;
 
 /// Commands to the clock-out thread. The thread owns the output
@@ -164,13 +162,21 @@ impl Drop for MidiHost {
 
 fn fmt_event(e: &MidiEvent) -> String {
     match e {
-        MidiEvent::NoteOn { channel, note, velocity } => {
+        MidiEvent::NoteOn {
+            channel,
+            note,
+            velocity,
+        } => {
             format!("NoteOn ch{} {} v{}", channel + 1, note, velocity)
         }
         MidiEvent::NoteOff { channel, note, .. } => {
             format!("NoteOff ch{} {}", channel + 1, note)
         }
-        MidiEvent::ControlChange { channel, controller, value } => {
+        MidiEvent::ControlChange {
+            channel,
+            controller,
+            value,
+        } => {
             format!("CC ch{} #{}={}", channel + 1, controller, value)
         }
         MidiEvent::Clock => "Clock".to_string(),

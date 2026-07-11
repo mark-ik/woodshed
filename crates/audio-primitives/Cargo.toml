@@ -1,7 +1,7 @@
 [package]
 name = "audio-primitives"
 version = "0.1.0"
-description = "Shared, framework-agnostic audio DSP primitives for the Strophos family (Woodshed, Strophe, Mere): click synthesis, streaming onset detection + tempo estimation, and round-trip latency estimation. Pure std, no engine or UI dependency."
+description = "Shared, framework-agnostic audio DSP primitives for the Merely family (Woodshed, Strophe, Mere): click synthesis, streaming onset detection + tempo estimation, and round-trip latency estimation. Pure std, no engine or UI dependency."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

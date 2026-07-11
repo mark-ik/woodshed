@@ -119,8 +119,7 @@ mod tests {
         let now = Instant::now();
         let clicks: Vec<Instant> = (0..5).map(|i| now + ms(1000 * i as u64)).collect();
         // Four clean 40ms onsets + one wildly late 150ms onset.
-        let mut onsets: Vec<Instant> =
-            clicks.iter().take(4).map(|&c| c + ms(40)).collect();
+        let mut onsets: Vec<Instant> = clicks.iter().take(4).map(|&c| c + ms(40)).collect();
         onsets.push(clicks[4] + ms(150));
         let latency = estimate_latency_from_pairs(&clicks, &onsets, 3).unwrap();
         let ms_value = latency.as_secs_f32() * 1000.0;
@@ -163,10 +162,10 @@ mod tests {
         let now = Instant::now();
         let clicks: Vec<Instant> = (0..4).map(|i| now + ms(1000 * i as u64)).collect();
         let onsets = vec![
-            clicks[0] + ms(40),  // in window
-            clicks[1] + ms(60),  // in window
+            clicks[0] + ms(40), // in window
+            clicks[1] + ms(60), // in window
             clicks[2] + ms(500), // out of window
-            // clicks[3] has no onset at all
+                                // clicks[3] has no onset at all
         ];
         assert_eq!(count_matches(&clicks, &onsets), 2);
     }

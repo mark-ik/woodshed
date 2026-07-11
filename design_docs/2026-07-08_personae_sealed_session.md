@@ -3,7 +3,7 @@
 **Date:** 2026-07-08
 **Status:** core slice landed; host wiring deferred.
 
-Woodshed is the first cross-app consumer of `personae`, the Strophos suite's
+Woodshed is the first cross-app consumer of `personae`, the Merely suite's
 identity + carry crate (see
 `personae/design_docs/2026-07-08_personae_across_the_suite.md`). It proves the
 "one persona, many devices, encrypt-at-rest" pole with the smallest real slice:

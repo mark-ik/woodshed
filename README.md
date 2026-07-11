@@ -1,167 +1,111 @@
 # Woodshed
 
-A guitarist's practice toolkit, named for the musician's term for focused
-solitary practice ("woodshedding"). It provides a tuner, comprehensive chord and
-scale libraries with interval formulas, chord progressions, classic practice
-exercises, a metronome that extends into a simple drum machine, and a Practice
-Mode that walks the user through rotations of musical material at tempo so the
-app drives the session. The theory model generalizes across stringed instruments
-(bass, ukulele, banjo) by parameterizing string count and tuning.
+Woodshed is an offline-first practice toolkit for guitar and other fretted
+instruments. It combines theory reference, a fretboard explorer, rehearsal
+sets, a song sketcher, a tuner, metronome, MIDI clock, latency calibration, and
+a small live-input looper.
 
-Built in Rust with [Xilem](https://github.com/linebender/xilem) +
-[Masonry](https://github.com/linebender/xilem/tree/main/masonry) for the UI
-(migrated from Iced on 2026-05-18). Desktop first (Windows, macOS, Linux), with a
-planned path to web and mobile.
+The theory model supports arbitrary string counts and tunings, so bass,
+ukulele, banjo, and custom instruments are first-class rather than afterthoughts.
 
-This is a Cargo workspace and an internal developer repository, not a published
-library. The crates are not on crates.io (most are marked `publish = false`).
+Built in Rust on [Serval](https://github.com/mark-ik/serval): a shared
+DOM-shaped Xilem view tree is laid out and painted by Serval/netrender, with a
+winit desktop host today and a browser host planned from the same view layer.
 
 **Made with AI**
 
 ## Status
 
-Pre-alpha, under active development. The current direction is a UI redesign pass
-(GPUI-quiet chrome, Slate and Ember built-in palettes, segmented-pill navigation,
-fretboard-layout setting, redesigned Rehearsal and Practice screens). See
-`design_docs/2026-06-15_redesign_plan.md` for the active plan and
-`design_docs/DOC_README.md` for the full plan index.
+Desktop alpha. The Serval migration is complete on the Woodshed side and the
+Windows host is functional, but this is not a packaged public release yet.
+The next release work is adaptive-screen polish, Mac and Linux receipts,
+packaging, and a current public build/install path. Browser and mobile hosts are
+separate work, not implied by the shared view layer.
+
+See [the Serval host plan](design_docs/2026-07-04_serval_host_cross_platform_plan.md)
+for the delivery architecture and [the documentation index](design_docs/DOC_README.md)
+for the wider project record.
 
 ## Workspace layout
 
 ```
 crates/
-  woodshedding/      Portable gerund core: pure theory, instrument realization,
-                     progressions, exercises, fretboard mapping, voicings,
-                     practice/rehearsal sets. No I/O, UI, or audio.
-  woodshed-audio/    Real-time audio engine: cpal-backed sequencer/click,
-                     tuner-grade pitch detection, MIDI, looper, song engine,
-                     latency calibration, offline render.
-  audio-primitives/  Shared, framework-agnostic DSP primitives (click synth,
-                     onset/tempo detection, latency estimation, buffer shaping).
-                     Pure std, no engine or UI dependency.
-  xilem-components/  Domain-neutral, product-agnostic Xilem/Masonry UI
-                     components (combobox, ...). The design-system layer.
-  audio-widgets/     Shared Masonry/Vello audio widgets (waveform, meter,
-                     fader, knob). Audio-domain layer above xilem-components.
-  woodshed-xilem/    The Xilem + Masonry application. Depends on all of the
-                     above. This is the binary crate.
-design_docs/         Plans, doc policy, project description.
+  woodshedding/      Pure musical theory and playable-practice model.
+  audio-primitives/  Framework-independent DSP helpers.
+  woodshed-audio/    cpal-backed audio, pitch/onset analysis, MIDI, looper,
+                     song engine, calibration, and offline render.
+  woodshed-core/     Portable application state and host seams.
+  woodshed-views/    Shared xilem_serval product views and CSS themes.
+  woodshed-serval/   Desktop winit + netrender host. The application binary.
+  woodshed-graph/    Theory catalog projection into the chartulary graph.
+design_docs/         Product description, plans, and documentation policy.
 ```
 
-### Crate roles and dependency direction
+### Dependency direction
 
-- `woodshedding` is the pure operation core (no `cpal`, no UI, no file I/O). It
-  owns the canonical model of pitches, intervals, tunings, scales, chords,
-  progressions, exercises, fretboard mappings, voicings, and practice/rehearsal
-  sets. Keep it pure; UI- or audio-coupled code belongs in the consuming crates.
-  The name follows the gerund-crate convention used across these repos
-  (`murmuring`, `mooting`, etc.): the gerund names the portable core that makes
-  the activity possible.
-- `audio-primitives` is pure `std` with no dependencies. If something takes plain
-  sample slices or timestamps and returns plain data it belongs here; anything
-  that owns an audio stream or live engine is a "driver" and lives in the
-  consumer.
-- `woodshed-audio` builds the cpal-backed driver layers on top of
-  `audio-primitives` (output sequencer/click, input pitch/onset analyzers, MIDI,
-  looper, song engine, offline render, calibration session).
-- `xilem-components` is the audio-agnostic, product-agnostic UI component layer.
-- `audio-widgets` is the audio-domain widget layer, one layer above
-  `xilem-components`.
-- `woodshed-xilem` is the application: it depends on `woodshedding`,
-  `woodshed-audio`, `audio-widgets`, and `xilem-components`.
+- `woodshedding` remains pure: no UI, audio device, or filesystem dependency.
+- `audio-primitives` is pure `std`; `woodshed-audio` owns real-time drivers.
+- `woodshed-core` owns portable application state, persistence payloads, and
+  host-facing seams. It does not own desktop windowing or browser APIs.
+- `woodshed-views` owns product composition and responsive presentation.
+  It contains neither desktop window chrome nor audio drivers.
+- `woodshed-serval` owns the desktop frame, winit event loop, CSD resize/drag
+  behavior, native storage, audio, and MIDI realization.
 
-`audio-primitives`, `audio-widgets`, and `xilem-components` are shared
-infrastructure crates intended for cross-repo reuse by sibling projects in the
-Strophos family (Strophe, Mere) via path dependencies. Within this workspace they
-are consumed by `woodshed-audio` and `woodshed-xilem`.
+`audio-primitives` is shared infrastructure for sibling Merely projects. The
+old Masonry-specific UI crates and Woodshed's Xilem app have been retired.
 
 ## Build and run
 
-```
-# Build the whole workspace
-cargo build
+```powershell
+# Build the desktop app
+cargo build -p woodshed-serval
 
-# Run the application
-cargo run -p woodshed-xilem
+# Run it
+cargo run -p woodshed-serval
 
-# Run all tests
-cargo test
-```
-
-The binary target is `woodshed-xilem` (`crates/woodshed-xilem/src/main.rs`).
-
-### Toolchain and platform notes
-
-- Workspace edition is 2021 with `rust-version = "1.80"` for the
-  workspace package; the Xilem-facing crates (`xilem-components`,
-  `audio-widgets`, `woodshed-xilem`) use edition 2024 and require Rust 1.92.
-- On Windows MSVC, the Xilem generic view types can overflow the per-symbol PDB
-  budget (LNK4319). This is handled by the `/DEBUG:LongSymbolTruncate` linker
-  flag set in `.cargo/config.toml`.
-
-## UI dependency: the Xilem fork
-
-The UI rides a lean fork branch rather than crates.io:
-
-```
-xilem        = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
-masonry      = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
-masonry_winit = { git = "https://github.com/mark-ik/xilem.git", branch = "woodshed-theme", version = "0.4.0" }
+# Run the workspace tests
+cargo test --workspace
 ```
 
-The `woodshed-theme` branch is `upstream/main` plus exactly one commit: the
-PR #1822 commit `WindowView::with_default_properties` (no-restart retheming).
-The Masonry-side counterpart (PR #1821 `set_default_properties`) is already
-upstream, so no Masonry patch is carried; the combobox/dropdown UI uses
-upstream's own `selector` view and `Selector`/`SelectorMenu` widgets, not a
-fork addition. It rides upstream's
-wgpu-28 / vello-0.8 (not the mere/serval wgpu-29 fork). Git deps (not path) keep
-the app buildable on any machine without a local fork worktree; `Cargo.lock` pins
-the exact commit. To iterate on the fork locally, override with a machine-local
-`paths = [...]` in a parent `.cargo/config.toml` rather than editing the manifest.
-Keep Xilem's default features enabled (including `imaging_vello`); disabling them
-panics the Masonry imaging layer at first paint.
-
-See `design_docs/xilem_fork_patches.md` for the ledger of fork edits.
+The binary target is `woodshed-serval` in
+`crates/woodshed-serval/src/main.rs`. Local development may use gitignored
+`.cargo/config.toml` patches for sibling Serval, netrender, and tincture
+checkouts; the committed manifest resolves those dependencies from their owned
+Git repositories.
 
 ## Key dependencies
 
-| Area            | Crate / version                                  |
-|-----------------|--------------------------------------------------|
-| UI              | xilem / masonry / masonry_winit 0.4.0 (forked)   |
-| Windowing       | winit 0.30                                        |
-| Audio I/O       | cpal 0.15                                          |
-| Pitch detection | pitch-detector 0.3 (hinted), pitch-detection 0.3 |
-| WAV I/O         | hound 3.5                                          |
-| MIDI            | midir 0.11                                         |
-| Async runtime   | tokio 1.50 (app crate)                            |
-| Config dirs     | directories 5 (app crate)                         |
-| Persistence     | serde 1.0, serde_json 1.0                         |
+| Area | Crate / role |
+|---|---|
+| Product views | `xilem-serval` over Serval's `ScriptedDom` |
+| Layout and paint | `serval-layout`, `paint-list`, `netrender` |
+| Desktop host | `winit` 0.30, `wgpu` 29 |
+| Audio I/O | `cpal` 0.18 |
+| Pitch detection | `pitch-detector` and `pitch-detection` |
+| MIDI | `midir` |
+| Persistence | `serde`, `serde_json`, `directories` |
 
-The McLeod (NSDF) detector from `pitch-detection` is used for
-octave-confusion-resistant tuning on guitar low strings; raw-frequency to
-note/cents conversion is done locally. `fundsp` (richer synthesis) and
-`symphonia` (FLAC/OGG/MP3 sample loading) are noted as future, deferred
-dependencies.
+The tuner uses the McLeod/NSDF detector for reliable low-string readings;
+frequency-to-note and cents conversion remain local to the project.
 
-## Project policy notes
+## Publishing posture
 
-- The theory model is owned. Do not depend on `rust-music-theory` or similar
-  upstream theory crates; their scale and chord coverage is insufficient and the
-  project needs exotic scales, non-tertiary chords, and arbitrary tunings.
-- The theory model must support arbitrary string counts and tunings; do not
-  hard-code 6-string assumptions.
-- Plans live in `design_docs/` under the `YYYY-MM-DD_<keyword>_plan.md`
-  convention. Read `design_docs/DOC_README.md` first; follow `DOC_POLICY.md` for
-  documentation changes.
+The code is open source under the licenses below. Tagged `v*` builds produce a
+checksummed portable Windows ZIP on GitHub. It is intentionally an alpha
+artifact: installer UX, code signing, an application icon, and third-party
+license notices are still release work. Until the first tagged build is
+published, treat source builds as the supported way to try Woodshed.
 
-## Relationship to sibling repos
+## Project policy
 
-Woodshed sits under the Strophos parent brand alongside Strophe (a collaborative
-loop recorder) and Mere. Woodshed is a pressure vessel for shared audio and UI
-infrastructure: stable pieces are factored into `audio-primitives`,
-`audio-widgets`, and `xilem-components`, which Strophe and Mere consume. The
-dependency direction is one-way (siblings consume Woodshed's shared crates).
+- The theory model is owned. External theory crates do not cover the required
+  combination of exotic scales, non-tertiary chords, and arbitrary tunings.
+- Do not hard-code six-string guitar assumptions.
+- Keep the shared product view thin and platform-neutral. Browser and desktop
+  hosts own their respective frames and native capabilities.
+- Plans live in `design_docs/`. Start with `DOC_README.md` and follow
+  `DOC_POLICY.md` for documentation changes.
 
 ## License
 

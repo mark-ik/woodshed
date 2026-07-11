@@ -94,8 +94,7 @@ impl OnsetDetector {
     /// Build a detector with sensible defaults for the given sample
     /// rate.
     pub fn new(sample_rate_hz: f32) -> Self {
-        let min_spacing_samples =
-            (sample_rate_hz * DEFAULT_MIN_SPACING_MS / 1000.0) as u64;
+        let min_spacing_samples = (sample_rate_hz * DEFAULT_MIN_SPACING_MS / 1000.0) as u64;
         Self {
             sample_rate_hz,
             frame_size: DEFAULT_FRAME_SIZE,
@@ -120,8 +119,7 @@ impl OnsetDetector {
     /// Override the debounce interval in milliseconds.
     pub fn with_min_spacing_ms(mut self, ms: f32) -> Self {
         let safe_ms = ms.max(1.0);
-        self.min_spacing_samples =
-            (self.sample_rate_hz * safe_ms / 1000.0) as u64;
+        self.min_spacing_samples = (self.sample_rate_hz * safe_ms / 1000.0) as u64;
         self
     }
 
@@ -301,8 +299,7 @@ fn frame_energy_two(a: &[f32], b: &[f32]) -> f32 {
     if total == 0 {
         return 0.0;
     }
-    let sum_sq: f32 = a.iter().map(|&s| s * s).sum::<f32>()
-        + b.iter().map(|&s| s * s).sum::<f32>();
+    let sum_sq: f32 = a.iter().map(|&s| s * s).sum::<f32>() + b.iter().map(|&s| s * s).sum::<f32>();
     sum_sq / total as f32
 }
 
@@ -383,7 +380,12 @@ mod tests {
         let signal = synthetic_signal(48_000, &[24_000]);
         let onsets = det.feed(&signal);
 
-        assert_eq!(onsets.len(), 1, "expected 1 onset, got {}: {onsets:?}", onsets.len());
+        assert_eq!(
+            onsets.len(),
+            1,
+            "expected 1 onset, got {}: {onsets:?}",
+            onsets.len()
+        );
 
         // Onset should land somewhere near sample 24000 (offset from
         // baseline), within one frame of the actual hit.
@@ -407,7 +409,12 @@ mod tests {
         let signal = synthetic_signal(60_000, &hits);
         let onsets = det.feed(&signal);
 
-        assert_eq!(onsets.len(), 4, "expected 4 onsets, got {}: {onsets:?}", onsets.len());
+        assert_eq!(
+            onsets.len(),
+            4,
+            "expected 4 onsets, got {}: {onsets:?}",
+            onsets.len()
+        );
     }
 
     #[test]
@@ -422,7 +429,11 @@ mod tests {
         let signal = synthetic_signal(48_000, &[10_000, 14_800]);
         let onsets = det.feed(&signal);
 
-        assert_eq!(onsets.len(), 1, "debounce should reject second hit: {onsets:?}");
+        assert_eq!(
+            onsets.len(),
+            1,
+            "debounce should reject second hit: {onsets:?}"
+        );
     }
 
     #[test]
@@ -439,7 +450,10 @@ mod tests {
         // trust onsets. Just verify the next quiet feed yields zero
         // onsets (i.e. no stale state firing).
         let onsets = det.feed(&vec![0.001_f32; 48_000]);
-        assert!(onsets.is_empty(), "post-reset quiet feed yielded onsets: {onsets:?}");
+        assert!(
+            onsets.is_empty(),
+            "post-reset quiet feed yielded onsets: {onsets:?}"
+        );
     }
 
     #[test]
@@ -465,7 +479,10 @@ mod tests {
         assert_eq!(combined.len(), 1);
         // Within one frame either way.
         let delta = single[0].abs_diff(combined[0]);
-        assert!(delta <= DEFAULT_FRAME_SIZE as u64, "single={single:?} split={combined:?}");
+        assert!(
+            delta <= DEFAULT_FRAME_SIZE as u64,
+            "single={single:?} split={combined:?}"
+        );
     }
 
     // === Tempo estimation ===

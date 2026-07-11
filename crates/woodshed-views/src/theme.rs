@@ -161,6 +161,12 @@ pub fn stage_css(p: &Palette) -> String {
 .root {{ width: 100%; height: 100%; box-sizing: border-box;
         background-color: {bg}; color: {text};
         font-family: sans-serif; font-size: 14px; padding: 8px 16px 16px 16px; }}
+.desktop-frame {{ width: 100%; height: 100%; box-sizing: border-box;
+                  display: flex; flex-direction: column; background-color: {bg};
+                  color: {text}; font-family: sans-serif; font-size: 14px;
+                  padding: 8px 16px 0 16px; }}
+.desktop-frame .root {{ width: 100%; height: auto; min-height: 0; flex-grow: 1;
+                        background-color: transparent; padding: 0 0 16px 0; }}
 .chrome {{ display: flex; margin-bottom: 10px; }}
 .chrome-title {{ color: {text_header}; font-size: 15px; padding: 4px 8px 4px 0; }}
 .chrome-drag {{ flex-grow: 1; height: 26px; }}
@@ -282,6 +288,24 @@ pub fn stage_css(p: &Palette) -> String {
 .pill, .lens {{ transition: background-color 0.14s ease, color 0.14s ease; }}
 .film-card, .recipe-tile, .bar-chip {{ transition: border-color 0.14s ease, background-color 0.14s ease; }}
 .search-wrap input {{ transition: border-color 0.12s ease; }}
+/* Responsive shell. The host selects a width band so the same product view
+   stays legible on a small desktop window and future browser canvas. */
+.viewport-medium .recipe-grid {{ grid-template-columns: repeat(2, 260px); }}
+.viewport-medium .transport {{ flex-wrap: wrap; }}
+.viewport-medium .t-btn {{ margin-bottom: 6px; }}
+.viewport-narrow .pills {{ flex-wrap: wrap; margin-bottom: 8px; }}
+.viewport-narrow .pill {{ padding: 8px 12px; margin-bottom: 6px; }}
+.viewport-narrow .nav-spacer {{ display: none; }}
+.viewport-narrow .search-wrap {{ width: 100%; margin: 0 0 8px 0; }}
+.viewport-narrow .search-wrap input, .viewport-narrow .search-list {{ width: 100%; }}
+.viewport-narrow .header-row, .viewport-narrow .transport,
+.viewport-narrow .prog-cards {{ flex-wrap: wrap; }}
+.viewport-narrow .header-gap {{ width: 10px; }}
+.viewport-narrow .t-btn {{ padding: 8px 12px; margin-bottom: 6px; }}
+.viewport-narrow .board {{ overflow: scroll; padding: 12px; }}
+.viewport-narrow .side-strip .side {{ flex-wrap: wrap; }}
+.viewport-narrow .recipe-grid {{ display: flex; flex-direction: column; }}
+.viewport-narrow .recipe-tile {{ width: 100%; box-sizing: border-box; }}
 "#
     )
 }

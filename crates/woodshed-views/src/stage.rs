@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::search::{search_corpus, SearchHit};
-use woodshed_core::storage::{PersistedSession, Tab};
 use woodshed_core::song::{song_from_progression, SongDoc, SECTION_LABELS};
+use woodshed_core::storage::{PersistedSession, Tab};
 use woodshed_core::{set_from_practice, step_set, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{FretWindow, Hold, LoopMode, Recipe, Set, Touch};
 use xilem_serval::{
@@ -60,6 +60,38 @@ impl BoardLayout {
             BoardLayout::TwoPane => "layout-two-pane",
             BoardLayout::Hero => "layout-hero",
             BoardLayout::FullCanvas => "layout-canvas",
+        }
+    }
+}
+
+/// Coarse layout class derived by the host from available logical width.
+/// It changes only presentation, never selected or persisted musical state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ViewportClass {
+    #[default]
+    Wide,
+    Medium,
+    Narrow,
+}
+
+impl ViewportClass {
+    /// These are width bands rather than device names. They preserve a usable
+    /// fretboard before the shell starts to crowd it.
+    pub fn for_width(width: f32) -> Self {
+        if width < 760.0 {
+            Self::Narrow
+        } else if width < 1_180.0 {
+            Self::Medium
+        } else {
+            Self::Wide
+        }
+    }
+
+    fn class(self) -> &'static str {
+        match self {
+            Self::Wide => "viewport-wide",
+            Self::Medium => "viewport-medium",
+            Self::Narrow => "viewport-narrow",
         }
     }
 }
@@ -131,6 +163,8 @@ pub struct UiState {
     pub tab: Tab,
     pub theme: ThemeMode,
     pub board_layout: BoardLayout,
+    /// Host-observed width band. This is transient rather than a user setting.
+    pub viewport: ViewportClass,
     /// Window-chrome requests the host consumes after dispatch (CSD).
     pub chrome_minimize: bool,
     pub chrome_maximize: bool,
@@ -188,6 +222,7 @@ impl UiState {
             tab: Tab::Stage,
             theme: ThemeMode::default(),
             board_layout: BoardLayout::default(),
+            viewport: ViewportClass::default(),
             chrome_minimize: false,
             chrome_maximize: false,
             chrome_close: false,
@@ -268,6 +303,18 @@ impl UiState {
         self.stage.set_root(self.root_dd.selected);
     }
 
+    /// Update the transient layout band after a host resize. Returns whether a
+    /// view rebuild is required.
+    pub fn set_viewport_width(&mut self, width: f32) -> bool {
+        let next = ViewportClass::for_width(width);
+        if self.viewport == next {
+            false
+        } else {
+            self.viewport = next;
+            true
+        }
+    }
+
     /// Pitches + shape for the on-demand "♪ Hear" preview, resolved from
     /// context: the current rehearsal card on the Rehearsal tab, else the
     /// active Stage lens. Empty pitches = nothing to voice. The host
@@ -302,8 +349,7 @@ impl UiState {
         self.tab = session.tab;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
-        self.board_layout =
-            BoardLayout::from_name(&session.board_layout).unwrap_or_default();
+        self.board_layout = BoardLayout::from_name(&session.board_layout).unwrap_or_default();
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
     }
@@ -314,10 +360,8 @@ pub type UiChild = Box<dyn AnyView<UiState, (), ServalCtx, ServalElement>>;
 
 fn pill(tab: Tab, active: bool) -> UiChild {
     Box::new(clickable(
-        el("span", text(tab.label())).attr(
-            "class",
-            if active { "pill pill-active" } else { "pill" },
-        ),
+        el("span", text(tab.label()))
+            .attr("class", if active { "pill pill-active" } else { "pill" }),
         move |ui: &mut UiState, _| {
             ui.tab = tab;
         },
@@ -368,8 +412,7 @@ fn midi_panel(ui: &UiState) -> UiChild {
     Box::new(el(
         "div",
         (
-            el("div", text("MIDI"))
-                .attr("class", "settings-heading settings-gap"),
+            el("div", text("MIDI")).attr("class", "settings-heading settings-gap"),
             el(
                 "div",
                 (
@@ -425,14 +468,21 @@ fn calibration_panel(ui: &UiState) -> UiChild {
             el("div", text("Calibrate")).attr("class", "t-btn t-hear"),
             |ui: &mut UiState, _| ui.calib_start_requested = true,
         )) as UiChild],
-        CalibrationStatus::Running { clicks_fired, total } => vec![
+        CalibrationStatus::Running {
+            clicks_fired,
+            total,
+        } => vec![
             readout(format!("Tap along… {clicks_fired}/{total}")),
             Box::new(clickable(
                 el("div", text("Cancel")).attr("class", "t-btn"),
                 |ui: &mut UiState, _| ui.calib_cancel_requested = true,
             )) as UiChild,
         ],
-        CalibrationStatus::Success { latency_ms, matched, total } => vec![
+        CalibrationStatus::Success {
+            latency_ms,
+            matched,
+            total,
+        } => vec![
             readout(format!("{latency_ms:.0} ms · {matched}/{total} hits")),
             Box::new(clickable(
                 el("div", text("Accept")).attr("class", "t-btn t-hear"),
@@ -449,8 +499,7 @@ fn calibration_panel(ui: &UiState) -> UiChild {
     Box::new(el(
         "div",
         (
-            el("div", text("Latency calibration"))
-                .attr("class", "settings-heading settings-gap"),
+            el("div", text("Latency calibration")).attr("class", "settings-heading settings-gap"),
             el("div", text(latency_line)).attr("class", "settings-line"),
             el("div", controls).attr("class", "transport"),
             el(
@@ -521,6 +570,14 @@ fn settings_screen(ui: &UiState) -> UiChild {
                     "div",
                     (
                         el("div", text("Session")).attr("class", "settings-heading"),
+                        el(
+                            "div",
+                            text(format!(
+                                "Woodshed {} · desktop alpha",
+                                env!("CARGO_PKG_VERSION")
+                            )),
+                        )
+                        .attr("class", "settings-line"),
                         el("div", text(audio_line)).attr("class", "settings-line"),
                         el(
                             "div",
@@ -543,10 +600,9 @@ fn settings_screen(ui: &UiState) -> UiChild {
 
 fn header(ui: &UiState) -> UiChild {
     let tuning_names: Vec<&str> = tunings().iter().map(|t| t.name).collect();
-    let tuning_dd = map_state(
-        select(&ui.tuning_dd, &tuning_names),
-        |ui: &mut UiState| &mut ui.tuning_dd,
-    );
+    let tuning_dd = map_state(select(&ui.tuning_dd, &tuning_names), |ui: &mut UiState| {
+        &mut ui.tuning_dd
+    });
     let root_dd = map_state(select(&ui.root_dd, &ROOT_NAMES), |ui: &mut UiState| {
         &mut ui.root_dd
     });
@@ -603,8 +659,7 @@ fn transport(ui: &UiState) -> UiChild {
                     el("div", text("-")).attr("class", "t-btn t-narrow"),
                     |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
                 ),
-                el("div", text(format!("{:.0} bpm", ui.transport.bpm)))
-                    .attr("class", "t-readout"),
+                el("div", text(format!("{:.0} bpm", ui.transport.bpm))).attr("class", "t-readout"),
                 clickable(
                     el("div", text("+")).attr("class", "t-btn t-narrow"),
                     |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
@@ -633,8 +688,7 @@ fn transport(ui: &UiState) -> UiChild {
                         }
                     },
                 ),
-                el("div", text(format!("{} cards", ui.set.cards.len())))
-                    .attr("class", "t-readout"),
+                el("div", text(format!("{} cards", ui.set.cards.len()))).attr("class", "t-readout"),
             ),
         )
         .attr("class", "transport"),
@@ -805,7 +859,10 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                                 direction: Default::default(),
                                 inversion: 0,
                             },
-                            Touch::Arpeggiate { direction, inversion } => {
+                            Touch::Arpeggiate {
+                                direction,
+                                inversion,
+                            } => {
                                 // Cycle direction; back to block after Down.
                                 use woodshed_core::arpeggio::ArpeggioDirection as D;
                                 match direction {
@@ -923,9 +980,7 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                                 .attr("class", cell_class),
                             ) as UiChild
                         }
-                        None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
-                        }
+                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
                     }
                 })
                 .collect();
@@ -1084,7 +1139,11 @@ fn sidebar(ui: &UiState) -> UiChild {
 fn exercise_board_view(ui: &UiState) -> UiChild {
     let state = &ui.stage;
     let board = state.exercise_board();
-    let play_label = if state.exercise_playing { "Pause" } else { "Run" };
+    let play_label = if state.exercise_playing {
+        "Pause"
+    } else {
+        "Run"
+    };
     let deck: UiChild = Box::new(
         el(
             "div",
@@ -1103,8 +1162,7 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
                     el("div", text("<")).attr("class", "t-btn t-narrow"),
                     |ui: &mut UiState, _| ui.stage.exercise_nudge_fret(-1),
                 ),
-                el("div", text(format!("fret {}", board.starting_fret)))
-                    .attr("class", "t-readout"),
+                el("div", text(format!("fret {}", board.starting_fret))).attr("class", "t-readout"),
                 clickable(
                     el("div", text(">")).attr("class", "t-btn t-narrow"),
                     |ui: &mut UiState, _| ui.stage.exercise_nudge_fret(1),
@@ -1138,9 +1196,7 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
                                 .attr("class", cell_class),
                             ) as UiChild
                         }
-                        None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
-                        }
+                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
                     }
                 })
                 .collect();
@@ -1175,8 +1231,7 @@ fn progression_board_view(ui: &UiState) -> UiChild {
         return Box::new(
             el(
                 "div",
-                el("div", text("Pick a progression from the list."))
-                    .attr("class", "placeholder"),
+                el("div", text("Pick a progression from the list.")).attr("class", "placeholder"),
             )
             .attr("class", "board"),
         );
@@ -1228,9 +1283,7 @@ fn progression_board_view(ui: &UiState) -> UiChild {
                                 .attr("class", cell_class),
                             ) as UiChild
                         }
-                        None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
-                        }
+                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
                     }
                 })
                 .collect();
@@ -1268,7 +1321,11 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
         ArpeggioDirection::Up => "Up",
         ArpeggioDirection::Down => "Down",
     };
-    let play_label = if state.arpeggio_playing { "Pause" } else { "Run" };
+    let play_label = if state.arpeggio_playing {
+        "Pause"
+    } else {
+        "Run"
+    };
     let deck: UiChild = Box::new(
         el(
             "div",
@@ -1301,7 +1358,11 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
                 ),
                 el(
                     "div",
-                    text(format!("shape {}/{}", board.position_idx + 1, board.shape_count)),
+                    text(format!(
+                        "shape {}/{}",
+                        board.position_idx + 1,
+                        board.shape_count
+                    )),
                 )
                 .attr("class", "t-readout"),
                 clickable(
@@ -1348,9 +1409,7 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
                                 .attr("class", cell_class),
                             ) as UiChild
                         }
-                        None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
-                        }
+                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
                     }
                 })
                 .collect();
@@ -1413,9 +1472,7 @@ fn board(ui: &UiState) -> UiChild {
                                 .attr("class", cell_class),
                             ) as UiChild
                         }
-                        None => {
-                            Box::new(el("div", ()).attr("class", cell_class)) as UiChild
-                        }
+                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
                     }
                 })
                 .collect();
@@ -1473,7 +1530,10 @@ fn practice_screen(ui: &UiState) -> UiChild {
             "div",
             (
                 el("div", text("Recipes")).attr("class", "settings-heading"),
-                el("div", tiles).attr("class", "recipe-grid"),
+                el("div", tiles).attr(
+                    "class",
+                    format!("recipe-grid recipe-grid-{}", ui.viewport.class()),
+                ),
             ),
         )
         .attr("class", "board"),
@@ -1490,11 +1550,8 @@ fn song_deck(ui: &UiState) -> UiChild {
             "div",
             (
                 clickable(
-                    el(
-                        "div",
-                        text(if ui.song_playing { "Stop" } else { "Play" }),
-                    )
-                    .attr("class", "t-btn"),
+                    el("div", text(if ui.song_playing { "Stop" } else { "Play" }))
+                        .attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
                         if !ui.song.is_empty() {
                             ui.song_playing = !ui.song_playing;
@@ -1509,15 +1566,8 @@ fn song_deck(ui: &UiState) -> UiChild {
                     },
                 ),
                 clickable(
-                    el(
-                        "div",
-                        text(if ui.song.one_shot {
-                            "Once"
-                        } else {
-                            "Loop"
-                        }),
-                    )
-                    .attr("class", "t-btn"),
+                    el("div", text(if ui.song.one_shot { "Once" } else { "Loop" }))
+                        .attr("class", "t-btn"),
                     |ui: &mut UiState, _| ui.song.one_shot = !ui.song.one_shot,
                 ),
                 clickable(
@@ -1535,9 +1585,7 @@ fn song_deck(ui: &UiState) -> UiChild {
                 clickable(
                     el("div", text(from_prog_label)).attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
-                        if let Some(doc) =
-                            song_from_progression(&ui.stage, ui.transport.bpm)
-                        {
+                        if let Some(doc) = song_from_progression(&ui.stage, ui.transport.bpm) {
                             ui.song = doc;
                             ui.song_playing = false;
                             ui.song_bar_live = 0;
@@ -1608,9 +1656,21 @@ fn song_bar_ops(_ui: &UiState) -> UiChild {
 /// The engine records live input into the bar's audio buffer; these drive
 /// it through the audio seam.
 fn song_loop_ops(ui: &UiState) -> UiChild {
-    let rec_label = if ui.song_recording { "● Recording" } else { "● Rec bar" };
-    let rec_class = if ui.song_recording { "t-btn rec-on" } else { "t-btn" };
-    let mode_label = if ui.song_record_replace { "Replace" } else { "Overdub" };
+    let rec_label = if ui.song_recording {
+        "● Recording"
+    } else {
+        "● Rec bar"
+    };
+    let rec_class = if ui.song_recording {
+        "t-btn rec-on"
+    } else {
+        "t-btn"
+    };
+    let mode_label = if ui.song_record_replace {
+        "Replace"
+    } else {
+        "Overdub"
+    };
     Box::new(
         el(
             "div",
@@ -1621,9 +1681,7 @@ fn song_loop_ops(ui: &UiState) -> UiChild {
                 ),
                 clickable(
                     el("div", text(mode_label)).attr("class", "t-btn"),
-                    |ui: &mut UiState, _| {
-                        ui.song_record_replace = !ui.song_record_replace
-                    },
+                    |ui: &mut UiState, _| ui.song_record_replace = !ui.song_record_replace,
                 ),
                 clickable(
                     el("div", text("Clear loop")).attr("class", "t-btn"),
@@ -1645,7 +1703,9 @@ fn song_loop_ops(ui: &UiState) -> UiChild {
 
 /// Per-bar chord / tempo / meter / section editor for the cursor bar.
 fn song_bar_editor(ui: &UiState) -> UiChild {
-    let cursor = ui.song_edit_cursor.min(ui.song.bars.len().saturating_sub(1));
+    let cursor = ui
+        .song_edit_cursor
+        .min(ui.song.bars.len().saturating_sub(1));
     let bar = &ui.song.bars[cursor];
     let root_label = if bar.formula_name.is_empty() {
         "silent".to_string()
@@ -1667,15 +1727,13 @@ fn song_bar_editor(ui: &UiState) -> UiChild {
             "div",
             (
                 clickable(
-                    el("div", text(format!("Root: {root_label}")))
-                        .attr("class", "t-btn"),
+                    el("div", text(format!("Root: {root_label}"))).attr("class", "t-btn"),
                     move |ui: &mut UiState, _| {
                         ui.song.bars[cursor].cycle_root();
                     },
                 ),
                 clickable(
-                    el("div", text(format!("Chord: {chord_label}")))
-                        .attr("class", "t-btn"),
+                    el("div", text(format!("Chord: {chord_label}"))).attr("class", "t-btn"),
                     move |ui: &mut UiState, _| {
                         ui.song.bars[cursor].cycle_formula();
                     },
@@ -1690,20 +1748,17 @@ fn song_bar_editor(ui: &UiState) -> UiChild {
                     el("div", text("-")).attr("class", "t-btn t-narrow"),
                     move |ui: &mut UiState, _| ui.song.bars[cursor].nudge_bpm(-5.0),
                 ),
-                el("div", text(format!("{:.0} bpm", bar.bpm)))
-                    .attr("class", "t-readout"),
+                el("div", text(format!("{:.0} bpm", bar.bpm))).attr("class", "t-readout"),
                 clickable(
                     el("div", text("+")).attr("class", "t-btn t-narrow"),
                     move |ui: &mut UiState, _| ui.song.bars[cursor].nudge_bpm(5.0),
                 ),
                 clickable(
-                    el("div", text(format!("{}/4", bar.beats)))
-                        .attr("class", "t-btn"),
+                    el("div", text(format!("{}/4", bar.beats))).attr("class", "t-btn"),
                     move |ui: &mut UiState, _| ui.song.bars[cursor].cycle_beats(),
                 ),
                 clickable(
-                    el("div", text(format!("x{}", bar.length)))
-                        .attr("class", "t-btn"),
+                    el("div", text(format!("x{}", bar.length))).attr("class", "t-btn"),
                     move |ui: &mut UiState, _| ui.song.bars[cursor].cycle_length(),
                 ),
                 clickable(
@@ -1826,60 +1881,22 @@ fn song_screen(ui: &UiState) -> UiChild {
     ))
 }
 
-/// The window chrome (CSD): title, drag surface, window buttons. The
-/// host consumes the request flags after dispatch.
-fn chrome(_ui: &UiState) -> UiChild {
-    Box::new(
-        el(
-            "div",
-            (
-                el("div", text("Woodshed")).attr("class", "chrome-title"),
-                clickable(el("div", ()).attr("class", "chrome-drag"), |ui: &mut UiState,
-                                                                       _| {
-                    ui.chrome_drag = true;
-                }),
-                clickable(
-                    el("div", text("–")).attr("class", "chrome-btn"),
-                    |ui: &mut UiState, _| {
-                        ui.chrome_minimize = true;
-                    },
-                ),
-                clickable(
-                    el("div", text("□")).attr("class", "chrome-btn"),
-                    |ui: &mut UiState, _| {
-                        ui.chrome_maximize = true;
-                    },
-                ),
-                clickable(
-                    el("div", text("×")).attr("class", "chrome-btn chrome-close"),
-                    |ui: &mut UiState, _| {
-                        ui.chrome_close = true;
-                    },
-                ),
-            ),
-        )
-        .attr("class", "chrome"),
-    )
-}
-
 fn stage_screen(ui: &UiState) -> UiChild {
-    let body: UiChild = match ui.board_layout {
-        BoardLayout::TwoPane => {
+    let body: UiChild = match (ui.board_layout, ui.viewport) {
+        (BoardLayout::TwoPane, ViewportClass::Wide) => {
             Box::new(el("div", (sidebar(ui), board(ui))).attr("class", "body"))
         }
-        BoardLayout::Hero => Box::new(el(
+        (BoardLayout::FullCanvas, _) => board(ui),
+        // Preserve the catalog on smaller surfaces without narrowing the neck.
+        _ => Box::new(el(
             "div",
             (
                 board(ui),
                 el("div", (sidebar(ui),)).attr("class", "side-strip"),
             ),
         )),
-        BoardLayout::FullCanvas => board(ui),
     };
-    Box::new(el(
-        "div",
-        (header(ui), transport(ui), lens_strip(ui), body),
-    ))
+    Box::new(el("div", (header(ui), transport(ui), lens_strip(ui), body)))
 }
 
 fn tab_content(ui: &UiState) -> UiChild {
@@ -1928,24 +1945,20 @@ fn search_view(ui: &UiState) -> UiChild {
     )
 }
 
-/// The app root. Boxed so hosts can name the runner's view type on
-/// stable Rust (`fn(&UiState) -> UiChild`).
+/// Shared product root. Desktop hosts add CSD chrome and resize affordances;
+/// browser hosts supply neither. Boxed so hosts can name the runner view type.
 pub fn stage_root(ui: &UiState) -> UiChild {
-    let mut nav: Vec<UiChild> = Tab::ALL
-        .iter()
-        .map(|&t| pill(t, t == ui.tab))
-        .collect();
+    let mut nav: Vec<UiChild> = Tab::ALL.iter().map(|&t| pill(t, t == ui.tab)).collect();
     nav.push(Box::new(el("div", ()).attr("class", "nav-spacer")));
     nav.push(search_view(ui));
     Box::new(
         el(
             "div",
-            (
-                chrome(ui),
-                el("div", nav).attr("class", "pills"),
-                tab_content(ui),
-            ),
+            (el("div", nav).attr("class", "pills"), tab_content(ui)),
         )
-        .attr("class", format!("root {}", ui.board_layout.class())),
+        .attr(
+            "class",
+            format!("root {} {}", ui.board_layout.class(), ui.viewport.class()),
+        ),
     )
 }

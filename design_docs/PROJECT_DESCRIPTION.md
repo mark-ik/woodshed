@@ -1,86 +1,89 @@
 # Project Description
 
-Maintainer-owned. Other docs are derived from this.
+Maintainer-owned. Other project-facing documents derive from this description.
 
 ## What it is
 
-A guitarist's toolkit application: tuner, comprehensive chord and scale
-libraries with formulas, chord progressions, classic practice exercises,
-and a metronome that extends into a simple drum machine. The theory
-model generalizes to other stringed instruments (bass, ukulele, banjo).
+Woodshed is an offline-first practice toolkit for guitar and related fretted
+instruments. It brings theory reference, fretboard exploration, rehearsal sets,
+song sketches, a tuner, metronome, MIDI clock, latency calibration, and a small
+live-input looper into one focused practice environment.
+
+The theory model generalizes across string counts and tunings, so bass, ukulele,
+banjo, and custom instruments are valid model inputs rather than a second
+product.
 
 ## Goals
 
-- **Comprehensive theory coverage** for guitar and related stringed
-  instruments, in a single offline application
-- **Open source** code, with a paid packaged binary distributed via
-  itch.io / Gumroad (and eventually Google Play, Apple App Store) for
-  users who want convenience
-- **Offline-first** — no network connection required for any feature
+- **Comprehensive theory coverage** for guitar and related instruments in one
+  offline application.
+- **Practice, not just reference.** Material can become a rehearsal set,
+  stepped exercise, or song timeline that drives an actual session at tempo.
+- **Open source with convenient desktop builds.** Source remains open; signed,
+  packaged binaries can later support itch.io or Gumroad distribution.
+- **Offline-first.** Core theory, session data, and practice behavior work
+  without an account or network connection.
 
-## Major Features
+## Current product surface
 
-### Tuner
-- All standard guitar tunings (standard, drop-D, drop-C, DADGAD, open G,
-  open D, etc.) and equivalents for bass, ukulele, banjo
-- Arbitrary user-defined tunings, savable as named presets
+### Fretboard and theory
 
-### Chord Library
-- Comprehensive chord catalog with formulas (intervals from root)
-- Tertiary (triads, sevenths, extensions, altered)
-- Suspended, quartal, quintal, cluster
-- Per-tuning fingering generation
+- Scale, chord, arpeggio, progression, and exercise lenses over one musical
+  context.
+- Named scale and chord catalogs, formulas, root selection, tunings, and
+  fretboard position mapping.
+- Rehearsal sets built from that material, with dwell, touch, and fret-window
+  controls.
+- Practice recipes and corpus search across the catalogs.
 
-### Scale Library
-- Diatonic modes (Ionian through Locrian)
-- Altered minor forms (harmonic, melodic, phrygian dominant, hungarian
-  minor, double harmonic, neapolitan, etc.)
-- Diminished (whole-half, half-whole), augmented, whole tone
-- Exotic / world (hirajoshi, in sen, pelog, etc.)
-- Bebop scales
-- Non-tertiary and altered non-tertiary
-- Per-tuning fretboard mapping
+### Practice and playback
 
-### Chord Progressions
-- Standard progressions (I-IV-V, ii-V-I, 12-bar blues, etc.)
-- Symmetric progressions
-- User-definable arbitrary progressions
+- Metronome playback and on-demand voicing previews for current material.
+- Song timeline with bar editing, loop/once transport, click, and live-input
+  looper recording.
+- Tuner input, latency calibration, and native MIDI input/output with clock
+  sync where devices are available.
 
-### Exercises
-- Chromatic and derivations
-- Spider and derivations
-- Trill
-- Ladder
-- X-pattern
+### Personalization and local state
 
-### Metronome / Drum Machine
-- Definable time signatures
-- Rhythm sequencer subdivisible to 1/32nd notes
-- Triplet subdivision toggle (for swing, shuffle, 12/8 feels)
-- Per-step velocity / accent
-- Multiple drum sounds — the metronome is a special-case drum pattern
+- Seed-derived Slate, Ember, Light, Dusk, Meadow, and Parchment themes.
+- Persisted session state for selections, tempo, theme, layout, rehearsal set,
+  and song document.
+- Fretboard layout choices: two pane, hero, and full canvas.
 
-## Distribution Plan
+## Delivery status
 
-1. itch.io / Gumroad (desktop: Windows, macOS, Linux)
-2. Google Play (Android)
-3. Apple App Store (iOS)
+The current app is a Windows desktop alpha hosted by Serval. It has a shared,
+adaptive product view layer, but Mac and Linux receipts have not been completed.
+A tagged build can produce a checksummed portable Windows ZIP; code signing,
+installer UX, an app icon, and third-party notice aggregation remain before a
+broad public release.
 
-The web version is free and self-hosted; paid binaries are for users who
-want a packaged, signed, offline-installable app without compiling.
+The browser/PWA host is planned from the same view layer. Web Audio, OPFS,
+accessibility exposure, and browser deployment are not shipped product features.
+Mobile follows the web host and is not a current delivery target.
 
-## Tech Stack
+## Distribution path
 
-- **Language**: Rust
-- **UI**: Iced (custom-rendered via wgpu — same look across platforms)
-- **Audio I/O**: cpal
-- **DSP**: fundsp (drum/click synthesis)
-- **Pitch detection**: pitch-detector (or pitch-detection)
-- **Theory**: in-house `woodshedding` crate (no external theory dep)
+1. GitHub-tagged portable Windows alpha builds.
+2. Signed Windows package, then itch.io / Gumroad distribution.
+3. Verified Mac and Linux builds and packages.
+4. Browser/PWA deployment, then mobile shells if it earns the work.
 
-## Non-Goals (Initial Release)
+## Tech stack
 
-- Real-time effects processing
-- Multi-track recording / DAW features
-- Notation rendering (sheet music staff display)
-- Collaborative / network features
+- **Language**: Rust.
+- **Product views**: `xilem-serval`, a DOM-shaped Xilem backend.
+- **Layout and paint**: Serval layout, PaintList, and netrender over wgpu.
+- **Desktop host**: winit 0.30.
+- **Audio I/O**: cpal 0.18, with in-house sequencing and DSP helpers.
+- **Pitch detection**: `pitch-detector` and `pitch-detection`.
+- **MIDI**: `midir` on the native host.
+- **Theory**: in-house `woodshedding` crate, not an external theory library.
+
+## Non-goals for the initial public release
+
+- Real-time effects processing.
+- Multi-track recording or a full DAW workflow.
+- Notation/staff rendering.
+- Collaborative or networked practice features.

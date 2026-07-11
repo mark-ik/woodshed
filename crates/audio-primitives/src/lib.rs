@@ -1,6 +1,6 @@
 //! Shared, framework-agnostic audio DSP primitives.
 //!
-//! The pure-DSP layer of the Strophos audio family's pressure-vessel
+//! The pure-DSP layer of the Merely audio family's pressure-vessel
 //! doctrine: the engine-and-UI-agnostic kernels that both Woodshed
 //! (cpal-direct) and Strophe (Firewheel) need, factored out so neither
 //! product carries a private copy.
@@ -31,6 +31,8 @@ pub mod click;
 pub mod onset;
 
 pub use buffer::{apply_gain, normalize, reverse};
-pub use calibration::{count_matches, estimate_latency_from_pairs, MATCH_WINDOW};
-pub use click::{click_sample, render_click_bar};
-pub use onset::{estimate_bpm, OnsetDetector};
+pub use calibration::{MATCH_WINDOW, count_matches, estimate_latency_from_pairs};
+pub use click::{
+    click_sample, frames_per_bar, frames_per_beat, render_click_bar, render_click_bar_in_meter,
+};
+pub use onset::{OnsetDetector, estimate_bpm};

@@ -29,12 +29,10 @@ use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::storage::Storage as _;
 use woodshed_views::theme::ThemeMode;
 
+use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
-use serval_layout::{
-    Applied, IncrementalLayout, InteractionState, ScrollOffsets, SourceNodeId,
-};
-use layout_dom_api::{DomMutation, LayoutDomMut as _};
+use serval_layout::{Applied, IncrementalLayout, InteractionState, ScrollOffsets, SourceNodeId};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
@@ -44,9 +42,45 @@ use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey
 use winit::window::{Window, WindowId};
 use woodshed_views::stage::{stage_root, UiChild, UiState};
 use woodshed_views::theme::slate_stage_css;
-use xilem_serval::{PointerClick, Propagation, ServalAppRunner};
+use xilem_serval::{clickable, el, text, PointerClick, Propagation, ServalAppRunner};
 
 type Runner = ServalAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
+
+/// Desktop-only frame. The shared Woodshed root deliberately contains product
+/// UI only, so a browser host does not inherit window controls it cannot use.
+fn desktop_chrome(_ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Woodshed")).attr("class", "chrome-title"),
+                clickable(
+                    el("div", ()).attr("class", "chrome-drag"),
+                    |ui: &mut UiState, _| {
+                        ui.chrome_drag = true;
+                    },
+                ),
+                clickable(
+                    el("div", text("–")).attr("class", "chrome-btn"),
+                    |ui: &mut UiState, _| ui.chrome_minimize = true,
+                ),
+                clickable(
+                    el("div", text("□")).attr("class", "chrome-btn"),
+                    |ui: &mut UiState, _| ui.chrome_maximize = true,
+                ),
+                clickable(
+                    el("div", text("×")).attr("class", "chrome-btn chrome-close"),
+                    |ui: &mut UiState, _| ui.chrome_close = true,
+                ),
+            ),
+        )
+        .attr("class", "chrome"),
+    )
+}
+
+fn desktop_root(ui: &UiState) -> UiChild {
+    Box::new(el("div", (desktop_chrome(ui), stage_root(ui))).attr("class", "desktop-frame"))
+}
 
 struct App {
     window: Option<Arc<Window>>,
@@ -135,6 +169,22 @@ fn edge_cursor(dir: winit::window::ResizeDirection) -> winit::window::CursorIcon
 }
 
 impl App {
+    /// Refresh the shared view's transient width band after a resize or DPI
+    /// change. The view only rebuilds when crossing a band boundary.
+    fn sync_viewport(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let width = window.inner_size().width as f32 / window.scale_factor() as f32;
+        let mut changed = false;
+        if let Some(runner) = self.runner.as_mut() {
+            runner.update(|ui| changed = ui.set_viewport_width(width));
+        }
+        if changed {
+            window.request_redraw();
+        }
+    }
+
     fn scale_factor(&self) -> f64 {
         self.window.as_ref().map_or(1.0, |w| w.scale_factor())
     }
@@ -161,7 +211,10 @@ impl App {
         };
         if dir != self.resize_hint {
             self.resize_hint = dir;
-            window.set_cursor(dir.map(edge_cursor).unwrap_or(winit::window::CursorIcon::Default));
+            window.set_cursor(
+                dir.map(edge_cursor)
+                    .unwrap_or(winit::window::CursorIcon::Default),
+            );
         }
     }
 
@@ -199,10 +252,7 @@ impl App {
                 }
                 if ui.rehearsal_running && !ui.set.cards.is_empty() {
                     let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                    match woodshed_core::card_dwell(
-                        &ui.set.cards[cursor],
-                        ui.transport.bpm,
-                    ) {
+                    match woodshed_core::card_dwell(&ui.set.cards[cursor], ui.transport.bpm) {
                         Some(dwell) => {
                             match last_rehearsal {
                                 Some(t) if now.duration_since(*t) >= dwell => {
@@ -234,9 +284,8 @@ impl App {
                 }
                 let stepping = ui.stage.arpeggio_playing || ui.stage.exercise_playing;
                 if stepping {
-                    let beat = std::time::Duration::from_secs_f32(
-                        60.0 / ui.transport.bpm.max(30.0),
-                    );
+                    let beat =
+                        std::time::Duration::from_secs_f32(60.0 / ui.transport.bpm.max(30.0));
                     match last_arp {
                         Some(t) if now.duration_since(*t) >= beat => {
                             // Sonify the step we land on — the arpeggio
@@ -268,8 +317,7 @@ impl App {
                 ui.midi.clock_bpm = midi_clock_bpm;
                 ui.midi.events = midi_events.clone();
                 if midi_in_connected
-                    && (ui.midi.clock_slave
-                        || ui.tab == woodshed_core::storage::Tab::Settings)
+                    && (ui.midi.clock_slave || ui.tab == woodshed_core::storage::Tab::Settings)
                 {
                     animating = true;
                 }
@@ -301,9 +349,11 @@ impl App {
         self.midi
             .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
         let tuner_live = animating;
-        let (Some(window), Some(host), Some(runner)) =
-            (self.window.as_ref(), self.host.as_ref(), self.runner.as_ref())
-        else {
+        let (Some(window), Some(host), Some(runner)) = (
+            self.window.as_ref(),
+            self.host.as_ref(),
+            self.runner.as_ref(),
+        ) else {
             return;
         };
         let size = window.inner_size();
@@ -422,8 +472,10 @@ impl App {
                     if std::mem::take(&mut ui.calib_start_requested) {
                         backend.calibration_start();
                         ui.calib_active = true;
-                        ui.calib_status =
-                            CalibrationStatus::Running { clicks_fired: 0, total: 6 };
+                        ui.calib_status = CalibrationStatus::Running {
+                            clicks_fired: 0,
+                            total: 6,
+                        };
                     }
                     if std::mem::take(&mut ui.calib_cancel_requested) {
                         backend.calibration_cancel();
@@ -496,8 +548,7 @@ impl App {
                 if midi.connected_input() != in_target.as_deref() {
                     midi.connect_input(in_target.as_deref());
                 }
-                let out_target =
-                    midi_port_at(&ui.midi.output_ports, ui.midi.output_dd.selected);
+                let out_target = midi_port_at(&ui.midi.output_ports, ui.midi.output_dd.selected);
                 if midi.connected_output() != out_target.as_deref() {
                     midi.connect_output(out_target.as_deref());
                 }
@@ -615,6 +666,30 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
+        // Start comfortably on a large desktop, but never assume one. The
+        // monitor API is available on every native host; browser hosts own
+        // their canvas size separately.
+        let (initial_pos, initial_size) = event_loop
+            .primary_monitor()
+            .map(|monitor| {
+                let scale = monitor.scale_factor();
+                let size = monitor.size();
+                let pos = monitor.position();
+                let logical_w = size.width as f64 / scale;
+                let logical_h = size.height as f64 / scale;
+                let width = 1_100.0_f64.min((logical_w - 48.0).max(480.0));
+                let height = 664.0_f64.min((logical_h - 48.0).max(360.0));
+                let x = pos.x as f64 / scale + ((logical_w - width) / 2.0).max(8.0);
+                let y = pos.y as f64 / scale + ((logical_h - height) / 2.0).max(8.0);
+                (
+                    winit::dpi::LogicalPosition::new(x, y),
+                    winit::dpi::LogicalSize::new(width, height),
+                )
+            })
+            .unwrap_or((
+                winit::dpi::LogicalPosition::new(40.0, 8.0),
+                winit::dpi::LogicalSize::new(1_100.0, 664.0),
+            ));
         let window = Arc::new(
             event_loop
                 .create_window(
@@ -623,12 +698,8 @@ impl ApplicationHandler for App {
                         // CSD: the app draws its own chrome (title row,
                         // window buttons, drag surface, edge resize).
                         .with_decorations(false)
-                        // Top-anchored and short enough to clear the taskbar
-                        // on a 720-logical-tall laptop screen (664 fits a
-                        // ~672 work area); the OS/compositor may override the
-                        // position (e.g. Wayland), which is fine.
-                        .with_position(winit::dpi::LogicalPosition::new(40.0, 8.0))
-                        .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 664.0)),
+                        .with_position(initial_pos)
+                        .with_inner_size(initial_size),
                 )
                 .expect("create window"),
         );
@@ -646,6 +717,7 @@ impl ApplicationHandler for App {
         .expect("boot serval host");
         let backend = CpalBackend::new();
         let mut ui = UiState::new();
+        ui.set_viewport_width(size.width as f32 / window.scale_factor() as f32);
         ui.audio_error = backend.error().map(String::from);
         // Restore the previous session (W0.2): selections, tempo, theme, tab.
         if let Some(json) = self.storage.load() {
@@ -660,7 +732,7 @@ impl ApplicationHandler for App {
         ui.midi.input_ports = self.midi.input_ports();
         ui.midi.output_ports = self.midi.output_ports();
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
-        let runner = Runner::new(dom, stage_root as fn(&UiState) -> UiChild, ui);
+        let runner = Runner::new(dom, desktop_root as fn(&UiState) -> UiChild, ui);
         self.window = Some(window);
         self.host = Some(host);
         self.runner = Some(runner);
@@ -674,11 +746,13 @@ impl ApplicationHandler for App {
                 if let Some(host) = self.host.as_mut() {
                     host.resize(size.width.max(1), size.height.max(1));
                 }
+                self.sync_viewport();
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
+                self.sync_viewport();
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();
                 }
@@ -688,10 +762,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let scale = self.scale_factor();
-                self.cursor = (
-                    (position.x / scale) as f32,
-                    (position.y / scale) as f32,
-                );
+                self.cursor = ((position.x / scale) as f32, (position.y / scale) as f32);
                 self.update_resize_cursor();
                 self.hover();
             }

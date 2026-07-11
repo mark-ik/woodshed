@@ -1,0 +1,45 @@
+name: Release Windows alpha
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release binary
+        run: cargo build --release -p woodshed-serval --locked
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            '0.1.0-alpha.0.manual'
+          }
+          .\scripts\package-windows.ps1 -Version $version
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.zip
+            dist/*.sha256
+      - name: Upload manual package
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: woodshed-windows-alpha
+          path: |
+            dist/*.zip
+            dist/*.sha256

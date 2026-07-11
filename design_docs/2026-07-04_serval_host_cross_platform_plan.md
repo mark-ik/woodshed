@@ -6,7 +6,9 @@ browser, from one DOM-shaped view tree. This supersedes the web-vs-native
 split in [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md);
 that plan's Tier 0 seams carry forward here.
 
-Status: **decided 2026-07-04 (Mark); planning the migration.**
+Status: **active desktop-alpha hardening.** The Woodshed-side Serval migration
+and S5 parity cut are complete; browser, cross-desktop receipts, and publishing
+remain separate release work.
 
 ## Why
 
@@ -28,7 +30,7 @@ Status: **decided 2026-07-04 (Mark); planning the migration.**
 **Alternative on file: Dioxus 0.7.** One RSX codebase, `dx` bundles
 installers for all five targets, hot patching, Dioxus Native (Blitz/wgpu).
 Strongest tooling for pure product speed; not chosen because it feeds
-nothing back into the Strophos stack and adds a foreign framework. Revisit
+nothing back into the Merely stack and adds a foreign framework. Revisit
 trigger: serval churn blocking Woodshed shipping for an extended stretch.
 
 ## Shape
@@ -146,6 +148,29 @@ workspace and the smoke already models it.
 
 ## Progress
 
+- 2026-07-10: **Windows-alpha release surface.** Added Windows CI (core tests
+  plus host check), a tag-triggered `v*` release workflow, and a manual
+  artifact path. `scripts/package-windows.ps1` packages the optimized host as
+  a portable `Woodshed-<version>-windows-x86_64.zip`, includes the project
+  licenses, README, release instructions, and Cargo.lock inventory, and emits
+  a SHA-256 sidecar. It honors `CARGO_TARGET_DIR` for local builds. The first
+  exercised package was `0.1.0-alpha.1`: 25.8 MB executable, 9.9 MB ZIP, and
+  the expected six package entries. This is intentionally not an installer:
+  application icon, signing/SmartScreen reputation, and third-party notice
+  aggregation remain before a broadly advertised release. Refreshed the
+  maintainer-owned `PROJECT_DESCRIPTION.md` at the same time so the canonical
+  product description no longer claims the retired Iced stack or an already
+  shipped web/mobile product.
+- 2026-07-09: **Adaptive-shell foundation.** CSD titlebar controls and their
+  desktop-only drag/resize behavior moved out of the shared product root and
+  into `woodshed-serval`; a future browser host therefore composes the same
+  app content without inheriting unusable window controls. The desktop host now
+  derives Wide / Medium / Narrow width bands from logical window width. Below
+  1180px the Stage catalog moves below the neck; below 760px navigation wraps,
+  controls enlarge, the fretboard scrolls rather than compressing, and recipes
+  become a single column. Native startup dimensions now clamp to the primary
+  monitor with a 24px margin instead of assuming a 1100px-wide display. This
+  is the adaptable-shell seam, not yet a web host or a mobile layout receipt.
 - 2026-07-08: **S5 parity cut (woodshed half) — woodshed-xilem deleted.**
   The old Masonry app is gone (`git rm`); woodshed-serval is now THE
   woodshed app. The mark-ik/xilem fork stays for now: audio-widgets +
