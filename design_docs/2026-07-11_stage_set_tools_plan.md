@@ -341,3 +341,12 @@ receipts are recorded before those platforms are advertised.
   39 core tests and checks for views and the desktop host. P2 remains partial
   until the durable fields move under a canonical core `AppSettings` envelope
   and nested page selection is persisted.
+- **2026-07-11, AppSettings slice:** Added a canonical core `AppSettings` with
+  typed Appearance, Instrument, Tuning, Stage, Fretboard, Metronome, Tuner,
+  Rehearsal, Looper, Audio/MIDI, and Accessibility subsections. Existing durable
+  theme, tuning, Related, layout, and tempo fields now live under those Rust
+  owners while Serde flattening preserves the legacy JSON keys. Empty
+  subsections mark routes whose runtimes do not yet implement durable knobs.
+  Verified 39 core tests, including old flat-session migration and flat-wire
+  round-trip coverage. P2 remains partial until contextual controls bind
+  directly to `AppSettings` and nested page selection persists.

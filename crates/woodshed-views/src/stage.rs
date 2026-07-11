@@ -472,11 +472,12 @@ impl UiState {
         self.set = session.set.clone();
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
-        self.related = session.related.clone();
+        self.related = session.settings.stage.related.clone();
         self.section = session.section;
-        self.transport.bpm = session.bpm.clamp(30.0, 300.0);
-        self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
-        self.board_layout = BoardLayout::from_name(&session.board_layout).unwrap_or_default();
+        self.transport.bpm = session.settings.metronome.bpm.clamp(30.0, 300.0);
+        self.theme = ThemeMode::from_name(&session.settings.appearance.theme).unwrap_or_default();
+        self.board_layout = BoardLayout::from_name(&session.settings.fretboard.board_layout)
+            .unwrap_or_default();
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
     }

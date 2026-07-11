@@ -9,6 +9,8 @@ use personae::{IdentityProvider, seal_bytes, unseal_bytes};
 use serde::{Deserialize, Serialize};
 
 use crate::arpeggio::ArpeggioDirection;
+pub use crate::settings::RelatedSettings;
+use crate::settings::AppSettings;
 use crate::{Lens, StageState};
 
 /// The host-supplied persistence realization.
@@ -55,26 +57,6 @@ impl AppSection {
     }
 }
 
-/// User-owned controls for the Related projection. Hidden identities are
-/// stable catalog IDs, so a dismissal survives catalog reordering.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct RelatedSettings {
-    pub use_history: bool,
-    pub show_neighborhood: bool,
-    pub dismissed_ids: Vec<String>,
-}
-
-impl Default for RelatedSettings {
-    fn default() -> Self {
-        Self {
-            use_history: true,
-            show_neighborhood: true,
-            dismissed_ids: Vec::new(),
-        }
-    }
-}
-
 /// Everything that survives a restart. Mirrors woodshed-xilem's persisted
 /// subset: selections and dials persist, transport cursors and playing
 /// flags do not.
@@ -84,7 +66,6 @@ pub struct PersistedSession {
     #[serde(alias = "tab")]
     pub section: AppSection,
     pub lens: Lens,
-    pub tuning_idx: usize,
     pub root_idx: usize,
     pub scale_idx: usize,
     pub chord_idx: usize,
@@ -96,12 +77,8 @@ pub struct PersistedSession {
     pub progression_expanded: usize,
     pub exercise_idx: usize,
     pub exercise_starting_fret: u8,
-    pub bpm: f32,
-    /// Theme name, opaque to the core (the view layer owns the theme
-    /// vocabulary).
-    pub theme: String,
-    /// Fretboard layout name (redesign P4), opaque like `theme`.
-    pub board_layout: String,
+    #[serde(flatten)]
+    pub settings: AppSettings,
     /// The rehearsal set (cards + cursor + loop mode).
     pub set: woodshedding::rehearsal::Set,
     /// The song lane: bars + song-level flags.
@@ -109,7 +86,6 @@ pub struct PersistedSession {
     /// Typed catalog engagement used by Related ranking and future history
     /// views. Defaults empty for sessions written before the field existed.
     pub practice_history: crate::history::PracticeHistory,
-    pub related: RelatedSettings,
 }
 
 impl Default for PersistedSession {
@@ -142,14 +118,27 @@ impl PersistedSession {
         related: &RelatedSettings,
     ) -> Self {
         Self {
-            board_layout: board_layout.to_string(),
+            settings: AppSettings {
+                appearance: crate::settings::AppearanceSettings {
+                    theme: theme.to_string(),
+                },
+                tuning: crate::settings::TuningSettings {
+                    tuning_idx: stage.tuning_idx,
+                },
+                stage: crate::settings::StageSettings {
+                    related: related.clone(),
+                },
+                fretboard: crate::settings::FretboardSettings {
+                    board_layout: board_layout.to_string(),
+                },
+                metronome: crate::settings::MetronomeSettings { bpm },
+                ..AppSettings::default()
+            },
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
-            related: related.clone(),
             section,
             lens: stage.lens,
-            tuning_idx: stage.tuning_idx,
             root_idx: stage.root_idx,
             scale_idx: stage.scale_idx,
             chord_idx: stage.chord_idx,
@@ -161,8 +150,6 @@ impl PersistedSession {
             progression_expanded: stage.progression_expanded,
             exercise_idx: stage.exercise_idx,
             exercise_starting_fret: stage.exercise_starting_fret,
-            bpm,
-            theme: theme.to_string(),
         }
     }
 
@@ -171,7 +158,7 @@ impl PersistedSession {
     /// future catalog degrades instead of panicking.
     pub fn restore(&self, stage: &mut StageState) {
         stage.set_lens(self.lens);
-        stage.set_tuning(self.tuning_idx);
+        stage.set_tuning(self.settings.tuning.tuning_idx);
         stage.set_root(self.root_idx);
         stage.select_scale(self.scale_idx);
         stage.select_chord(self.chord_idx);
@@ -252,6 +239,7 @@ mod tests {
     fn session_round_trips_through_json() {
         let mut stage = StageState::new();
         stage.set_lens(Lens::Arpeggios);
+        stage.set_tuning(3);
         stage.set_root(3);
         stage.select_arpeggio(5);
         stage.arpeggio_inversion = 2;
@@ -286,24 +274,30 @@ mod tests {
                 &related,
             );
         let json = serde_json::to_string(&snap).unwrap();
+        let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(wire.get("settings").is_none(), "settings stay flat on the wire");
+        assert_eq!(wire["theme"], "Ember");
+        assert_eq!(wire["tuning_idx"], 3);
+        assert_eq!(wire["bpm"], 96.0);
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();
         back.restore(&mut restored);
         assert_eq!(restored.lens, Lens::Arpeggios);
+        assert_eq!(restored.tuning_idx, 3);
         assert_eq!(restored.root_idx, 3);
         assert_eq!(restored.arpeggio_idx, 5);
         assert_eq!(restored.arpeggio_inversion, 2);
         assert_eq!(restored.progression_idx, Some(1));
         assert_eq!(back.section, AppSection::Settings);
-        assert_eq!(back.bpm, 96.0);
-        assert_eq!(back.theme, "Ember");
+        assert_eq!(back.settings.metronome.bpm, 96.0);
+        assert_eq!(back.settings.appearance.theme, "Ember");
         assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");
         assert_eq!(back.set.cards[0].label, "Csus4 arpeggio");
         assert_eq!(back.song.name, "My Song", "the song doc round-trips");
         assert_eq!(back.song.bars.len(), 1);
         assert!(back.song.one_shot);
         assert_eq!(back.practice_history.events, history.events);
-        assert_eq!(back.related, related);
+        assert_eq!(back.settings.stage.related, related);
     }
 
     #[test]
@@ -311,7 +305,7 @@ mod tests {
         let back: PersistedSession =
             serde_json::from_str(r#"{"lens":"Chords","bpm":88.0}"#).unwrap();
         assert_eq!(back.lens, Lens::Chords);
-        assert_eq!(back.bpm, 88.0);
+        assert_eq!(back.settings.metronome.bpm, 88.0);
         assert_eq!(back.section, AppSection::Stage, "missing fields default");
         // Out-of-range indices clamp through the setters.
         let huge: PersistedSession =

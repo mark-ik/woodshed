@@ -14,6 +14,7 @@ pub mod audio;
 pub mod history;
 pub mod midi;
 pub mod search;
+pub mod settings;
 pub mod song;
 pub mod storage;
 
