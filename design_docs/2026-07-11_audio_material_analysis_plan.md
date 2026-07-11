@@ -46,6 +46,15 @@ audio asset is immutable and content-addressed. Each analysis run records:
 A corrected interpretation is a new analysis or a user-authored correction,
 not a mutation of either the recording or prior output.
 
+### Exchange files, not project internals
+
+Woodshed should consume a decoded audio file plus a small sidecar carrying the
+loop region, tempo/meter hints, source digest, and optional Strophe
+session/track/phrase provenance. It must not open Strophe's Redb/Muniment
+project store directly. Ordinary WAV is the first audio boundary; FLAC or other
+formats can follow behind one decoder seam. Missing sidecar metadata only
+reduces available context and does not make the audio unusable.
+
 ### Keep analyzers outside the realtime audio graph
 
 This is offline work over a file or frozen capture. `woodshed-audio` retains
@@ -319,3 +328,6 @@ analysis runs at all.
   product dependency.
 - Kept MT3, separation, and local reasoners as optional comparator lanes.
 - Landed the normalized JSON smoke scorer and fixtures.
+- Confirmed `basic-pitch` 0.4.0 is published but not installed in the reference
+  Python environment. R3 requires a disposable pinned environment and must
+  measure setup friction separately from inference.
