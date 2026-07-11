@@ -6832,6 +6832,7 @@ dependencies = [
 name = "woodshed-serval"
 version = "0.1.0"
 dependencies = [
+ "chisel",
  "directories",
  "layout-dom-api",
  "netrender",

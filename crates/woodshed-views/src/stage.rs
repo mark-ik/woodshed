@@ -13,7 +13,7 @@ use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::song::SongDoc;
-use woodshed_core::storage::{PersistedSession, Tab};
+use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::Set;
 use xilem_serval::{
@@ -28,6 +28,24 @@ mod related;
 mod rehearsal;
 mod settings;
 mod templates;
+mod tools;
+
+pub const NEIGHBORHOOD_LEAF_KEY: u64 = 0x5753_4e42;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StagePage {
+    #[default]
+    Catalog,
+    Templates,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ToolPage {
+    #[default]
+    Fretboard,
+    Metronome,
+    Tuner,
+}
 
 /// Fretboard layout (redesign P4): how the Stage arranges catalog and
 /// neck. All three render the same resolved positions.
@@ -168,7 +186,9 @@ pub struct UiState {
     pub song_edit_cursor: usize,
     /// One-shot rewind request the host consumes after dispatch.
     pub song_rewind_requested: bool,
-    pub tab: Tab,
+    pub section: AppSection,
+    pub stage_page: StagePage,
+    pub tool_page: ToolPage,
     pub theme: ThemeMode,
     pub board_layout: BoardLayout,
     /// Host-observed width band. This is transient rather than a user setting.
@@ -228,7 +248,9 @@ impl UiState {
             song_bar_live: 0,
             song_edit_cursor: 0,
             song_rewind_requested: false,
-            tab: Tab::Stage,
+            section: AppSection::Stage,
+            stage_page: StagePage::default(),
+            tool_page: ToolPage::default(),
             theme: ThemeMode::default(),
             board_layout: BoardLayout::default(),
             viewport: ViewportClass::default(),
@@ -267,38 +289,43 @@ impl UiState {
             SearchHit::Scale(i) => {
                 self.stage.set_lens(Lens::Scales);
                 self.stage.select_scale(i);
-                self.tab = Tab::Stage;
+                self.stage_page = StagePage::Catalog;
+                self.section = AppSection::Stage;
             }
             SearchHit::Chord(i) => {
                 self.stage.set_lens(Lens::Chords);
                 self.stage.select_chord(i);
-                self.tab = Tab::Stage;
+                self.stage_page = StagePage::Catalog;
+                self.section = AppSection::Stage;
             }
             SearchHit::Arpeggio(i) => {
                 self.stage.set_lens(Lens::Arpeggios);
                 self.stage.select_arpeggio(i);
-                self.tab = Tab::Stage;
+                self.stage_page = StagePage::Catalog;
+                self.section = AppSection::Stage;
             }
             SearchHit::Progression(i) => {
                 self.stage.set_lens(Lens::Progressions);
                 self.stage.select_progression(i);
-                self.tab = Tab::Stage;
+                self.stage_page = StagePage::Catalog;
+                self.section = AppSection::Stage;
             }
             SearchHit::Exercise(i) => {
                 self.stage.set_lens(Lens::Exercises);
                 self.stage.select_exercise(i);
-                self.tab = Tab::Stage;
+                self.stage_page = StagePage::Catalog;
+                self.section = AppSection::Stage;
             }
             SearchHit::Recipe(i) => {
                 if let Some(ps) = woodshedding::practice::catalog().get(i) {
                     self.set = set_from_practice(ps);
-                    self.tab = Tab::Rehearsal;
+                    self.section = AppSection::Rehearsal;
                 }
             }
             SearchHit::Tuning(i) => {
                 self.stage.set_tuning(i);
                 self.tuning_dd = SelectState::new(self.stage.tuning_idx);
-                self.tab = Tab::Stage;
+                self.section = AppSection::Stage;
             }
         }
         self.search = TextInput::new("");
@@ -329,7 +356,7 @@ impl UiState {
     /// active Stage lens. Empty pitches = nothing to voice. The host
     /// consumes [`Self::preview_requested`] and calls this.
     pub fn preview_voicing(&self) -> (Vec<f32>, f32, f32) {
-        if self.tab == Tab::Rehearsal && !self.set.cards.is_empty() {
+        if self.section == AppSection::Rehearsal && !self.set.cards.is_empty() {
             let cursor = self.set.cursor.min(self.set.cards.len() - 1);
             return self.stage.card_voicing(&self.set.cards[cursor]);
         }
@@ -337,7 +364,7 @@ impl UiState {
     }
 
     pub fn request_preview(&mut self) {
-        let subject_id = if self.tab == Tab::Rehearsal && !self.set.cards.is_empty() {
+        let subject_id = if self.section == AppSection::Rehearsal && !self.set.cards.is_empty() {
             let cursor = self.set.cursor.min(self.set.cards.len() - 1);
             Some(catalog_id_for_card(&self.set.cards[cursor]))
         } else {
@@ -389,7 +416,7 @@ impl UiState {
     pub fn to_persisted(&self) -> PersistedSession {
         PersistedSession::capture(
             &self.stage,
-            self.tab,
+            self.section,
             self.transport.bpm,
             self.theme.label(),
             self.board_layout.label(),
@@ -406,7 +433,7 @@ impl UiState {
         self.set = session.set.clone();
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
-        self.tab = session.tab;
+        self.section = session.section;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
         self.board_layout = BoardLayout::from_name(&session.board_layout).unwrap_or_default();
@@ -418,12 +445,12 @@ impl UiState {
 /// Boxed heterogeneous child view over [`UiState`].
 pub type UiChild = Box<dyn AnyView<UiState, (), ServalCtx, ServalElement>>;
 
-fn pill(tab: Tab, active: bool) -> UiChild {
+fn pill(section: AppSection, active: bool) -> UiChild {
     Box::new(clickable(
-        el("span", text(tab.label()))
+        el("span", text(section.label()))
             .attr("class", if active { "pill pill-active" } else { "pill" }),
         move |ui: &mut UiState, _| {
-            ui.tab = tab;
+            ui.section = section;
         },
     ))
 }
@@ -522,10 +549,10 @@ fn transport(ui: &UiState) -> UiChild {
 }
 
 fn lens_strip(ui: &UiState) -> UiChild {
-    let items: Vec<UiChild> = Lens::ALL
+    let mut items: Vec<UiChild> = Lens::ALL
         .iter()
         .map(|&lens| {
-            let class = if lens == ui.stage.lens {
+            let class = if ui.stage_page == StagePage::Catalog && lens == ui.stage.lens {
                 "lens lens-active"
             } else {
                 "lens"
@@ -533,11 +560,21 @@ fn lens_strip(ui: &UiState) -> UiChild {
             Box::new(clickable(
                 el("div", text(lens.label())).attr("class", class),
                 move |ui: &mut UiState, _| {
+                    ui.stage_page = StagePage::Catalog;
                     ui.stage.set_lens(lens);
                 },
             )) as UiChild
         })
         .collect();
+    let templates_class = if ui.stage_page == StagePage::Templates {
+        "lens lens-active"
+    } else {
+        "lens"
+    };
+    items.push(Box::new(clickable(
+        el("div", text("Set Templates")).attr("class", templates_class),
+        |ui: &mut UiState, _| ui.stage_page = StagePage::Templates,
+    )));
     Box::new(el("div", items).attr("class", "lens-strip"))
 }
 
@@ -956,7 +993,7 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
     )
 }
 
-fn board(ui: &UiState) -> UiChild {
+pub(super) fn board(ui: &UiState) -> UiChild {
     let state = &ui.stage;
     if state.lens == Lens::Arpeggios {
         return arpeggio_board_view(ui);
@@ -1016,6 +1053,9 @@ fn board(ui: &UiState) -> UiChild {
 }
 
 fn stage_screen(ui: &UiState) -> UiChild {
+    if ui.stage_page == StagePage::Templates {
+        return Box::new(el("div", (header(ui), lens_strip(ui), templates::screen(ui))));
+    }
     let body: UiChild = match (ui.board_layout, ui.viewport) {
         (BoardLayout::TwoPane, ViewportClass::Wide) => {
             Box::new(el("div", (sidebar(ui), board(ui), related::panel(ui))).attr("class", "body"))
@@ -1035,12 +1075,12 @@ fn stage_screen(ui: &UiState) -> UiChild {
 }
 
 fn tab_content(ui: &UiState) -> UiChild {
-    match ui.tab {
-        Tab::Stage => stage_screen(ui),
-        Tab::Practice => templates::screen(ui),
-        Tab::Song => looper::screen(ui),
-        Tab::Rehearsal => rehearsal::screen(ui),
-        Tab::Settings => settings::screen(ui),
+    match ui.section {
+        AppSection::Stage => stage_screen(ui),
+        AppSection::Rehearsal => rehearsal::screen(ui),
+        AppSection::Looper => looper::screen(ui),
+        AppSection::Tools => tools::screen(ui),
+        AppSection::Settings => settings::screen(ui),
     }
 }
 
@@ -1083,7 +1123,10 @@ fn search_view(ui: &UiState) -> UiChild {
 /// Shared product root. Desktop hosts add CSD chrome and resize affordances;
 /// browser hosts supply neither. Boxed so hosts can name the runner view type.
 pub fn stage_root(ui: &UiState) -> UiChild {
-    let mut nav: Vec<UiChild> = Tab::ALL.iter().map(|&t| pill(t, t == ui.tab)).collect();
+    let mut nav: Vec<UiChild> = AppSection::ALL
+        .iter()
+        .map(|&section| pill(section, section == ui.section))
+        .collect();
     nav.push(Box::new(el("div", ()).attr("class", "nav-spacer")));
     nav.push(search_view(ui));
     Box::new(

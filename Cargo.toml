@@ -46,6 +46,7 @@ winit = "0.30"
 # path deps (layout-dom-api, xilem-core, ...) resolve inside its git
 # checkout; only the crates woodshed names appear here.
 xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+chisel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }

@@ -1,7 +1,7 @@
 //! Portable practice-engagement history.
 
 use serde::{Deserialize, Serialize};
-use woodshedding::rehearsal::{Card, Material};
+use woodshedding::rehearsal::{Card, Material, Touch};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EngagementKind {
@@ -87,6 +87,9 @@ impl PracticeHistory {
 pub fn catalog_id_for_card(card: &Card) -> String {
     match &card.material {
         Material::Scale { name, .. } => woodshed_graph::scale_id(name),
+        Material::Chord { name, .. } if matches!(card.touch, Touch::Arpeggiate { .. }) => {
+            woodshed_graph::arpeggio_id(name)
+        }
         Material::Chord { name, .. } => woodshed_graph::chord_id(name),
         Material::Riff { name } => woodshed_graph::exercise_id(name),
     }

@@ -33,6 +33,8 @@ pub const FAMILY: &str = "woodshed";
 pub const CONTAINS: u16 = 0;
 /// A chord fits within a scale (kind 1 of the woodshed family).
 pub const FITS_IN_SCALE: u16 = 1;
+/// An arpeggio is the sequential realization of a chord formula.
+pub const REALIZES: u16 = 2;
 
 /// Catalog kind carried by a related-material result. This deliberately names
 /// catalog identities rather than a configured practice Card.
@@ -40,6 +42,7 @@ pub const FITS_IN_SCALE: u16 = 1;
 pub enum CatalogKind {
     Scale,
     Chord,
+    Arpeggio,
     Progression,
     Exercise,
 }
@@ -51,6 +54,8 @@ pub struct RelatedMaterial {
     pub name: String,
     pub kind: CatalogKind,
     pub reason: String,
+    /// Deterministic harmonic relevance in `0..=100`.
+    pub score: u16,
 }
 
 /// The node id for a scale.
@@ -60,6 +65,10 @@ pub fn scale_id(name: &str) -> String {
 /// The node id for a chord.
 pub fn chord_id(name: &str) -> String {
     format!("chord:{name}")
+}
+/// The node id for an arpeggio realization of a chord formula.
+pub fn arpeggio_id(name: &str) -> String {
+    format!("arpeggio:{name}")
 }
 /// The node id for a progression.
 pub fn progression_id(name: &str) -> String {
@@ -103,6 +112,12 @@ pub fn build_catalog_graph(log_id: &str) -> GraphLog<Container, Relation> {
                 .with_tag("chord")
                 .with_tag(format!("{:?}", c.category)),
         );
+        graph.insert_node(
+            Container::new(arpeggio_id(c.name))
+                .with_title(c.name)
+                .with_tag("arpeggio")
+                .with_tag(format!("{:?}", c.category)),
+        );
     }
     for p in progression::catalog() {
         graph.insert_node(
@@ -140,8 +155,18 @@ pub fn build_catalog_graph(log_id: &str) -> GraphLog<Container, Relation> {
             let scale_pcs = pitch_classes(s.intervals);
             if chord_pcs.is_subset(&scale_pcs) {
                 graph.connect(&chord_id(c.name), &scale_id(s.name), relation(FITS_IN_SCALE));
+                graph.connect(
+                    &arpeggio_id(c.name),
+                    &scale_id(s.name),
+                    relation(FITS_IN_SCALE),
+                );
             }
         }
+        graph.connect(
+            &arpeggio_id(c.name),
+            &chord_id(c.name),
+            relation(REALIZES),
+        );
     }
 
     graph
@@ -152,6 +177,8 @@ fn kind_of(node: &Container) -> Option<CatalogKind> {
         Some(CatalogKind::Scale)
     } else if node.tags.iter().any(|tag| tag == "chord") {
         Some(CatalogKind::Chord)
+    } else if node.tags.iter().any(|tag| tag == "arpeggio") {
+        Some(CatalogKind::Arpeggio)
     } else if node.tags.iter().any(|tag| tag == "progression") {
         Some(CatalogKind::Progression)
     } else if node.tags.iter().any(|tag| tag == "exercise") {
@@ -194,16 +221,26 @@ fn build_related_index() -> HashMap<String, Vec<RelatedMaterial>> {
                 .title
                 .clone()
                 .unwrap_or_else(|| target_node.id.clone());
-            let (forward_reason, reverse_reason) = match edge.class {
+            let (forward_reason, reverse_reason, score) = match edge.class {
                 ref class if class == &RelationClass::app(FAMILY, CONTAINS) => {
-                    (format!("Used in {source_name}"), format!("Appears in {source_name}"))
+                    (
+                        format!("Used in {source_name}"),
+                        format!("Appears in {source_name}"),
+                        96,
+                    )
                 }
                 ref class if class == &RelationClass::app(FAMILY, FITS_IN_SCALE) => {
                     (
                         format!("{source_name} fits this scale"),
                         format!("{source_name} fits {target_name}"),
+                        92,
                     )
                 }
+                ref class if class == &RelationClass::app(FAMILY, REALIZES) => (
+                    format!("Arpeggiates {target_name}"),
+                    format!("Practice {source_name} as an arpeggio"),
+                    100,
+                ),
                 _ => continue,
             };
             index.entry(source_node.id.clone()).or_default().push(RelatedMaterial {
@@ -211,24 +248,80 @@ fn build_related_index() -> HashMap<String, Vec<RelatedMaterial>> {
                 name: target_name,
                 kind: target_kind,
                 reason: forward_reason,
+                score,
             });
             index.entry(target_node.id.clone()).or_default().push(RelatedMaterial {
                 id: source_node.id.clone(),
                 name: source_name.clone(),
                 kind: source_kind,
                 reason: reverse_reason,
+                score,
             });
         }
     }
 
+    add_chord_affinities(&mut index);
+
     for related in index.values_mut() {
         related.sort_by(|a, b| {
-            (a.kind, a.name.as_str(), a.reason.as_str())
-                .cmp(&(b.kind, b.name.as_str(), b.reason.as_str()))
+            (std::cmp::Reverse(a.score), a.kind, a.name.as_str())
+                .cmp(&(std::cmp::Reverse(b.score), b.kind, b.name.as_str()))
         });
-        related.dedup_by(|a, b| a.id == b.id && a.reason == b.reason);
+        related.dedup_by(|a, b| a.id == b.id);
     }
     index
+}
+
+fn circular_distance(a: i32, b: i32) -> i32 {
+    let d = (a - b).abs().rem_euclid(12);
+    d.min(12 - d)
+}
+
+fn voice_leading_distance(a: &BTreeSet<i32>, b: &BTreeSet<i32>) -> f32 {
+    let one_way = |from: &BTreeSet<i32>, to: &BTreeSet<i32>| -> f32 {
+        from.iter()
+            .map(|tone| {
+                to.iter()
+                    .map(|other| circular_distance(*tone, *other))
+                    .min()
+                    .unwrap_or(6)
+            })
+            .sum::<i32>() as f32
+            / from.len().max(1) as f32
+    };
+    (one_way(a, b) + one_way(b, a)) * 0.5
+}
+
+fn add_chord_affinities(index: &mut HashMap<String, Vec<RelatedMaterial>>) {
+    let chords = chord::catalog();
+    for (i, source) in chords.iter().enumerate() {
+        let source_pcs = pitch_classes(source.intervals);
+        for target in chords.iter().skip(i + 1) {
+            let target_pcs = pitch_classes(target.intervals);
+            let shared = source_pcs.intersection(&target_pcs).count();
+            let motion = voice_leading_distance(&source_pcs, &target_pcs);
+            if shared == 0 && motion > 1.5 {
+                continue;
+            }
+            let score = (38.0 + shared as f32 * 12.0 + (3.0 - motion).max(0.0) * 7.0)
+                .round()
+                .clamp(0.0, 88.0) as u16;
+            let reason = format!(
+                "Shares {shared} tone{} · voice-leading {:.1}",
+                if shared == 1 { "" } else { "s" },
+                motion
+            );
+            for (from, to) in [(source, target), (target, source)] {
+                index.entry(chord_id(from.name)).or_default().push(RelatedMaterial {
+                    id: chord_id(to.name),
+                    name: to.name.to_string(),
+                    kind: CatalogKind::Chord,
+                    reason: reason.clone(),
+                    score,
+                });
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -239,12 +332,13 @@ mod tests {
     fn the_graph_holds_the_whole_catalog() {
         let graph = build_catalog_graph("woodshed:catalog");
         let expected = scale::catalog().len()
-            + chord::catalog().len()
+            + chord::catalog().len() * 2
             + progression::catalog().len()
             + exercise::catalog().len();
         assert_eq!(graph.graph().node_count(), expected);
         // A well-known object is present, found by its stable id.
         assert!(graph.graph().get(&chord_id("Major 7")).is_some());
+        assert!(graph.graph().get(&arpeggio_id("Major 7")).is_some());
         assert!(graph.graph().get(&scale_id("Major")).is_some());
     }
 
@@ -384,5 +478,31 @@ mod tests {
         assert!(scale.iter().any(|item| {
             item.id == chord_id("Major 7") && item.reason.contains("fits Major")
         }));
+    }
+
+    #[test]
+    fn chord_and_arpeggio_are_distinct_related_identities() {
+        let chord = related_material(&chord_id("Minor 7"), 64);
+        let arpeggio = chord
+            .iter()
+            .find(|item| item.id == arpeggio_id("Minor 7"))
+            .expect("chord offers its arpeggio realization");
+        assert_eq!(arpeggio.kind, CatalogKind::Arpeggio);
+        assert_eq!(arpeggio.score, 100);
+
+        let reverse = related_material(&arpeggio_id("Minor 7"), 64);
+        assert!(reverse.iter().any(|item| item.id == chord_id("Minor 7")));
+    }
+
+    #[test]
+    fn chord_affinity_scores_shared_tones_and_voice_leading() {
+        let related = related_material(&chord_id("Major"), 64);
+        let major_7 = related
+            .iter()
+            .find(|item| item.id == chord_id("Major 7"))
+            .expect("closely related chord");
+        assert!(major_7.score > 60);
+        assert!(major_7.reason.contains("Shares 3 tones"));
+        assert!(major_7.reason.contains("voice-leading"));
     }
 }

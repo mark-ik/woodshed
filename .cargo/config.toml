@@ -24,6 +24,7 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # dirs but NOT serval's support/patches/* so it never collides with the
 # committed [patch.crates-io] taffy/ipc-channel redirects.
 [patch."https://github.com/mark-ik/serval.git"]
+chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
 "serval-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-layout" }
 "serval-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-scripted-dom" }

@@ -264,9 +264,9 @@ receipts are recorded before those platforms are advertised.
 - Chisel is a good fit for custom-painted material projections. Its semantic
   event/action seam is still a placeholder, so ordinary `xilem_serval` elements
   remain the right owner for Card interaction and accessibility.
-- `woodshed-graph` already projects real catalog nodes, `Contains` and
-  `FitsInScale` relations, stable IDs, and practice lineage. It is not yet wired
-  into the product views and does not yet cover arpeggios or typed engagement.
+- `woodshed-graph` projects scales, chords, arpeggios, stable IDs, scored theory
+  relations, and practice lineage into both the Related list and Chisel
+  neighborhood. Progressions and exercises still need first-class graph nodes.
 - Current `PracticeSet` values already lower to the same Cards, so Practice can
   become Set Templates without a new data model.
 - Current `SongDoc` duplicates ordering, tempo, and duration. Progressions can
@@ -312,5 +312,16 @@ receipts are recorded before those platforms are advertised.
   Templates into owned view modules. `stage.rs` fell from 2,087 lines to about
   1,040 and now concentrates shared app state plus the catalog/fretboard Stage
   surface. This is behavior-preserving and keeps coordination in the existing
-  `UiState`; P1 remains partial until the app shell/shared controls and
-  standalone Tools surface are separated.
+  `UiState`; P1 remains partial until shared shell controls and the remaining
+  large `UiState` coordination are separated.
+- **2026-07-11, harmonic-neighborhood slice:** Added stable arpeggio graph
+  identities and scored direct relations plus shared-tone and symmetric
+  voice-leading chord affinity. Core now projects the ranked neighborhood once
+  for both the Related list and a Chisel graph glyph; selecting an arpeggio
+  changes both surfaces to the same identity. Also continued the P1 shell split
+  with owned Stage, Rehearsal, Looper, Tools, and Settings sections and Catalog
+  and Templates Stage pages. Verified 38 core tests, 10 graph tests, checks for
+  the views and desktop host, a desktop build, and a live Windows receipt at
+  1100x664. P4 remains partial: graph-node selection, context-sensitive
+  instrument/tuning filtering, history controls, dismissals, and progression
+  or scale-to-scale affinity remain.

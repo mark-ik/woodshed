@@ -80,6 +80,7 @@ impl Lens {
 pub enum RelatedTarget {
     Scale(usize),
     Chord(usize),
+    Arpeggio(usize),
     Progression(usize),
     Exercise(usize),
 }
@@ -89,7 +90,22 @@ pub struct RelatedSuggestion {
     pub title: String,
     pub kind: &'static str,
     pub reason: String,
+    pub score: u16,
     pub target: RelatedTarget,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NeighborhoodNode {
+    pub id: String,
+    pub title: String,
+    pub kind: &'static str,
+    pub score: u16,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NeighborhoodSnapshot {
+    pub nodes: Vec<NeighborhoodNode>,
+    pub edges: Vec<(u16, u16)>,
 }
 
 /// Root pitch-class names, indexed by semitones above A.
@@ -514,7 +530,7 @@ impl StageState {
         let selected_id = match self.lens {
             Lens::Scales => woodshed_graph::scale_id(self.scale().name),
             Lens::Chords => woodshed_graph::chord_id(self.chord().name),
-            Lens::Arpeggios => woodshed_graph::chord_id(self.arpeggio_chord().name),
+            Lens::Arpeggios => woodshed_graph::arpeggio_id(self.arpeggio_chord().name),
             Lens::Progressions => {
                 let Some(idx) = self.progression_idx else { return Vec::new() };
                 woodshed_graph::progression_id(self.progressions()[idx].name)
@@ -535,6 +551,12 @@ impl StageState {
                         "Chord",
                         RelatedTarget::Chord(self.chords().iter().position(|x| x.name == item.name)?),
                     ),
+                    CatalogKind::Arpeggio => (
+                        "Arpeggio",
+                        RelatedTarget::Arpeggio(
+                            self.chords().iter().position(|x| x.name == item.name)?,
+                        ),
+                    ),
                     CatalogKind::Progression => (
                         "Progression",
                         RelatedTarget::Progression(
@@ -552,6 +574,7 @@ impl StageState {
                     title: item.name,
                     kind,
                     reason: item.reason,
+                    score: item.score,
                     target,
                 })
             })
@@ -562,7 +585,7 @@ impl StageState {
         match self.lens {
             Lens::Scales => Some(woodshed_graph::scale_id(self.scale().name)),
             Lens::Chords => Some(woodshed_graph::chord_id(self.chord().name)),
-            Lens::Arpeggios => Some(woodshed_graph::chord_id(self.arpeggio_chord().name)),
+            Lens::Arpeggios => Some(woodshed_graph::arpeggio_id(self.arpeggio_chord().name)),
             Lens::Progressions => self
                 .progression_idx
                 .map(|idx| woodshed_graph::progression_id(self.progressions()[idx].name)),
@@ -584,6 +607,9 @@ impl StageState {
                 let target_id = match suggestion.target {
                     RelatedTarget::Scale(idx) => woodshed_graph::scale_id(self.scales()[idx].name),
                     RelatedTarget::Chord(idx) => woodshed_graph::chord_id(self.chords()[idx].name),
+                    RelatedTarget::Arpeggio(idx) => {
+                        woodshed_graph::arpeggio_id(self.chords()[idx].name)
+                    }
                     RelatedTarget::Progression(idx) => {
                         woodshed_graph::progression_id(self.progressions()[idx].name)
                     }
@@ -610,6 +636,49 @@ impl StageState {
             .collect()
     }
 
+    fn related_target_id(&self, target: RelatedTarget) -> String {
+        match target {
+            RelatedTarget::Scale(idx) => woodshed_graph::scale_id(self.scales()[idx].name),
+            RelatedTarget::Chord(idx) => woodshed_graph::chord_id(self.chords()[idx].name),
+            RelatedTarget::Arpeggio(idx) => woodshed_graph::arpeggio_id(self.chords()[idx].name),
+            RelatedTarget::Progression(idx) => {
+                woodshed_graph::progression_id(self.progressions()[idx].name)
+            }
+            RelatedTarget::Exercise(idx) => woodshed_graph::exercise_id(self.exercises()[idx].name),
+        }
+    }
+
+    pub fn neighborhood_snapshot(
+        &self,
+        history: &history::PracticeHistory,
+        limit: usize,
+    ) -> NeighborhoodSnapshot {
+        let Some(center_id) = self.catalog_id() else { return NeighborhoodSnapshot::default() };
+        let center_title = center_id
+            .split_once(':')
+            .map(|(_, title)| title)
+            .unwrap_or(center_id.as_str())
+            .to_string();
+        let mut nodes = vec![NeighborhoodNode {
+            id: center_id,
+            title: center_title,
+            kind: self.lens.label(),
+            score: 100,
+        }];
+        nodes.extend(
+            self.related_material_with_history(history, limit)
+                .into_iter()
+                .map(|suggestion| NeighborhoodNode {
+                    id: self.related_target_id(suggestion.target),
+                    title: suggestion.title,
+                    kind: suggestion.kind,
+                    score: suggestion.score,
+                }),
+        );
+        let edges = (1..nodes.len()).map(|idx| (0, idx as u16)).collect();
+        NeighborhoodSnapshot { nodes, edges }
+    }
+
     pub fn select_related(&mut self, target: RelatedTarget) {
         match target {
             RelatedTarget::Scale(idx) => {
@@ -619,6 +688,10 @@ impl StageState {
             RelatedTarget::Chord(idx) => {
                 self.set_lens(Lens::Chords);
                 self.select_chord(idx);
+            }
+            RelatedTarget::Arpeggio(idx) => {
+                self.set_lens(Lens::Arpeggios);
+                self.select_arpeggio(idx);
             }
             RelatedTarget::Progression(idx) => {
                 self.set_lens(Lens::Progressions);

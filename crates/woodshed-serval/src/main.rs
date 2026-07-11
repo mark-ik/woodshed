@@ -18,6 +18,8 @@ mod midi;
 mod storage;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -32,7 +34,9 @@ use woodshed_views::theme::ThemeMode;
 use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
-use serval_layout::{Applied, IncrementalLayout, InteractionState, ScrollOffsets, SourceNodeId};
+use serval_layout::{
+    Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, SourceNodeId,
+};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
@@ -40,11 +44,19 @@ use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowE
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
-use woodshed_views::stage::{stage_root, UiChild, UiState};
+use woodshed_views::stage::{stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 use woodshed_views::theme::slate_stage_css;
 use xilem_serval::{clickable, el, text, PointerClick, Propagation, ServalAppRunner};
 
 type Runner = ServalAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
+
+struct ChiselSource<'a>(&'a chisel::RenderedLeaves);
+
+impl LeafPaintSource for ChiselSource<'_> {
+    fn leaf_commands(&self, key: u64) -> Option<&[paint_list_api::PaintCmd]> {
+        self.0.get(key)
+    }
+}
 
 /// Desktop-only frame. The shared Woodshed root deliberately contains product
 /// UI only, so a browser host does not inherit window controls it cannot use.
@@ -91,6 +103,9 @@ struct App {
     layout: Option<IncrementalLayout<NodeId>>,
     /// Logical size the retained layout was built at.
     layout_size: (f32, f32),
+    neighborhood_leaves: chisel::LeafRegistry<u64>,
+    neighborhood_rendered: chisel::RenderedLeaves,
+    neighborhood_sig: u64,
     sheet: String,
     /// Cursor position in logical coordinates.
     cursor: (f32, f32),
@@ -169,6 +184,80 @@ fn edge_cursor(dir: winit::window::ResizeDirection) -> winit::window::CursorIcon
 }
 
 impl App {
+    fn sync_neighborhood_leaf(&mut self) {
+        let Some(runner) = self.runner.as_ref() else { return };
+        let snapshot = runner
+            .state()
+            .stage
+            .neighborhood_snapshot(&runner.state().practice_history, 8);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for node in &snapshot.nodes {
+            node.id.hash(&mut hasher);
+            node.score.hash(&mut hasher);
+        }
+        snapshot.edges.hash(&mut hasher);
+        let sig = hasher.finish();
+        if sig == self.neighborhood_sig {
+            return;
+        }
+
+        let count = snapshot.nodes.len();
+        let nodes: Vec<chisel::GraphGlyphNode> = snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| {
+                let (x, y) = if idx == 0 {
+                    (0.5, 0.5)
+                } else {
+                    let angle = (idx - 1) as f32
+                        / count.saturating_sub(1).max(1) as f32
+                        * std::f32::consts::TAU
+                        - std::f32::consts::FRAC_PI_2;
+                    (0.5 + angle.cos() * 0.40, 0.5 + angle.sin() * 0.40)
+                };
+                let [r, g, b] = match node.kind {
+                    "Scale" => [0.30, 0.67, 0.76],
+                    "Chord" => [0.91, 0.38, 0.25],
+                    "Arpeggio" => [0.70, 0.46, 0.86],
+                    "Progression" => [0.91, 0.68, 0.28],
+                    "Exercise" => [0.40, 0.72, 0.42],
+                    _ => [0.72, 0.74, 0.78],
+                };
+                let strength = 0.55 + node.score as f32 / 100.0 * 0.45;
+                chisel::GraphGlyphNode {
+                    x,
+                    y,
+                    color: chisel::ColorF {
+                        r: r * strength,
+                        g: g * strength,
+                        b: b * strength,
+                        a: 1.0,
+                    },
+                }
+            })
+            .collect();
+        let mut glyph = chisel::GraphGlyph::new(
+            nodes,
+            snapshot.edges,
+            chisel::Size {
+                width: 232.0,
+                height: 112.0,
+            },
+        );
+        glyph.node_radius = 5.0;
+        glyph.edge_width = 1.4;
+        glyph.edge_color = chisel::ColorF {
+            r: 0.38,
+            g: 0.40,
+            b: 0.46,
+            a: 1.0,
+        };
+        self.neighborhood_leaves
+            .insert(NEIGHBORHOOD_LEAF_KEY, Box::new(glyph));
+        self.neighborhood_sig = sig;
+    }
+
     /// Refresh the shared view's transient width band after a resize or DPI
     /// change. The view only rebuilds when crossing a band boundary.
     fn sync_viewport(&mut self) {
@@ -319,7 +408,8 @@ impl App {
                 ui.midi.clock_bpm = midi_clock_bpm;
                 ui.midi.events = midi_events.clone();
                 if midi_in_connected
-                    && (ui.midi.clock_slave || ui.tab == woodshed_core::storage::Tab::Settings)
+                    && (ui.midi.clock_slave
+                        || ui.section == woodshed_core::storage::AppSection::Settings)
                 {
                     animating = true;
                 }
@@ -350,6 +440,7 @@ impl App {
         }
         self.midi
             .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
+        self.sync_neighborhood_leaf();
         let tuner_live = animating;
         let (Some(window), Some(host), Some(runner)) = (
             self.window.as_ref(),
@@ -398,10 +489,22 @@ impl App {
             }
             let layout = self.layout.as_ref().expect("layout just ensured");
             let anim_active = layout.has_active_animations();
-            let list = layout.emit_paint_list(
+            let sizes: HashMap<u64, (f32, f32)> =
+                layout.chisel_leaf_boxes().into_iter().collect();
+            self.neighborhood_leaves.render_into(
+                |key| {
+                    sizes
+                        .get(&key)
+                        .map(|&(width, height)| chisel::Size { width, height })
+                },
+                &mut self.neighborhood_rendered,
+            );
+            let source = ChiselSource(&self.neighborhood_rendered);
+            let list = layout.emit_paint_list_with_leaves(
                 &*dom_ref,
                 &ScrollOffsets::default(),
                 DeviceIntSize::new(lw as i32, lh as i32),
+                &source,
             );
             let translated = paint_list_render::translate_paint_cmd_stream(
                 list.viewport(),
@@ -835,6 +938,9 @@ fn main() {
         runner: None,
         layout: None,
         layout_size: (0.0, 0.0),
+        neighborhood_leaves: chisel::LeafRegistry::new(),
+        neighborhood_rendered: chisel::RenderedLeaves::new(),
+        neighborhood_sig: 0,
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),
         modifiers: ModifiersState::empty(),

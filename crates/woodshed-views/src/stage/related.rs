@@ -1,6 +1,6 @@
-use xilem_serval::{clickable, el, text};
+use xilem_serval::{chisel_leaf, clickable, el, text};
 
-use super::{UiChild, UiState};
+use super::{UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 
 pub(super) fn panel(ui: &UiState) -> UiChild {
     let suggestions = ui
@@ -21,7 +21,11 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                                 (
                                     el("div", text(format!("{} · {}", item.kind, item.title)))
                                         .attr("class", "related-title"),
-                                    el("div", text(item.reason)).attr("class", "related-reason"),
+                                    el(
+                                        "div",
+                                        text(format!("{} · {}", item.score, item.reason)),
+                                    )
+                                    .attr("class", "related-reason"),
                                 ),
                             )
                             .attr("class", "related-copy"),
@@ -96,6 +100,11 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                 el("div", text("Related")).attr("class", "related-heading"),
                 el("div", text("What might I stage next?"))
                     .attr("class", "related-subtitle"),
+                el(
+                    "div",
+                    chisel_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
+                )
+                .attr("class", "related-graph"),
                 history,
                 body,
             ),
@@ -103,4 +112,3 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
         .attr("class", "related-panel"),
     )
 }
-

@@ -21,34 +21,36 @@ pub trait Storage {
     fn save(&self, contents: &str);
 }
 
-/// The top-level app tab. Stage carries the lens strip; the others
-/// migrate through S4.
+/// The top-level product section. Legacy Practice and Song values migrate at
+/// deserialization into Stage and Looper respectively.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum Tab {
+pub enum AppSection {
     #[default]
+    #[serde(alias = "Practice")]
     Stage,
-    Practice,
-    Song,
     Rehearsal,
+    #[serde(alias = "Song")]
+    Looper,
+    Tools,
     Settings,
 }
 
-impl Tab {
-    pub const ALL: [Tab; 5] = [
-        Tab::Stage,
-        Tab::Practice,
-        Tab::Song,
-        Tab::Rehearsal,
-        Tab::Settings,
+impl AppSection {
+    pub const ALL: [AppSection; 5] = [
+        AppSection::Stage,
+        AppSection::Rehearsal,
+        AppSection::Looper,
+        AppSection::Tools,
+        AppSection::Settings,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            Tab::Stage => "Stage",
-            Tab::Practice => "Practice",
-            Tab::Song => "Song",
-            Tab::Rehearsal => "Rehearsal",
-            Tab::Settings => "Settings",
+            AppSection::Stage => "Stage",
+            AppSection::Rehearsal => "Rehearsal",
+            AppSection::Looper => "Looper",
+            AppSection::Tools => "Tools",
+            AppSection::Settings => "Settings",
         }
     }
 }
@@ -59,7 +61,8 @@ impl Tab {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PersistedSession {
-    pub tab: Tab,
+    #[serde(alias = "tab")]
+    pub section: AppSection,
     pub lens: Lens,
     pub tuning_idx: usize,
     pub root_idx: usize,
@@ -92,7 +95,7 @@ impl Default for PersistedSession {
     fn default() -> Self {
         Self::capture(
             &StageState::new(),
-            Tab::Stage,
+            AppSection::Stage,
             120.0,
             "Slate",
             "Two pane",
@@ -107,7 +110,7 @@ impl PersistedSession {
     /// Snapshot the persistable subset of the app state.
     pub fn capture(
         stage: &StageState,
-        tab: Tab,
+        section: AppSection,
         bpm: f32,
         theme: &str,
         board_layout: &str,
@@ -120,7 +123,7 @@ impl PersistedSession {
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
-            tab,
+            section,
             lens: stage.lens,
             tuning_idx: stage.tuning_idx,
             root_idx: stage.root_idx,
@@ -244,7 +247,7 @@ mod tests {
         let snap =
             PersistedSession::capture(
                 &stage,
-                Tab::Settings,
+                AppSection::Settings,
                 96.0,
                 "Ember",
                 "Hero",
@@ -261,7 +264,7 @@ mod tests {
         assert_eq!(restored.arpeggio_idx, 5);
         assert_eq!(restored.arpeggio_inversion, 2);
         assert_eq!(restored.progression_idx, Some(1));
-        assert_eq!(back.tab, Tab::Settings);
+        assert_eq!(back.section, AppSection::Settings);
         assert_eq!(back.bpm, 96.0);
         assert_eq!(back.theme, "Ember");
         assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");
@@ -278,13 +281,21 @@ mod tests {
             serde_json::from_str(r#"{"lens":"Chords","bpm":88.0}"#).unwrap();
         assert_eq!(back.lens, Lens::Chords);
         assert_eq!(back.bpm, 88.0);
-        assert_eq!(back.tab, Tab::Stage, "missing fields default");
+        assert_eq!(back.section, AppSection::Stage, "missing fields default");
         // Out-of-range indices clamp through the setters.
         let huge: PersistedSession =
             serde_json::from_str(r#"{"scale_idx":99999}"#).unwrap();
         let mut s = StageState::new();
         huge.restore(&mut s);
         assert!(s.scale_idx < s.scales().len());
+    }
+
+    #[test]
+    fn legacy_tabs_migrate_to_current_sections() {
+        let practice: PersistedSession = serde_json::from_str(r#"{"tab":"Practice"}"#).unwrap();
+        assert_eq!(practice.section, AppSection::Stage);
+        let song: PersistedSession = serde_json::from_str(r#"{"tab":"Song"}"#).unwrap();
+        assert_eq!(song.section, AppSection::Looper);
     }
 
     // A mock host Storage holding one String (what SealedStorage wraps; a real

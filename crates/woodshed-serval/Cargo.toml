@@ -12,6 +12,7 @@ woodshed-core = { workspace = true }
 woodshed-audio = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 xilem-serval = { workspace = true }
+chisel = { workspace = true }
 layout-dom-api = { workspace = true }
 serval-scripted-dom = { workspace = true }
 serval-layout = { workspace = true }
