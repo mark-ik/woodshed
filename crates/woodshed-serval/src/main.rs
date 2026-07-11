@@ -189,7 +189,11 @@ impl App {
         let snapshot = runner
             .state()
             .stage
-            .neighborhood_snapshot(&runner.state().practice_history, 8);
+            .neighborhood_snapshot(
+                &runner.state().practice_history,
+                &runner.state().related,
+                8,
+            );
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         for node in &snapshot.nodes {
             node.id.hash(&mut hasher);

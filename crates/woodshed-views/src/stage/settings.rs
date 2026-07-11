@@ -187,6 +187,17 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         Some(err) => format!("Audio: {err}"),
         None => "Audio: output and input streams open.".to_string(),
     };
+    let history_label = if ui.related.use_history {
+        "History ranking: on"
+    } else {
+        "History ranking: off"
+    };
+    let graph_label = if ui.related.show_neighborhood {
+        "Neighborhood graph: on"
+    } else {
+        "Neighborhood graph: off"
+    };
+    let hidden_count = ui.related.dismissed_ids.len();
     Box::new(
         el(
             "div",
@@ -199,6 +210,25 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                         el("div", text("Fretboard layout"))
                             .attr("class", "settings-heading settings-gap"),
                         el("div", layouts),
+                        el("div", text("Related"))
+                            .attr("class", "settings-heading settings-gap"),
+                        clickable(
+                            el("div", text(history_label)).attr("class", "side-item"),
+                            |ui: &mut UiState, _| {
+                                ui.related.use_history = !ui.related.use_history;
+                            },
+                        ),
+                        clickable(
+                            el("div", text(graph_label)).attr("class", "side-item"),
+                            |ui: &mut UiState, _| {
+                                ui.related.show_neighborhood = !ui.related.show_neighborhood;
+                            },
+                        ),
+                        clickable(
+                            el("div", text(format!("Restore hidden ({hidden_count})")))
+                                .attr("class", "side-item"),
+                            |ui: &mut UiState, _| ui.related.dismissed_ids.clear(),
+                        ),
                     ),
                 )
                 .attr("class", "side"),

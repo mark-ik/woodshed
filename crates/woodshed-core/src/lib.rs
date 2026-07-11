@@ -636,7 +636,7 @@ impl StageState {
             .collect()
     }
 
-    fn related_target_id(&self, target: RelatedTarget) -> String {
+    pub fn related_target_id(&self, target: RelatedTarget) -> String {
         match target {
             RelatedTarget::Scale(idx) => woodshed_graph::scale_id(self.scales()[idx].name),
             RelatedTarget::Chord(idx) => woodshed_graph::chord_id(self.chords()[idx].name),
@@ -648,9 +648,32 @@ impl StageState {
         }
     }
 
+    pub fn related_material_configured(
+        &self,
+        history: &history::PracticeHistory,
+        settings: &storage::RelatedSettings,
+        limit: usize,
+    ) -> Vec<RelatedSuggestion> {
+        let suggestions = if settings.use_history {
+            self.related_material_with_history(history, usize::MAX)
+        } else {
+            self.related_material(usize::MAX)
+        };
+        suggestions
+            .into_iter()
+            .filter(|suggestion| {
+                !settings
+                    .dismissed_ids
+                    .contains(&self.related_target_id(suggestion.target))
+            })
+            .take(limit)
+            .collect()
+    }
+
     pub fn neighborhood_snapshot(
         &self,
         history: &history::PracticeHistory,
+        settings: &storage::RelatedSettings,
         limit: usize,
     ) -> NeighborhoodSnapshot {
         let Some(center_id) = self.catalog_id() else { return NeighborhoodSnapshot::default() };
@@ -666,7 +689,7 @@ impl StageState {
             score: 100,
         }];
         nodes.extend(
-            self.related_material_with_history(history, limit)
+            self.related_material_configured(history, settings, limit)
                 .into_iter()
                 .map(|suggestion| NeighborhoodNode {
                     id: self.related_target_id(suggestion.target),
@@ -1581,5 +1604,27 @@ mod tests {
         let ranked = s.related_material_with_history(&history, 5);
         assert_eq!(ranked[0].title, "Minor 7");
         assert_eq!(ranked[0].reason, "Previously staged from here");
+    }
+
+    #[test]
+    fn related_settings_disable_history_and_hide_stable_identities() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+        let dorian = s.scales().iter().position(|scale| scale.name == "Dorian").unwrap();
+        s.select_scale(dorian);
+        let mut history = history::PracticeHistory::default();
+        history.record(
+            woodshed_graph::chord_id("Minor 7"),
+            history::EngagementKind::Staged,
+            Some(woodshed_graph::scale_id("Dorian")),
+        );
+        let settings = storage::RelatedSettings {
+            use_history: false,
+            show_neighborhood: true,
+            dismissed_ids: vec![woodshed_graph::chord_id("Minor 7")],
+        };
+        let related = s.related_material_configured(&history, &settings, 5);
+        assert!(related.iter().all(|item| item.title != "Minor 7"));
+        assert!(related.iter().all(|item| !item.reason.contains("Previously")));
     }
 }

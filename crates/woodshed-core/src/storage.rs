@@ -55,6 +55,26 @@ impl AppSection {
     }
 }
 
+/// User-owned controls for the Related projection. Hidden identities are
+/// stable catalog IDs, so a dismissal survives catalog reordering.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RelatedSettings {
+    pub use_history: bool,
+    pub show_neighborhood: bool,
+    pub dismissed_ids: Vec<String>,
+}
+
+impl Default for RelatedSettings {
+    fn default() -> Self {
+        Self {
+            use_history: true,
+            show_neighborhood: true,
+            dismissed_ids: Vec::new(),
+        }
+    }
+}
+
 /// Everything that survives a restart. Mirrors woodshed-xilem's persisted
 /// subset: selections and dials persist, transport cursors and playing
 /// flags do not.
@@ -89,6 +109,7 @@ pub struct PersistedSession {
     /// Typed catalog engagement used by Related ranking and future history
     /// views. Defaults empty for sessions written before the field existed.
     pub practice_history: crate::history::PracticeHistory,
+    pub related: RelatedSettings,
 }
 
 impl Default for PersistedSession {
@@ -102,6 +123,7 @@ impl Default for PersistedSession {
             &woodshedding::rehearsal::Set::default(),
             &crate::song::SongDoc::default(),
             &crate::history::PracticeHistory::default(),
+            &RelatedSettings::default(),
         )
     }
 }
@@ -117,12 +139,14 @@ impl PersistedSession {
         set: &woodshedding::rehearsal::Set,
         song: &crate::song::SongDoc,
         practice_history: &crate::history::PracticeHistory,
+        related: &RelatedSettings,
     ) -> Self {
         Self {
             board_layout: board_layout.to_string(),
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
+            related: related.clone(),
             section,
             lens: stage.lens,
             tuning_idx: stage.tuning_idx,
@@ -244,6 +268,11 @@ mod tests {
             crate::history::EngagementKind::Staged,
             Some(woodshed_graph::scale_id("Dorian")),
         );
+        let related = RelatedSettings {
+            use_history: false,
+            show_neighborhood: false,
+            dismissed_ids: vec![woodshed_graph::chord_id("Minor 7")],
+        };
         let snap =
             PersistedSession::capture(
                 &stage,
@@ -254,6 +283,7 @@ mod tests {
                 &set,
                 &song,
                 &history,
+                &related,
             );
         let json = serde_json::to_string(&snap).unwrap();
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
@@ -273,6 +303,7 @@ mod tests {
         assert_eq!(back.song.bars.len(), 1);
         assert!(back.song.one_shot);
         assert_eq!(back.practice_history.events, history.events);
+        assert_eq!(back.related, related);
     }
 
     #[test]

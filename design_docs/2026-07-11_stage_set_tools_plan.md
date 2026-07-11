@@ -325,3 +325,11 @@ receipts are recorded before those platforms are advertised.
   1100x664. P4 remains partial: graph-node selection, context-sensitive
   instrument/tuning filtering, history controls, dismissals, and progression
   or scale-to-scale affinity remain.
+- **2026-07-11, Related controls slice:** Added persisted settings for history
+  ranking and the Chisel neighborhood, per-identity Hide actions, and a Restore
+  hidden control. Turning history ranking off preserves deterministic theory
+  suggestions, and hidden identities are removed from both the list and graph.
+  Verified 39 core tests, checks and a desktop build, plus a live Windows
+  receipt covering both toggles and dismissal restoration. P4 still needs
+  Chisel event routing before graph nodes can select material directly; it also
+  needs instrument/tuning context and broader progression/scale affinity.

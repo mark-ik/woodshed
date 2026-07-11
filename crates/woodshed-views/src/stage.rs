@@ -13,7 +13,7 @@ use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::song::SongDoc;
-use woodshed_core::storage::{AppSection, PersistedSession};
+use woodshed_core::storage::{AppSection, PersistedSession, RelatedSettings};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::Set;
 use xilem_serval::{
@@ -176,6 +176,7 @@ pub struct UiState {
     pub stage: StageState,
     pub set: Set,
     pub practice_history: PracticeHistory,
+    pub related: RelatedSettings,
     /// Rehearsal dwell transport running (transient).
     pub rehearsal_running: bool,
     pub song: SongDoc,
@@ -242,6 +243,7 @@ impl UiState {
         Self {
             set: Set::default(),
             practice_history: PracticeHistory::default(),
+            related: RelatedSettings::default(),
             rehearsal_running: false,
             song: SongDoc::default(),
             song_playing: false,
@@ -423,6 +425,7 @@ impl UiState {
             &self.set,
             &self.song,
             &self.practice_history,
+            &self.related,
         )
     }
 
@@ -433,6 +436,7 @@ impl UiState {
         self.set = session.set.clone();
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
+        self.related = session.related.clone();
         self.section = session.section;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();

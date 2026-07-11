@@ -3,14 +3,17 @@ use xilem_serval::{chisel_leaf, clickable, el, text};
 use super::{UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 
 pub(super) fn panel(ui: &UiState) -> UiChild {
-    let suggestions = ui
-        .stage
-        .related_material_with_history(&ui.practice_history, 5);
+    let suggestions = ui.stage.related_material_configured(
+        &ui.practice_history,
+        &ui.related,
+        5,
+    );
     let rows: Vec<UiChild> = suggestions
         .into_iter()
         .map(|item| {
             let select_target = item.target;
             let stage_target = item.target;
+            let dismiss_id = ui.stage.related_target_id(item.target);
             Box::new(
                 el(
                     "div",
@@ -33,14 +36,28 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                                 ui.stage.select_related(select_target);
                             },
                         ),
-                        clickable(
-                            el("div", text("Stage")).attr("class", "related-stage"),
-                            move |ui: &mut UiState, _| {
-                                let from_id = ui.stage.catalog_id();
-                                ui.stage.select_related(stage_target);
-                                ui.stage_current(from_id);
-                            },
-                        ),
+                        el(
+                            "div",
+                            (
+                                clickable(
+                                    el("div", text("Stage")).attr("class", "related-stage"),
+                                    move |ui: &mut UiState, _| {
+                                        let from_id = ui.stage.catalog_id();
+                                        ui.stage.select_related(stage_target);
+                                        ui.stage_current(from_id);
+                                    },
+                                ),
+                                clickable(
+                                    el("div", text("Hide")).attr("class", "related-hide"),
+                                    move |ui: &mut UiState, _| {
+                                        if !ui.related.dismissed_ids.contains(&dismiss_id) {
+                                            ui.related.dismissed_ids.push(dismiss_id.clone());
+                                        }
+                                    },
+                                ),
+                            ),
+                        )
+                        .attr("class", "related-actions"),
                     ),
                 )
                 .attr("class", "related-item"),
@@ -92,6 +109,17 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
             .attr("class", "related-history"),
         )
     };
+    let graph: UiChild = if ui.related.show_neighborhood {
+        Box::new(
+            el(
+                "div",
+                chisel_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
+            )
+            .attr("class", "related-graph"),
+        )
+    } else {
+        Box::new(el("div", ()))
+    };
 
     Box::new(
         el(
@@ -100,11 +128,7 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                 el("div", text("Related")).attr("class", "related-heading"),
                 el("div", text("What might I stage next?"))
                     .attr("class", "related-subtitle"),
-                el(
-                    "div",
-                    chisel_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
-                )
-                .attr("class", "related-graph"),
+                graph,
                 history,
                 body,
             ),

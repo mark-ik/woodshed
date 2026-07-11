@@ -232,7 +232,9 @@ pub fn stage_css(p: &Palette) -> String {
 .related-title {{ color: {text}; font-size: 13px; }}
 .related-reason {{ margin-top: 2px; }}
 .related-stage {{ color: {tertiary}; font-size: 12px; margin-left: 8px; padding: 5px 7px; border-radius: 5px; cursor: pointer; }}
-.related-stage:hover, .related-copy:hover .related-title {{ background-color: {surface_2}; color: {text}; }}
+.related-actions {{ margin-left: 8px; }}
+.related-hide {{ color: {text_dim}; font-size: 10px; padding: 2px 7px; cursor: pointer; text-align: right; }}
+.related-stage:hover, .related-hide:hover, .related-copy:hover .related-title {{ background-color: {surface_2}; color: {text}; }}
 .viewport-medium .related-panel, .viewport-narrow .related-panel {{ width: auto; margin-left: 0; margin-top: 12px; }}
 .viewport-medium .related-list {{ display: flex; flex-wrap: wrap; }}
 .viewport-medium .related-item {{ width: 46%; margin-right: 12px; }}
