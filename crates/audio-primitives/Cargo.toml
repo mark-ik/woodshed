@@ -1,14 +1,14 @@
 [package]
 name = "audio-primitives"
 version = "0.1.0"
-description = "Shared, framework-agnostic audio DSP primitives for the Merely family (Woodshed, Strophe, Mere): click synthesis, streaming onset detection + tempo estimation, and round-trip latency estimation. Pure std, no engine or UI dependency."
+description = "Shared pure-std audio DSP primitives for the Merely family: waveform peaks, meter ballistics, click synthesis, onset/tempo detection, and latency estimation."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish = false
-keywords = ["audio", "dsp", "onset", "tempo", "latency"]
+keywords = ["audio", "dsp", "waveform", "meter", "tempo"]
 categories = ["multimedia::audio"]
 
 # No dependencies by design — these are pure-std DSP/data primitives.

@@ -24,15 +24,21 @@
 //! - [`buffer`] — in-place sample-buffer shaping (gain / normalize /
 //!   reverse). The looper/sampler "shape the take" kernels, behind
 //!   Woodshed's `SampleBuffer` and available to any future sampler.
+//! - [`waveform`] — signed min/max overview columns from plain samples.
+//! - [`meter`] — configurable display attack/release and peak hold.
 
 pub mod buffer;
 pub mod calibration;
 pub mod click;
+pub mod meter;
 pub mod onset;
+pub mod waveform;
 
 pub use buffer::{apply_gain, normalize, reverse};
 pub use calibration::{MATCH_WINDOW, count_matches, estimate_latency_from_pairs};
 pub use click::{
     click_sample, frames_per_bar, frames_per_beat, render_click_bar, render_click_bar_in_meter,
 };
+pub use meter::{MeterBallistics, MeterReading, PeakMeterSmoother};
 pub use onset::{OnsetDetector, estimate_bpm};
+pub use waveform::{WaveformPeak, min_max_peaks};
