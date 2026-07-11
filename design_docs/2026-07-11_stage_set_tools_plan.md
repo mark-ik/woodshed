@@ -348,5 +348,6 @@ receipts are recorded before those platforms are advertised.
   owners while Serde flattening preserves the legacy JSON keys. Empty
   subsections mark routes whose runtimes do not yet implement durable knobs.
   Verified 39 core tests, including old flat-session migration and flat-wire
-  round-trip coverage. P2 remains partial until contextual controls bind
-  directly to `AppSettings` and nested page selection persists.
+  round-trip coverage. The nested Settings page is now a core enum and restores
+  with the session. P2 remains partial until contextual controls bind directly
+  to `AppSettings` and the currently empty subsections gain real runtime knobs.

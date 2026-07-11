@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
+use woodshed_core::settings::SettingsPage;
 use woodshed_core::song::SongDoc;
 use woodshed_core::storage::{AppSection, PersistedSession, RelatedSettings};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
@@ -45,40 +46,6 @@ pub enum ToolPage {
     Fretboard,
     Metronome,
     Tuner,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SettingsPage {
-    #[default]
-    General,
-    Appearance,
-    Instrument,
-    Tuning,
-    Stage,
-    Fretboard,
-    Metronome,
-    Tuner,
-    Rehearsal,
-    Looper,
-    AudioMidi,
-    Accessibility,
-}
-
-impl SettingsPage {
-    pub const ALL: [(SettingsPage, &'static str); 12] = [
-        (Self::General, "General"),
-        (Self::Appearance, "Appearance"),
-        (Self::Instrument, "Instrument"),
-        (Self::Tuning, "Tuning"),
-        (Self::Stage, "Stage"),
-        (Self::Fretboard, "Fretboard"),
-        (Self::Metronome, "Metronome"),
-        (Self::Tuner, "Tuner"),
-        (Self::Rehearsal, "Rehearsal"),
-        (Self::Looper, "Looper"),
-        (Self::AudioMidi, "Audio and MIDI"),
-        (Self::Accessibility, "Accessibility"),
-    ];
 }
 
 /// Fretboard layout (redesign P4): how the Stage arranges catalog and
@@ -455,6 +422,7 @@ impl UiState {
         PersistedSession::capture(
             &self.stage,
             self.section,
+            self.settings_page,
             self.transport.bpm,
             self.theme.label(),
             self.board_layout.label(),
@@ -474,6 +442,7 @@ impl UiState {
         self.practice_history = session.practice_history.clone();
         self.related = session.settings.stage.related.clone();
         self.section = session.section;
+        self.settings_page = session.settings.page;
         self.transport.bpm = session.settings.metronome.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.settings.appearance.theme).unwrap_or_default();
         self.board_layout = BoardLayout::from_name(&session.settings.fretboard.board_layout)

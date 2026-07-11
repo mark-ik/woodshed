@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::arpeggio::ArpeggioDirection;
 pub use crate::settings::RelatedSettings;
 use crate::settings::AppSettings;
+use crate::settings::SettingsPage;
 use crate::{Lens, StageState};
 
 /// The host-supplied persistence realization.
@@ -93,6 +94,7 @@ impl Default for PersistedSession {
         Self::capture(
             &StageState::new(),
             AppSection::Stage,
+            SettingsPage::General,
             120.0,
             "Slate",
             "Two pane",
@@ -109,6 +111,7 @@ impl PersistedSession {
     pub fn capture(
         stage: &StageState,
         section: AppSection,
+        settings_page: SettingsPage,
         bpm: f32,
         theme: &str,
         board_layout: &str,
@@ -119,6 +122,7 @@ impl PersistedSession {
     ) -> Self {
         Self {
             settings: AppSettings {
+                page: settings_page,
                 appearance: crate::settings::AppearanceSettings {
                     theme: theme.to_string(),
                 },
@@ -265,6 +269,7 @@ mod tests {
             PersistedSession::capture(
                 &stage,
                 AppSection::Settings,
+                SettingsPage::Tuning,
                 96.0,
                 "Ember",
                 "Hero",
@@ -289,6 +294,7 @@ mod tests {
         assert_eq!(restored.arpeggio_inversion, 2);
         assert_eq!(restored.progression_idx, Some(1));
         assert_eq!(back.section, AppSection::Settings);
+        assert_eq!(back.settings.page, SettingsPage::Tuning);
         assert_eq!(back.settings.metronome.bpm, 96.0);
         assert_eq!(back.settings.appearance.theme, "Ember");
         assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");

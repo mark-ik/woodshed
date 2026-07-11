@@ -6,6 +6,40 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SettingsPage {
+    #[default]
+    General,
+    Appearance,
+    Instrument,
+    Tuning,
+    Stage,
+    Fretboard,
+    Metronome,
+    Tuner,
+    Rehearsal,
+    Looper,
+    AudioMidi,
+    Accessibility,
+}
+
+impl SettingsPage {
+    pub const ALL: [(SettingsPage, &'static str); 12] = [
+        (Self::General, "General"),
+        (Self::Appearance, "Appearance"),
+        (Self::Instrument, "Instrument"),
+        (Self::Tuning, "Tuning"),
+        (Self::Stage, "Stage"),
+        (Self::Fretboard, "Fretboard"),
+        (Self::Metronome, "Metronome"),
+        (Self::Tuner, "Tuner"),
+        (Self::Rehearsal, "Rehearsal"),
+        (Self::Looper, "Looper"),
+        (Self::AudioMidi, "Audio and MIDI"),
+        (Self::Accessibility, "Accessibility"),
+    ];
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppearanceSettings {
@@ -93,6 +127,8 @@ pub struct AccessibilitySettings {}
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
+    #[serde(rename = "settings_page")]
+    pub page: SettingsPage,
     #[serde(flatten)]
     pub appearance: AppearanceSettings,
     #[serde(flatten)]
