@@ -307,3 +307,10 @@ receipts are recorded before those platforms are advertised.
   Verified 37 core tests, 8 graph tests, and checks for the views and desktop
   host. P4 remains partial: elapsed practice facts, history retention settings,
   arpeggio nodes, richer harmonic scoring, and the Chisel graph view remain.
+- **2026-07-11, P1 decomposition slice:** Moved Settings with MIDI/calibration,
+  Rehearsal, the current Song-to-Looper surface, Related/history, and Set
+  Templates into owned view modules. `stage.rs` fell from 2,087 lines to about
+  1,040 and now concentrates shared app state plus the catalog/fretboard Stage
+  surface. This is behavior-preserving and keeps coordination in the existing
+  `UiState`; P1 remains partial until the app shell/shared controls and
+  standalone Tools surface are separated.
