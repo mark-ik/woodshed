@@ -333,3 +333,11 @@ receipts are recorded before those platforms are advertised.
   receipt covering both toggles and dismissal restoration. P4 still needs
   Chisel event routing before graph nodes can select material directly; it also
   needs instrument/tuning context and broader progression/scale affinity.
+- **2026-07-11, Settings routes slice:** Replaced the mixed Settings surface
+  with explicit General, Appearance, Instrument, Tuning, Stage, Fretboard,
+  Metronome, Tuner, Rehearsal, Looper, Audio and MIDI, and Accessibility
+  pages. Each live control projects the same state used contextually elsewhere;
+  pages with missing backend/configuration support say so directly. Verified
+  39 core tests and checks for views and the desktop host. P2 remains partial
+  until the durable fields move under a canonical core `AppSettings` envelope
+  and nested page selection is persisted.

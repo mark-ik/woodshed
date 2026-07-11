@@ -227,6 +227,12 @@ pub fn stage_css(p: &Palette) -> String {
 .history-title {{ color: {text}; }}
 .tool-board {{ min-height: 220px; }}
 .tool-reading {{ color: {tertiary}; font-size: 28px; margin-top: 18px; }}
+.settings-shell {{ align-items: flex-start; }}
+.settings-nav {{ flex: 0 0 220px; }}
+.settings-page {{ flex: 1; min-height: 300px; }}
+.settings-options {{ margin-top: 10px; }}
+.viewport-narrow .settings-shell {{ display: block; }}
+.viewport-narrow .settings-nav {{ width: 100%; display: flex; flex-wrap: wrap; margin-bottom: 12px; }}
 .related-item {{ display: flex; align-items: center; border-top-width: 1px; border-top-color: {surface_2}; padding-top: 8px; padding-bottom: 8px; }}
 .related-copy {{ flex: 1; min-width: 0; cursor: pointer; }}
 .related-title {{ color: {text}; font-size: 13px; }}

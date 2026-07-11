@@ -1,7 +1,7 @@
 use woodshed_core::audio::CalibrationStatus;
 use xilem_serval::{clickable, el, map_state, select, text};
 
-use super::{BoardLayout, UiChild, UiState};
+use super::{BoardLayout, SettingsPage, UiChild, UiState};
 use crate::theme::ThemeMode;
 
 /// MIDI device panel (audio-depth slice 13): port pickers, clock-slave /
@@ -150,7 +150,52 @@ fn calibration_panel(ui: &UiState) -> UiChild {
     ))
 }
 
-pub(super) fn screen(ui: &UiState) -> UiChild {
+fn page_nav(ui: &UiState) -> UiChild {
+    let items: Vec<UiChild> = SettingsPage::ALL
+        .iter()
+        .map(|&(page, label)| {
+            let class = if page == ui.settings_page {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
+            Box::new(clickable(
+                el("div", text(label)).attr("class", class),
+                move |ui: &mut UiState, _| ui.settings_page = page,
+            )) as UiChild
+        })
+        .collect();
+    Box::new(el("nav", items).attr("class", "side settings-nav"))
+}
+
+fn general_page(ui: &UiState) -> UiChild {
+    let audio_line = match &ui.audio_error {
+        Some(err) => format!("Audio: {err}"),
+        None => "Audio: output and input streams open.".to_string(),
+    };
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("General")).attr("class", "settings-heading"),
+                el(
+                    "div",
+                    text(format!("Woodshed {} · desktop alpha", env!("CARGO_PKG_VERSION"))),
+                )
+                .attr("class", "settings-line"),
+                el("div", text(audio_line)).attr("class", "settings-line"),
+                el(
+                    "div",
+                    text("Selections, Set, practice history, tempo, theme, and layout restore on launch."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn appearance_page(ui: &UiState) -> UiChild {
     let themes: Vec<UiChild> = ThemeMode::ALL
         .iter()
         .map(|&mode| {
@@ -161,32 +206,70 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             };
             Box::new(clickable(
                 el("div", text(mode.label())).attr("class", class),
-                move |ui: &mut UiState, _| {
-                    ui.theme = mode;
-                },
+                move |ui: &mut UiState, _| ui.theme = mode,
             )) as UiChild
         })
         .collect();
-    let layouts: Vec<UiChild> = BoardLayout::ALL
-        .iter()
-        .map(|&layout| {
-            let class = if layout == ui.board_layout {
-                "side-item side-active"
-            } else {
-                "side-item"
-            };
-            Box::new(clickable(
-                el("div", text(layout.label())).attr("class", class),
-                move |ui: &mut UiState, _| {
-                    ui.board_layout = layout;
-                },
-            )) as UiChild
-        })
-        .collect();
-    let audio_line = match &ui.audio_error {
-        Some(err) => format!("Audio: {err}"),
-        None => "Audio: output and input streams open.".to_string(),
-    };
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Appearance")).attr("class", "settings-heading"),
+                el("div", themes).attr("class", "settings-options"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn instrument_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Instrument")).attr("class", "settings-heading"),
+                el(
+                    "div",
+                    text(format!(
+                        "Fretted instrument · {} strings",
+                        ui.stage.string_count()
+                    )),
+                )
+                .attr("class", "settings-line"),
+                el(
+                    "div",
+                    text("Instrument-family selection will live here; tuning already drives every material projection."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn tuning_page(ui: &UiState) -> UiChild {
+    let names: Vec<&str> = woodshed_core::tunings().iter().map(|t| t.name).collect();
+    let picker = map_state(select(&ui.tuning_dd, &names), |ui: &mut UiState| {
+        &mut ui.tuning_dd
+    });
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Tuning")).attr("class", "settings-heading"),
+                el("div", picker).attr("class", "settings-options"),
+                el(
+                    "div",
+                    text("This is the same tuning used by Stage, Fretboard, Rehearsal, and Looper."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn stage_page(ui: &UiState) -> UiChild {
     let history_label = if ui.related.use_history {
         "History ranking: on"
     } else {
@@ -202,65 +285,202 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         el(
             "div",
             (
-                el(
-                    "div",
-                    (
-                        el("div", text("Theme")).attr("class", "settings-heading"),
-                        el("div", themes),
-                        el("div", text("Fretboard layout"))
-                            .attr("class", "settings-heading settings-gap"),
-                        el("div", layouts),
-                        el("div", text("Related"))
-                            .attr("class", "settings-heading settings-gap"),
-                        clickable(
-                            el("div", text(history_label)).attr("class", "side-item"),
-                            |ui: &mut UiState, _| {
-                                ui.related.use_history = !ui.related.use_history;
-                            },
-                        ),
-                        clickable(
-                            el("div", text(graph_label)).attr("class", "side-item"),
-                            |ui: &mut UiState, _| {
-                                ui.related.show_neighborhood = !ui.related.show_neighborhood;
-                            },
-                        ),
-                        clickable(
-                            el("div", text(format!("Restore hidden ({hidden_count})")))
-                                .attr("class", "side-item"),
-                            |ui: &mut UiState, _| ui.related.dismissed_ids.clear(),
-                        ),
-                    ),
-                )
-                .attr("class", "side"),
-                el(
-                    "div",
-                    (
-                        el("div", text("Session")).attr("class", "settings-heading"),
-                        el(
-                            "div",
-                            text(format!(
-                                "Woodshed {} · desktop alpha",
-                                env!("CARGO_PKG_VERSION")
-                            )),
-                        )
-                        .attr("class", "settings-line"),
-                        el("div", text(audio_line)).attr("class", "settings-line"),
-                        el(
-                            "div",
-                            text(
-                                "Selections, tempo, and theme persist to \
-                                 serval-state.json and restore on launch.",
-                            ),
-                        )
-                        .attr("class", "settings-line"),
-                        midi_panel(ui),
-                        calibration_panel(ui),
-                    ),
-                )
-                .attr("class", "board"),
+                el("div", text("Stage")).attr("class", "settings-heading"),
+                clickable(
+                    el("div", text(history_label)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| ui.related.use_history = !ui.related.use_history,
+                ),
+                clickable(
+                    el("div", text(graph_label)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        ui.related.show_neighborhood = !ui.related.show_neighborhood;
+                    },
+                ),
+                clickable(
+                    el("div", text(format!("Restore hidden ({hidden_count})")))
+                        .attr("class", "side-item"),
+                    |ui: &mut UiState, _| ui.related.dismissed_ids.clear(),
+                ),
             ),
         )
-        .attr("class", "body"),
+        .attr("class", "board settings-page"),
     )
 }
 
+fn fretboard_page(ui: &UiState) -> UiChild {
+    let layouts: Vec<UiChild> = BoardLayout::ALL
+        .iter()
+        .map(|&layout| {
+            let class = if layout == ui.board_layout {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
+            Box::new(clickable(
+                el("div", text(layout.label())).attr("class", class),
+                move |ui: &mut UiState, _| ui.board_layout = layout,
+            )) as UiChild
+        })
+        .collect();
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Fretboard")).attr("class", "settings-heading"),
+                el("div", layouts).attr("class", "settings-options"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn metronome_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Metronome")).attr("class", "settings-heading"),
+                el(
+                    "div",
+                    (
+                        clickable(
+                            el("div", text("-5")).attr("class", "t-btn"),
+                            |ui: &mut UiState, _| ui.transport.nudge_bpm(-5.0),
+                        ),
+                        el("div", text(format!("{:.0} bpm", ui.transport.bpm)))
+                            .attr("class", "t-readout"),
+                        clickable(
+                            el("div", text("+5")).attr("class", "t-btn"),
+                            |ui: &mut UiState, _| ui.transport.nudge_bpm(5.0),
+                        ),
+                    ),
+                )
+                .attr("class", "transport"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn tuner_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Tuner")).attr("class", "settings-heading"),
+                clickable(
+                    el(
+                        "div",
+                        text(if ui.tuner.enabled { "Listening: on" } else { "Listening: off" }),
+                    )
+                    .attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.tuner.enabled = !ui.tuner.enabled;
+                        if !ui.tuner.enabled {
+                            ui.tuner.reading = None;
+                        }
+                    },
+                ),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn rehearsal_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Rehearsal")).attr("class", "settings-heading"),
+                el(
+                    "div",
+                    text(format!("Current Set: {} cards", ui.set.cards.len())),
+                )
+                .attr("class", "settings-line"),
+                el(
+                    "div",
+                    text("Card timing and touch remain Card settings; runner defaults will live here."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn looper_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Looper")).attr("class", "settings-heading"),
+                clickable(
+                    el(
+                        "div",
+                        text(if ui.song_record_replace { "Record: replace" } else { "Record: overdub" }),
+                    )
+                    .attr("class", "t-btn"),
+                    |ui: &mut UiState, _| {
+                        ui.song_record_replace = !ui.song_record_replace;
+                    },
+                ),
+                el(
+                    "div",
+                    text("Count-in, unresolved-Card timing, and WAV export defaults will live here."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn audio_midi_page(ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Audio and MIDI")).attr("class", "settings-heading"),
+                midi_panel(ui),
+                calibration_panel(ui),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+fn accessibility_page(_ui: &UiState) -> UiChild {
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Accessibility")).attr("class", "settings-heading"),
+                el(
+                    "div",
+                    text("Keyboard focus is visible. Reduced-motion and screen-reader preferences still need host wiring."),
+                )
+                .attr("class", "settings-line"),
+            ),
+        )
+        .attr("class", "board settings-page"),
+    )
+}
+
+pub(super) fn screen(ui: &UiState) -> UiChild {
+    let page = match ui.settings_page {
+        SettingsPage::General => general_page(ui),
+        SettingsPage::Appearance => appearance_page(ui),
+        SettingsPage::Instrument => instrument_page(ui),
+        SettingsPage::Tuning => tuning_page(ui),
+        SettingsPage::Stage => stage_page(ui),
+        SettingsPage::Fretboard => fretboard_page(ui),
+        SettingsPage::Metronome => metronome_page(ui),
+        SettingsPage::Tuner => tuner_page(ui),
+        SettingsPage::Rehearsal => rehearsal_page(ui),
+        SettingsPage::Looper => looper_page(ui),
+        SettingsPage::AudioMidi => audio_midi_page(ui),
+        SettingsPage::Accessibility => accessibility_page(ui),
+    };
+    Box::new(el("div", (page_nav(ui), page)).attr("class", "body settings-shell"))
+}

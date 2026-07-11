@@ -47,6 +47,40 @@ pub enum ToolPage {
     Tuner,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SettingsPage {
+    #[default]
+    General,
+    Appearance,
+    Instrument,
+    Tuning,
+    Stage,
+    Fretboard,
+    Metronome,
+    Tuner,
+    Rehearsal,
+    Looper,
+    AudioMidi,
+    Accessibility,
+}
+
+impl SettingsPage {
+    pub const ALL: [(SettingsPage, &'static str); 12] = [
+        (Self::General, "General"),
+        (Self::Appearance, "Appearance"),
+        (Self::Instrument, "Instrument"),
+        (Self::Tuning, "Tuning"),
+        (Self::Stage, "Stage"),
+        (Self::Fretboard, "Fretboard"),
+        (Self::Metronome, "Metronome"),
+        (Self::Tuner, "Tuner"),
+        (Self::Rehearsal, "Rehearsal"),
+        (Self::Looper, "Looper"),
+        (Self::AudioMidi, "Audio and MIDI"),
+        (Self::Accessibility, "Accessibility"),
+    ];
+}
+
 /// Fretboard layout (redesign P4): how the Stage arranges catalog and
 /// neck. All three render the same resolved positions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -190,6 +224,7 @@ pub struct UiState {
     pub section: AppSection,
     pub stage_page: StagePage,
     pub tool_page: ToolPage,
+    pub settings_page: SettingsPage,
     pub theme: ThemeMode,
     pub board_layout: BoardLayout,
     /// Host-observed width band. This is transient rather than a user setting.
@@ -253,6 +288,7 @@ impl UiState {
             section: AppSection::Stage,
             stage_page: StagePage::default(),
             tool_page: ToolPage::default(),
+            settings_page: SettingsPage::default(),
             theme: ThemeMode::default(),
             board_layout: BoardLayout::default(),
             viewport: ViewportClass::default(),
