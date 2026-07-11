@@ -1,4 +1,4 @@
-use woodshed_core::{set_from_practice, storage::AppSection};
+use woodshed_core::set_from_practice;
 use xilem_serval::{clickable, el, text};
 
 use super::{UiChild, UiState};
@@ -24,7 +24,6 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                 .attr("class", "recipe-tile"),
                 move |ui: &mut UiState, _| {
                     ui.set = set_from_practice(&ps);
-                    ui.section = AppSection::Rehearsal;
                 },
             )) as UiChild
         })

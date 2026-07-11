@@ -360,3 +360,12 @@ receipts are recorded before those platforms are advertised.
   a parallel settings copy. Verified 39 core tests and checks for views and the
   desktop host. P2 now remains open only for real settings in the empty
   Instrument, Tuner, Rehearsal, Looper, Audio/MIDI, and Accessibility sections.
+- **2026-07-11, Stage Set tray slice:** Added a Stage-owned Set tray showing
+  ordered Card kind, label, touch, dwell, tuning, and recipe provenance. The
+  selected Card can move, duplicate, or be removed; the tray also owns clear,
+  Set looping, and the transition into Rehearsal. Set Templates now fills the
+  tray without navigating away from Stage. Verified views/desktop checks, 39
+  core tests, a desktop build, and a live 1100x664 receipt over a real 12-card
+  Set; duplicate/remove changed 12 -> 13 -> 12 as expected. P3 remains partial:
+  Card timing/touch/placement editing still lives in Rehearsal, and the tray is
+  document-bottom rather than a sticky/collapsible bottom rail.

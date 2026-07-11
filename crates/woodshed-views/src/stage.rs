@@ -27,6 +27,7 @@ use crate::theme::ThemeMode;
 mod looper;
 mod related;
 mod rehearsal;
+mod set_tray;
 mod settings;
 mod templates;
 mod tools;
@@ -1078,7 +1079,10 @@ pub(super) fn board(ui: &UiState) -> UiChild {
 
 fn stage_screen(ui: &UiState) -> UiChild {
     if ui.stage_page == StagePage::Templates {
-        return Box::new(el("div", (header(ui), lens_strip(ui), templates::screen(ui))));
+        return Box::new(el(
+            "div",
+            (header(ui), lens_strip(ui), templates::screen(ui), set_tray::view(ui)),
+        ));
     }
     let body: UiChild = match (ui.board_layout(), ui.viewport) {
         (BoardLayout::TwoPane, ViewportClass::Wide) => {
@@ -1095,7 +1099,10 @@ fn stage_screen(ui: &UiState) -> UiChild {
             ),
         )),
     };
-    Box::new(el("div", (header(ui), transport(ui), lens_strip(ui), body)))
+    Box::new(el(
+        "div",
+        (header(ui), transport(ui), lens_strip(ui), body, set_tray::view(ui)),
+    ))
 }
 
 fn tab_content(ui: &UiState) -> UiChild {
