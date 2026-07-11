@@ -1,5 +1,11 @@
 # Polyphonic Pitch Detection — Research Spike
 
+> **Superseded 2026-07-11** by
+> [`2026-07-11_audio_material_analysis_plan.md`](2026-07-11_audio_material_analysis_plan.md).
+> This document remains useful background on guitar acoustics. Its recommendation
+> to embed Basic Pitch through `tract` is no longer current; the new plan starts
+> with a model-neutral, out-of-process benchmark.
+
 The current Woodshed tuner uses `pitch-detector` (FFT + cepstrum
 backends) for **monophonic** detection: one fundamental at a time.
 This spike captures the technology landscape for polyphonic detection

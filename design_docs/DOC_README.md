@@ -13,6 +13,11 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-07-11_audio_material_analysis_plan.md](2026-07-11_audio_material_analysis_plan.md)
+  — **The audio-to-material research lane.** Treats recordings as immutable
+  evidence and model output as versioned observations; defines a model-neutral
+  benchmark for transcription, catalog resolution, optional separation, and
+  local agents before any ML runtime enters the product.
 - [2026-07-11_stage_set_tools_plan.md](2026-07-11_stage_set_tools_plan.md)
   — **The product architecture.** Catalogs stage material into one Set;
   Rehearsal and Looper consume it; Fretboard, Metronome, and Tuner are shared
@@ -47,7 +52,8 @@ before any other doc in this directory.
 - [2026-05-15_midi_design.md](2026-05-15_midi_design.md) — MIDI in/out
   design and clock-sync model.
 - [2026-05-15_polyphonic_pitch_spike.md](2026-05-15_polyphonic_pitch_spike.md)
-  — Spike on polyphonic pitch detection.
+  — **Superseded 2026-07-11.** Background on guitar polyphony; its embedded
+  Basic Pitch recommendation is replaced by the model-neutral analysis plan.
 - [2026-05-16_song_mode_integration.md](2026-05-16_song_mode_integration.md)
   — **Superseded 2026-07-11.** Historical Song engine and save-format work;
   Song becomes a Set-derived Looper rather than a parallel product mode.

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "source_id": "synthetic:c-major-block",
+  "run": {
+    "analyzer": "smoke-fixture",
+    "version": "1",
+    "elapsed_seconds": 0.01
+  },
+  "notes": [
+    { "onset_seconds": 0.01, "offset_seconds": 0.98, "midi": 60.0, "confidence": 0.97 },
+    { "onset_seconds": 0.02, "offset_seconds": 0.99, "midi": 64.0, "confidence": 0.93 },
+    { "onset_seconds": 0.01, "offset_seconds": 1.01, "midi": 67.0, "confidence": 0.95 }
+  ],
+  "catalog_candidates": [
+    { "id": "chord:Major", "score": 0.96 },
+    { "id": "chord:Major 7", "score": 0.41 }
+  ]
+}

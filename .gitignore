@@ -6,6 +6,8 @@
 *.swo
 .DS_Store
 Thumbs.db
+__pycache__/
+*.pyc
 
 # sem (Ataraxy-Labs) semantic-diff index cache — local, never committed.
 .sem/

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_id": "synthetic:c-major-block",
+  "notes": [
+    { "onset_seconds": 0.0, "offset_seconds": 1.0, "midi": 60.0, "confidence": 1.0 },
+    { "onset_seconds": 0.0, "offset_seconds": 1.0, "midi": 64.0, "confidence": 1.0 },
+    { "onset_seconds": 0.0, "offset_seconds": 1.0, "midi": 67.0, "confidence": 1.0 }
+  ],
+  "catalog_targets": ["chord:Major"]
+}
