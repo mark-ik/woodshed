@@ -83,6 +83,9 @@ pub struct PersistedSession {
     pub set: woodshedding::rehearsal::Set,
     /// The song lane: bars + song-level flags.
     pub song: crate::song::SongDoc,
+    /// Typed catalog engagement used by Related ranking and future history
+    /// views. Defaults empty for sessions written before the field existed.
+    pub practice_history: crate::history::PracticeHistory,
 }
 
 impl Default for PersistedSession {
@@ -95,6 +98,7 @@ impl Default for PersistedSession {
             "Two pane",
             &woodshedding::rehearsal::Set::default(),
             &crate::song::SongDoc::default(),
+            &crate::history::PracticeHistory::default(),
         )
     }
 }
@@ -109,11 +113,13 @@ impl PersistedSession {
         board_layout: &str,
         set: &woodshedding::rehearsal::Set,
         song: &crate::song::SongDoc,
+        practice_history: &crate::history::PracticeHistory,
     ) -> Self {
         Self {
             board_layout: board_layout.to_string(),
             set: set.clone(),
             song: song.clone(),
+            practice_history: practice_history.clone(),
             tab,
             lens: stage.lens,
             tuning_idx: stage.tuning_idx,
@@ -229,8 +235,23 @@ mod tests {
         song.name = "My Song".into();
         song.bars.push(crate::song::SongBar::default());
         song.one_shot = true;
+        let mut history = crate::history::PracticeHistory::default();
+        history.record(
+            woodshed_graph::chord_id("Minor 7"),
+            crate::history::EngagementKind::Staged,
+            Some(woodshed_graph::scale_id("Dorian")),
+        );
         let snap =
-            PersistedSession::capture(&stage, Tab::Settings, 96.0, "Ember", "Hero", &set, &song);
+            PersistedSession::capture(
+                &stage,
+                Tab::Settings,
+                96.0,
+                "Ember",
+                "Hero",
+                &set,
+                &song,
+                &history,
+            );
         let json = serde_json::to_string(&snap).unwrap();
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();
@@ -248,6 +269,7 @@ mod tests {
         assert_eq!(back.song.name, "My Song", "the song doc round-trips");
         assert_eq!(back.song.bars.len(), 1);
         assert!(back.song.one_shot);
+        assert_eq!(back.practice_history.events, history.events);
     }
 
     #[test]

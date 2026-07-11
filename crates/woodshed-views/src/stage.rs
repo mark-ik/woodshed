@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
+use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::song::{song_from_progression, SongDoc, SECTION_LABELS};
 use woodshed_core::storage::{PersistedSession, Tab};
@@ -150,6 +151,7 @@ impl Default for MidiUiState {
 pub struct UiState {
     pub stage: StageState,
     pub set: Set,
+    pub practice_history: PracticeHistory,
     /// Rehearsal dwell transport running (transient).
     pub rehearsal_running: bool,
     pub song: SongDoc,
@@ -213,6 +215,7 @@ impl UiState {
         let stage = StageState::new();
         Self {
             set: Set::default(),
+            practice_history: PracticeHistory::default(),
             rehearsal_running: false,
             song: SongDoc::default(),
             song_playing: false,
@@ -327,6 +330,55 @@ impl UiState {
         self.stage.voicing_preview()
     }
 
+    pub fn request_preview(&mut self) {
+        let subject_id = if self.tab == Tab::Rehearsal && !self.set.cards.is_empty() {
+            let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+            Some(catalog_id_for_card(&self.set.cards[cursor]))
+        } else {
+            self.stage.catalog_id()
+        };
+        if let Some(subject_id) = subject_id {
+            self.practice_history
+                .record(subject_id, EngagementKind::Previewed, None);
+        }
+        self.preview_requested = true;
+    }
+
+    pub fn stage_current(&mut self, from_id: Option<String>) {
+        let subject_id = self.stage.catalog_id();
+        if let Some(card) = self.stage.card_from_lens() {
+            self.set.push(card);
+            if let Some(subject_id) = subject_id {
+                self.practice_history
+                    .record(subject_id, EngagementKind::Staged, from_id);
+            }
+        }
+    }
+
+    pub fn record_rehearsal_cursor(&mut self) {
+        if self.set.cards.is_empty() {
+            return;
+        }
+        let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+        self.practice_history.record(
+            catalog_id_for_card(&self.set.cards[cursor]),
+            EngagementKind::Rehearsed,
+            None,
+        );
+    }
+
+    pub fn complete_rehearsal_cursor(&mut self) {
+        if self.set.cards.is_empty() {
+            return;
+        }
+        let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+        self.practice_history.record(
+            catalog_id_for_card(&self.set.cards[cursor]),
+            EngagementKind::Completed,
+            None,
+        );
+    }
+
     /// Snapshot the persistable subset (the W0.2 seam's payload).
     pub fn to_persisted(&self) -> PersistedSession {
         PersistedSession::capture(
@@ -337,6 +389,7 @@ impl UiState {
             self.board_layout.label(),
             &self.set,
             &self.song,
+            &self.practice_history,
         )
     }
 
@@ -346,6 +399,7 @@ impl UiState {
         session.restore(&mut self.stage);
         self.set = session.set.clone();
         self.song = session.song.clone();
+        self.practice_history = session.practice_history.clone();
         self.tab = session.tab;
         self.transport.bpm = session.bpm.clamp(30.0, 300.0);
         self.theme = ThemeMode::from_name(&session.theme).unwrap_or_default();
@@ -666,7 +720,7 @@ fn transport(ui: &UiState) -> UiChild {
                 ),
                 clickable(
                     el("div", text("♪ Hear")).attr("class", "t-btn t-hear"),
-                    |ui: &mut UiState, _| ui.preview_requested = true,
+                    |ui: &mut UiState, _| ui.request_preview(),
                 ),
                 el("span", ()).attr("class", "header-gap"),
                 clickable(
@@ -681,12 +735,8 @@ fn transport(ui: &UiState) -> UiChild {
                 el("div", text(readout)).attr("class", "t-readout"),
                 el("span", ()).attr("class", "header-gap"),
                 clickable(
-                    el("div", text("+ Rehearse")).attr("class", "t-btn"),
-                    |ui: &mut UiState, _| {
-                        if let Some(card) = ui.stage.card_from_lens() {
-                            ui.set.push(card);
-                        }
-                    },
+                    el("div", text("Stage")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.stage_current(None),
                 ),
                 el("div", text(format!("{} cards", ui.set.cards.len()))).attr("class", "t-readout"),
             ),
@@ -711,7 +761,7 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                 "div",
                 el(
                     "div",
-                    text("The set is empty. Add cards from Stage with + Rehearse."),
+                    text("The set is empty. Stage material to begin."),
                 )
                 .attr("class", "placeholder"),
             )
@@ -734,6 +784,9 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                     )
                     .attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
+                        if !ui.rehearsal_running {
+                            ui.record_rehearsal_cursor();
+                        }
                         ui.rehearsal_running = !ui.rehearsal_running;
                     },
                 ),
@@ -741,17 +794,26 @@ fn rehearsal_screen(ui: &UiState) -> UiChild {
                     el("div", text("Prev")).attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
                         step_set(&mut ui.set, -1);
+                        if ui.rehearsal_running {
+                            ui.record_rehearsal_cursor();
+                        }
                     },
                 ),
                 clickable(
                     el("div", text("Next")).attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
+                        if ui.rehearsal_running {
+                            ui.complete_rehearsal_cursor();
+                        }
                         step_set(&mut ui.set, 1);
+                        if ui.rehearsal_running {
+                            ui.record_rehearsal_cursor();
+                        }
                     },
                 ),
                 clickable(
                     el("div", text("♪ Hear")).attr("class", "t-btn t-hear"),
-                    |ui: &mut UiState, _| ui.preview_requested = true,
+                    |ui: &mut UiState, _| ui.request_preview(),
                 ),
                 clickable(
                     el("div", text(loop_label)).attr("class", "t-btn"),
@@ -1134,6 +1196,108 @@ fn sidebar(ui: &UiState) -> UiChild {
             .collect(),
     };
     Box::new(el("div", items).attr("class", "side"))
+}
+
+fn related_panel(ui: &UiState) -> UiChild {
+    let suggestions = ui
+        .stage
+        .related_material_with_history(&ui.practice_history, 5);
+    let rows: Vec<UiChild> = suggestions
+        .into_iter()
+        .map(|item| {
+            let select_target = item.target;
+            let stage_target = item.target;
+            Box::new(
+                el(
+                    "div",
+                    (
+                        clickable(
+                            el(
+                                "div",
+                                (
+                                    el("div", text(format!("{} · {}", item.kind, item.title)))
+                                        .attr("class", "related-title"),
+                                    el("div", text(item.reason)).attr("class", "related-reason"),
+                                ),
+                            )
+                            .attr("class", "related-copy"),
+                            move |ui: &mut UiState, _| {
+                                ui.stage.select_related(select_target);
+                            },
+                        ),
+                        clickable(
+                            el("div", text("Stage")).attr("class", "related-stage"),
+                            move |ui: &mut UiState, _| {
+                                let from_id = ui.stage.catalog_id();
+                                ui.stage.select_related(stage_target);
+                                ui.stage_current(from_id);
+                            },
+                        ),
+                    ),
+                )
+                .attr("class", "related-item"),
+            ) as UiChild
+        })
+        .collect();
+
+    let body: UiChild = if rows.is_empty() {
+        Box::new(
+            el("div", text("Choose material with catalog relations to see suggestions."))
+                .attr("class", "related-empty"),
+        )
+    } else {
+        Box::new(el("div", rows).attr("class", "related-list"))
+    };
+
+    let recent: Vec<UiChild> = ui
+        .practice_history
+        .recent(4)
+        .map(|event| {
+            let title = event
+                .subject_id
+                .split_once(':')
+                .map(|(_, title)| title)
+                .unwrap_or(event.subject_id.as_str());
+            Box::new(
+                el(
+                    "div",
+                    (
+                        el("span", text(event.kind.label())).attr("class", "history-kind"),
+                        el("span", text(title.to_string())).attr("class", "history-title"),
+                    ),
+                )
+                .attr("class", "history-item"),
+            ) as UiChild
+        })
+        .collect();
+    let history: UiChild = if recent.is_empty() {
+        Box::new(el("div", ()).attr("class", "history-empty"))
+    } else {
+        Box::new(
+            el(
+                "div",
+                (
+                    el("div", text("Recent")).attr("class", "history-heading"),
+                    el("div", recent).attr("class", "history-list"),
+                ),
+            )
+            .attr("class", "related-history"),
+        )
+    };
+
+    Box::new(
+        el(
+            "aside",
+            (
+                el("div", text("Related")).attr("class", "related-heading"),
+                el("div", text("What might I stage next?"))
+                    .attr("class", "related-subtitle"),
+                history,
+                body,
+            ),
+        )
+        .attr("class", "related-panel"),
+    )
 }
 
 fn exercise_board_view(ui: &UiState) -> UiChild {
@@ -1884,7 +2048,7 @@ fn song_screen(ui: &UiState) -> UiChild {
 fn stage_screen(ui: &UiState) -> UiChild {
     let body: UiChild = match (ui.board_layout, ui.viewport) {
         (BoardLayout::TwoPane, ViewportClass::Wide) => {
-            Box::new(el("div", (sidebar(ui), board(ui))).attr("class", "body"))
+            Box::new(el("div", (sidebar(ui), board(ui), related_panel(ui))).attr("class", "body"))
         }
         (BoardLayout::FullCanvas, _) => board(ui),
         // Preserve the catalog on smaller surfaces without narrowing the neck.
@@ -1892,6 +2056,7 @@ fn stage_screen(ui: &UiState) -> UiChild {
             "div",
             (
                 board(ui),
+                related_panel(ui),
                 el("div", (sidebar(ui),)).attr("class", "side-strip"),
             ),
         )),

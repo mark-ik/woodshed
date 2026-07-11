@@ -256,7 +256,9 @@ impl App {
                         Some(dwell) => {
                             match last_rehearsal {
                                 Some(t) if now.duration_since(*t) >= dwell => {
+                                    ui.complete_rehearsal_cursor();
                                     if woodshed_core::step_set(&mut ui.set, 1) {
+                                        ui.record_rehearsal_cursor();
                                         // Landed on a new card — voice its
                                         // material ("hear it as you land").
                                         let c = ui.set.cursor.min(ui.set.cards.len() - 1);

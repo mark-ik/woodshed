@@ -25,6 +25,7 @@ woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
 # Portable state/logic core for the serval-host stack (W1.1 split).
 woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
+woodshed-graph = { path = "crates/woodshed-graph", version = "0.1.0" }
 # Shared pure-DSP primitives (click synth, onset/tempo, latency) — the
 # `audio-primitives` extraction. Pure std; consumed by woodshed-audio
 # here and cross-repo by strophe-engine via path-dep.

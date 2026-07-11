@@ -1,9 +1,11 @@
 # Woodshed
 
 Woodshed is an offline-first practice toolkit for guitar and other fretted
-instruments. It combines theory reference, a fretboard explorer, rehearsal
-sets, a song sketcher, a tuner, metronome, MIDI clock, latency calibration, and
-a small live-input looper.
+instruments. Its catalogs stage chords, scales, arpeggios, progressions, and
+exercises into an ordered practice Set. Rehearsal streams that Set as guided
+practice; the Looper repeats it for live-input recording and export. A
+fretboard, tuner, metronome, MIDI clock, and latency calibration round out the
+practice environment.
 
 The theory model supports arbitrary string counts and tunings, so bass,
 ukulele, banjo, and custom instruments are first-class rather than afterthoughts.
@@ -32,8 +34,8 @@ for the wider project record.
 crates/
   woodshedding/      Pure musical theory and playable-practice model.
   audio-primitives/  Framework-independent DSP helpers.
-  woodshed-audio/    cpal-backed audio, pitch/onset analysis, MIDI, looper,
-                     song engine, calibration, and offline render.
+  woodshed-audio/    cpal-backed audio, pitch/onset analysis, MIDI, looping,
+                     calibration, and offline render.
   woodshed-core/     Portable application state and host seams.
   woodshed-views/    Shared xilem_serval product views and CSS themes.
   woodshed-serval/   Desktop winit + netrender host. The application binary.
@@ -44,7 +46,9 @@ design_docs/         Product description, plans, and documentation policy.
 ### Dependency direction
 
 - `woodshedding` remains pure: no UI, audio device, or filesystem dependency.
-- `audio-primitives` is pure `std`; `woodshed-audio` owns real-time drivers.
+- `audio-primitives` is pure `std`, including click/onset/calibration,
+  min/max waveform projection, and configurable meter display ballistics;
+  `woodshed-audio` owns real-time drivers.
 - `woodshed-core` owns portable application state, persistence payloads, and
   host-facing seams. It does not own desktop windowing or browser APIs.
 - `woodshed-views` owns product composition and responsive presentation.

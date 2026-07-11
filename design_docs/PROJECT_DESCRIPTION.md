@@ -5,9 +5,11 @@ Maintainer-owned. Other project-facing documents derive from this description.
 ## What it is
 
 Woodshed is an offline-first practice toolkit for guitar and related fretted
-instruments. It brings theory reference, fretboard exploration, rehearsal sets,
-song sketches, a tuner, metronome, MIDI clock, latency calibration, and a small
-live-input looper into one focused practice environment.
+instruments. Its chord, scale, arpeggio, progression, exercise, and set-template
+catalogs stage material into an ordered practice Set. Rehearsal streams that Set
+as guided practice; the Looper repeats it as a backing form for live-input
+recording and export. A fretboard, tuner, metronome, MIDI clock, and latency
+calibration complete the focused practice environment.
 
 The theory model generalizes across string counts and tunings, so bass, ukulele,
 banjo, and custom instruments are valid model inputs rather than a second
@@ -17,39 +19,43 @@ product.
 
 - **Comprehensive theory coverage** for guitar and related instruments in one
   offline application.
-- **Practice, not just reference.** Material can become a rehearsal set,
-  stepped exercise, or song timeline that drives an actual session at tempo.
+- **Practice, not just reference.** Catalog material can be staged into one Set
+  and run through guided Rehearsal or the live-input Looper at tempo.
 - **Open source with convenient desktop builds.** Source remains open; signed,
   packaged binaries can later support itch.io or Gumroad distribution.
 - **Offline-first.** Core theory, session data, and practice behavior work
   without an account or network connection.
 
-## Current product surface
+## Product model
 
-### Fretboard and theory
+### Stage and Set
 
-- Scale, chord, arpeggio, progression, and exercise lenses over one musical
-  context.
+- Scale, chord, arpeggio, progression, exercise, and set-template catalogs over
+  one musical context.
 - Named scale and chord catalogs, formulas, root selection, tunings, and
   fretboard position mapping.
-- Rehearsal sets built from that material, with dwell, touch, and fret-window
-  controls.
-- Practice recipes and corpus search across the catalogs.
+- One ordered, heterogeneous Set built by staging configured material, with
+  dwell, touch, instrument, tuning, and fret-window controls.
+- Corpus search across the catalogs.
 
 ### Practice and playback
 
 - Metronome playback and on-demand voicing previews for current material.
-- Song timeline with bar editing, loop/once transport, click, and live-input
-  looper recording.
+- Guided Rehearsal with Set looping and metronome-synchronized fretboard
+  articulation.
+- Set-derived Looper with repeat transport, click, live-input recording,
+  replace/overdub, and WAV export.
 - Tuner input, latency calibration, and native MIDI input/output with clock
   sync where devices are available.
 
 ### Personalization and local state
 
 - Seed-derived Slate, Ember, Light, Dusk, Meadow, and Parchment themes.
-- Persisted session state for selections, tempo, theme, layout, rehearsal set,
-  and song document.
+- Persisted session state for selections, tempo, theme, layout, Set, and Looper
+  configuration.
 - Fretboard layout choices: two pane, hero, and full canvas.
+- Canonical Settings pages for each product section plus appearance, instrument,
+  tuning, audio, MIDI, and accessibility.
 
 ## Delivery status
 

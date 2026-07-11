@@ -13,19 +13,25 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-07-11_stage_set_tools_plan.md](2026-07-11_stage_set_tools_plan.md)
+  — **The product architecture.** Catalogs stage material into one Set;
+  Rehearsal and Looper consume it; Fretboard, Metronome, and Tuner are shared
+  tools; Settings is the canonical configuration home. Mere projects related
+  catalog material and practice history contextually inside Stage. Retires
+  Practice as a top-level section and replaces Song/DAW framing with
+  Set-derived looping.
 - [2026-07-04_serval_host_cross_platform_plan.md](2026-07-04_serval_host_cross_platform_plan.md)
-  — **The delivery architecture.** Woodshed moves to a serval host
-  (xilem_serval): one DOM-shaped view tree rendered by serval on desktop and
-  in the browser (receipt: serval `examples/serval_web_smoke`, PASS
-  2026-07-04). Phases S0-S5 (desktop parity, absorbs redesign P4-P6),
-  W1-W3 (web shell, web audio, deploy/PWA), mobile downstream. Retires the
-  mark-ik/xilem fork at the parity cut.
+  — **The delivery architecture.** The move to the Serval desktop host is
+  complete: one DOM-shaped `xilem_serval` view tree rendered by Serval. The
+  remaining plan covers browser shell, Web Audio, deploy/PWA, and mobile
+  downstream.
 - [2026-06-15_redesign_plan.md](2026-06-15_redesign_plan.md) — UI redesign from
   the Redesign Explorations board: GPUI-quiet chrome (hairline borders, calmer
   density, steppers→dropdowns), Slate + Ember palettes as built-ins, segmented-
   pill nav (left rail held for mobile), fretboard-layout setting, Rehearsal
   filmstrip + transport deck, Practice recipe tiles. Decisions locked
-  2026-06-15; cheap layer first.
+  2026-06-15; cheap layer first. **Product/navigation framing superseded
+  2026-07-11** by the Stage/Set/Tools plan; retain as visual reference.
 - [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) —
   **Superseded 2026-07-04** by the serval-host plan above; kept for the web
   profile constraints and the Tier-0 seams (AudioBackend, Storage, timers,
@@ -33,8 +39,8 @@ before any other doc in this directory.
 - [2026-05-22_rehearsal_redesign_plan.md](2026-05-22_rehearsal_redesign_plan.md)
   — Prototype → designed UI. Card vocabulary (tagged-union `Card`), a rehearsal
   queue/projections spine, bulldoze-then-build the lens nav. Branch
-  `rehearsal-redesign`; leads with R1 material portability ("➕ Rehearse" from
-  any lens). **Current active redesign.**
+  `rehearsal-redesign`; leads with R1 material portability. **Superseded
+  2026-07-11** as product authority; its shipped Set/Card work carries forward.
 - [2026-04-30_initial_plan.md](2026-04-30_initial_plan.md) — Initial
   scaffold and roadmap from theory crate through Iced UI to first
   desktop release.
@@ -43,19 +49,19 @@ before any other doc in this directory.
 - [2026-05-15_polyphonic_pitch_spike.md](2026-05-15_polyphonic_pitch_spike.md)
   — Spike on polyphonic pitch detection.
 - [2026-05-16_song_mode_integration.md](2026-05-16_song_mode_integration.md)
-  — Song Mode integration into the practice app. (§3 "UI" superseded by the
-  timeline-layers plan below; engine wiring + save format still current.)
+  — **Superseded 2026-07-11.** Historical Song engine and save-format work;
+  Song becomes a Set-derived Looper rather than a parallel product mode.
 - [2026-05-19_song_timeline_layers_plan.md](2026-05-19_song_timeline_layers_plan.md)
-  — Bar-quantized layered timeline (section / chord / click lanes) + sampler;
-  the "one-person DLR" evolution of the Song tab. Sampler incubates in
-  `woodshed-audio` (shared crate Strophe consumes).
+  — **Superseded 2026-07-11.** Historical layered-timeline proposal. Woodshed's
+  Looper stops short of song arrangement and DAW-shaped editing.
 - [2026-05-20_theme_system_design.md](2026-05-20_theme_system_design.md)
   — Seed-derived palette formula (OKLCH + contrast) + theme management model
   (built-in vs user themes, edit/rename/remove). Proposal, pending sign-off.
 - [2026-05-21_fretboard_canvas_lenses_plan.md](2026-05-21_fretboard_canvas_lenses_plan.md)
   — Reorient from toolbox to instrument: one persistent fretboard surface +
   Scale/Chord/Progression/Exercise *lenses* over a shared musical context
-  (Navigator principle). Phases 1–2 shipped; Phase 3 spun out below.
+  (Navigator principle). Phases 1–2 shipped; catalog/product framing is
+  superseded by the Stage/Set/Tools plan.
 - [2026-05-21_arpeggio_lens_plan.md](2026-05-21_arpeggio_lens_plan.md)
   — Arpeggios as a 5th fretboard lens: chord-catalog tones rendered as
   CAGED-style position/shape cards + an up/down (ascending→descending)
@@ -66,10 +72,11 @@ before any other doc in this directory.
   instrument modules (fretboard / tuner / metronome) coordinating via
   shared state + a reconcile arbiter + a shared clock; folds the old
   tabs into one configurable surface; plus custom-authoring for 1.0.
-  Form B chosen. Proposal, pending sign-off.
+  Form B chosen. **Superseded 2026-07-11:** the reusable tool principle carries
+  forward without folding the product into one configurable surface.
 - [2026-05-16_xilem_migration_plan.md](2026-05-16_xilem_migration_plan.md)
-  — Migration from Iced to Xilem; feature-parity ladder and web/mobile
-  follow-on.
+  — **Superseded 2026-07-04.** Historical Iced-to-Xilem migration record; the
+  live host and delivery path are governed by the Serval-host plan.
 
 ## Archive
 
@@ -104,6 +111,12 @@ section whenever a durable working insight emerges from a session.
   + math — no I/O, no UI, no audio. It may model the portable operations
   required for woodshedding, but app-specific rehearsal UI, persistence,
   and audio engines live in consuming crates.
+- **Stage is a verb and Set is the spine**: catalogs supply material; Stage
+  adds configured Cards to one ordered Set; Rehearsal and Looper consume it.
+  Do not create parallel practice, song, or tool-owned material documents.
+- **Tools project shared state**: Fretboard, Metronome, and Tuner have
+  standalone homes and contextual forms. Settings owns their durable
+  configuration; contextual controls edit that same canonical state.
 - **Desktop first, mobile later**: ship to itch.io / Gumroad for desktop
   before attempting mobile. Mobile is a shell around the web build (see the
   serval-host plan's M track); building toward it is part of the project's

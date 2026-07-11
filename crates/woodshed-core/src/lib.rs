@@ -11,6 +11,7 @@
 
 pub mod arpeggio;
 pub mod audio;
+pub mod history;
 pub mod midi;
 pub mod search;
 pub mod song;
@@ -70,6 +71,25 @@ impl Lens {
     pub fn implemented(self) -> bool {
         true
     }
+}
+
+/// A catalog selection surfaced by the related-material projection. It is
+/// intentionally small and copyable so views can route it through a click
+/// without carrying graph implementation types.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RelatedTarget {
+    Scale(usize),
+    Chord(usize),
+    Progression(usize),
+    Exercise(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelatedSuggestion {
+    pub title: String,
+    pub kind: &'static str,
+    pub reason: String,
+    pub target: RelatedTarget,
 }
 
 /// Root pitch-class names, indexed by semitones above A.
@@ -485,6 +505,130 @@ impl StageState {
 
     pub fn set_lens(&mut self, lens: Lens) {
         self.lens = lens;
+    }
+
+    /// Explainable immediate neighbors of the current catalog material. The
+    /// graph owns relations; core maps stable catalog identity back into the
+    /// selection handles the product already uses.
+    pub fn related_material(&self, limit: usize) -> Vec<RelatedSuggestion> {
+        let selected_id = match self.lens {
+            Lens::Scales => woodshed_graph::scale_id(self.scale().name),
+            Lens::Chords => woodshed_graph::chord_id(self.chord().name),
+            Lens::Arpeggios => woodshed_graph::chord_id(self.arpeggio_chord().name),
+            Lens::Progressions => {
+                let Some(idx) = self.progression_idx else { return Vec::new() };
+                woodshed_graph::progression_id(self.progressions()[idx].name)
+            }
+            Lens::Exercises => woodshed_graph::exercise_id(self.exercise().name),
+        };
+
+        woodshed_graph::related_material(&selected_id, limit)
+            .into_iter()
+            .filter_map(|item| {
+                use woodshed_graph::CatalogKind;
+                let (kind, target) = match item.kind {
+                    CatalogKind::Scale => (
+                        "Scale",
+                        RelatedTarget::Scale(self.scales().iter().position(|x| x.name == item.name)?),
+                    ),
+                    CatalogKind::Chord => (
+                        "Chord",
+                        RelatedTarget::Chord(self.chords().iter().position(|x| x.name == item.name)?),
+                    ),
+                    CatalogKind::Progression => (
+                        "Progression",
+                        RelatedTarget::Progression(
+                            self.progressions().iter().position(|x| x.name == item.name)?,
+                        ),
+                    ),
+                    CatalogKind::Exercise => (
+                        "Exercise",
+                        RelatedTarget::Exercise(
+                            self.exercises().iter().position(|x| x.name == item.name)?,
+                        ),
+                    ),
+                };
+                Some(RelatedSuggestion {
+                    title: item.name,
+                    kind,
+                    reason: item.reason,
+                    target,
+                })
+            })
+            .collect()
+    }
+
+    pub fn catalog_id(&self) -> Option<String> {
+        match self.lens {
+            Lens::Scales => Some(woodshed_graph::scale_id(self.scale().name)),
+            Lens::Chords => Some(woodshed_graph::chord_id(self.chord().name)),
+            Lens::Arpeggios => Some(woodshed_graph::chord_id(self.arpeggio_chord().name)),
+            Lens::Progressions => self
+                .progression_idx
+                .map(|idx| woodshed_graph::progression_id(self.progressions()[idx].name)),
+            Lens::Exercises => Some(woodshed_graph::exercise_id(self.exercise().name)),
+        }
+    }
+
+    pub fn related_material_with_history(
+        &self,
+        history: &history::PracticeHistory,
+        limit: usize,
+    ) -> Vec<RelatedSuggestion> {
+        let Some(selected_id) = self.catalog_id() else { return Vec::new() };
+        let mut ranked: Vec<(usize, usize, RelatedSuggestion)> = self
+            .related_material(usize::MAX)
+            .into_iter()
+            .enumerate()
+            .map(|(stable_order, mut suggestion)| {
+                let target_id = match suggestion.target {
+                    RelatedTarget::Scale(idx) => woodshed_graph::scale_id(self.scales()[idx].name),
+                    RelatedTarget::Chord(idx) => woodshed_graph::chord_id(self.chords()[idx].name),
+                    RelatedTarget::Progression(idx) => {
+                        woodshed_graph::progression_id(self.progressions()[idx].name)
+                    }
+                    RelatedTarget::Exercise(idx) => {
+                        woodshed_graph::exercise_id(self.exercises()[idx].name)
+                    }
+                };
+                let count = history.related_transition_count(&selected_id, &target_id);
+                if count > 0 {
+                    suggestion.reason = if count == 1 {
+                        "Previously staged from here".to_string()
+                    } else {
+                        format!("Staged from here {count} times")
+                    };
+                }
+                (count, stable_order, suggestion)
+            })
+            .collect();
+        ranked.sort_by_key(|(count, stable_order, _)| (std::cmp::Reverse(*count), *stable_order));
+        ranked
+            .into_iter()
+            .take(limit)
+            .map(|(_, _, suggestion)| suggestion)
+            .collect()
+    }
+
+    pub fn select_related(&mut self, target: RelatedTarget) {
+        match target {
+            RelatedTarget::Scale(idx) => {
+                self.set_lens(Lens::Scales);
+                self.select_scale(idx);
+            }
+            RelatedTarget::Chord(idx) => {
+                self.set_lens(Lens::Chords);
+                self.select_chord(idx);
+            }
+            RelatedTarget::Progression(idx) => {
+                self.set_lens(Lens::Progressions);
+                self.select_progression(idx);
+            }
+            RelatedTarget::Exercise(idx) => {
+                self.set_lens(Lens::Exercises);
+                self.select_exercise(idx);
+            }
+        }
     }
 
     pub fn select_scale(&mut self, idx: usize) {
@@ -1330,5 +1474,39 @@ mod tests {
         s.set_lens(Lens::Exercises);
         let p = s.exercise_current_pitch_hz().expect("exercise has notes");
         assert!(p > 20.0 && p < 5000.0);
+    }
+
+    #[test]
+    fn related_material_selects_through_catalog_identity() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Chords);
+        let major_7 = s.chords().iter().position(|c| c.name == "Major 7").unwrap();
+        s.select_chord(major_7);
+        let related = s.related_material(64);
+        let major = related
+            .iter()
+            .find(|item| item.kind == "Scale" && item.title == "Major")
+            .expect("Major 7 relates to Major");
+        assert!(major.reason.contains("fits this scale"));
+        s.select_related(major.target);
+        assert_eq!(s.lens, Lens::Scales);
+        assert_eq!(s.scale().name, "Major");
+    }
+
+    #[test]
+    fn related_history_promotes_a_prior_stage_path() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+        let dorian = s.scales().iter().position(|scale| scale.name == "Dorian").unwrap();
+        s.select_scale(dorian);
+        let mut history = history::PracticeHistory::default();
+        history.record(
+            woodshed_graph::chord_id("Minor 7"),
+            history::EngagementKind::Staged,
+            Some(woodshed_graph::scale_id("Dorian")),
+        );
+        let ranked = s.related_material_with_history(&history, 5);
+        assert_eq!(ranked[0].title, "Minor 7");
+        assert_eq!(ranked[0].reason, "Previously staged from here");
     }
 }

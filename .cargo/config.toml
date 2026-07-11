@@ -34,6 +34,9 @@ xilem_core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
 [patch."https://github.com/mark-ik/tinct"]
 tinct = { path = "C:/Users/mark_/Code/repos/tincture" }
 
+[patch."https://github.com/mark-ik/muniment.git"]
+muniment = { path = "C:/Users/mark_/Code/repos/muniment" }
+
 [patch."https://github.com/mark-ik/netrender.git"]
 netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }
 netrender_device = { path = "C:/Users/mark_/Code/repos/netrender/netrender_device" }

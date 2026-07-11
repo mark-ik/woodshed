@@ -214,6 +214,25 @@ pub fn stage_css(p: &Palette) -> String {
 .side-strip {{ margin-top: 12px; }}
 .side-strip .side {{ width: 100%; display: flex; flex-wrap: wrap; margin-right: 0; }}
 .side-strip .side-item {{ margin-right: 6px; margin-bottom: 6px; }}
+.related-panel {{ width: 260px; flex: 0 0 260px; margin-left: 16px; background-color: {surface}; border-radius: 10px; padding: 14px; }}
+.related-heading {{ color: {text}; font-size: 15px; font-weight: 700; }}
+.related-subtitle, .related-empty, .related-reason {{ color: {text_dim}; font-size: 12px; }}
+.related-subtitle {{ margin-top: 2px; margin-bottom: 10px; }}
+.related-history {{ margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 1px; border-bottom-color: {surface_2}; }}
+.history-heading {{ color: {text_dim}; font-size: 11px; margin-bottom: 4px; }}
+.history-list {{ display: flex; flex-wrap: wrap; }}
+.history-item {{ background-color: {surface_2}; border-radius: 10px; margin-right: 5px; margin-bottom: 4px; padding: 3px 7px; font-size: 11px; }}
+.history-kind {{ color: {text_dim}; margin-right: 4px; }}
+.history-title {{ color: {text}; }}
+.related-item {{ display: flex; align-items: center; border-top-width: 1px; border-top-color: {surface_2}; padding-top: 8px; padding-bottom: 8px; }}
+.related-copy {{ flex: 1; min-width: 0; cursor: pointer; }}
+.related-title {{ color: {text}; font-size: 13px; }}
+.related-reason {{ margin-top: 2px; }}
+.related-stage {{ color: {tertiary}; font-size: 12px; margin-left: 8px; padding: 5px 7px; border-radius: 5px; cursor: pointer; }}
+.related-stage:hover, .related-copy:hover .related-title {{ background-color: {surface_2}; color: {text}; }}
+.viewport-medium .related-panel, .viewport-narrow .related-panel {{ width: auto; margin-left: 0; margin-top: 12px; }}
+.viewport-medium .related-list {{ display: flex; flex-wrap: wrap; }}
+.viewport-medium .related-item {{ width: 46%; margin-right: 12px; }}
 .settings-gap {{ margin-top: 16px; }}
 .t-btn:focus {{ background-color: {surface_hover}; color: {tertiary}; }}
 .side-item:focus {{ background-color: {surface}; }}

@@ -855,7 +855,7 @@ name = "chartulary"
 version = "0.1.0"
 dependencies = [
  "codicil",
- "muniment 0.1.0",
+ "muniment",
  "petgraph",
  "serde",
 ]
@@ -904,7 +904,7 @@ dependencies = [
 name = "codicil"
 version = "0.1.0"
 dependencies = [
- "muniment 0.1.0 (git+https://github.com/mark-ik/muniment.git?branch=main)",
+ "muniment",
  "serde",
 ]
 
@@ -2815,16 +2815,6 @@ dependencies = [
 [[package]]
 name = "muniment"
 version = "0.1.0"
-dependencies = [
- "async-trait",
- "blake3",
- "serde",
-]
-
-[[package]]
-name = "muniment"
-version = "0.1.0"
-source = "git+https://github.com/mark-ik/muniment.git?branch=main#2ea41a0a333a2f523ae1a7b9026bd172bc5185d2"
 dependencies = [
  "async-trait",
  "blake3",
@@ -6824,6 +6814,7 @@ dependencies = [
  "personae",
  "serde",
  "serde_json",
+ "woodshed-graph",
  "woodshedding",
 ]
 
