@@ -30,6 +30,71 @@ fn source_label(source: &Option<Recipe>) -> String {
     }
 }
 
+pub(super) fn card_editor(ui: &UiState) -> UiChild {
+    if ui.set.cards.is_empty() {
+        return Box::new(el("div", ()));
+    }
+    let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
+    let card = &ui.set.cards[cursor];
+    let bpm = card
+        .timing
+        .bpm
+        .map(|value| format!("{value:.0} bpm"))
+        .unwrap_or_else(|| "transport bpm".into());
+    let window = card
+        .setting
+        .fret_window
+        .map(|value| format!("frets {}-{}", value.start, value.start + value.span))
+        .unwrap_or_else(|| "whole neck".into());
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text("Selected Card")).attr("class", "set-editor-label"),
+                clickable(
+                    el(
+                        "div",
+                        text(format!("Touch: {}", touch_label(&card.touch))),
+                    )
+                    .attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.cycle_card_touch(),
+                ),
+                clickable(
+                    el(
+                        "div",
+                        text(format!("Hold: {}", hold_label(&card.timing.hold))),
+                    )
+                    .attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.cycle_card_hold(),
+                ),
+                clickable(
+                    el("div", text("-")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.nudge_card_bpm(-5.0),
+                ),
+                el("div", text(bpm)).attr("class", "t-readout"),
+                clickable(
+                    el("div", text("+")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.nudge_card_bpm(5.0),
+                ),
+                clickable(
+                    el("div", text("<")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.shift_card_window(-1),
+                ),
+                el("div", text(window)).attr("class", "t-readout"),
+                clickable(
+                    el("div", text(">")).attr("class", "t-btn t-narrow"),
+                    |ui: &mut UiState, _| ui.shift_card_window(1),
+                ),
+                clickable(
+                    el("div", text("Free position")).attr("class", "t-btn"),
+                    |ui: &mut UiState, _| ui.clear_card_window(),
+                ),
+            ),
+        )
+        .attr("class", "set-editor"),
+    )
+}
+
 pub(super) fn view(ui: &UiState) -> UiChild {
     let loop_label = match ui.set.loop_mode {
         LoopMode::Off => "Loop set: off",
@@ -81,6 +146,11 @@ pub(super) fn view(ui: &UiState) -> UiChild {
     } else {
         Box::new(el("div", cards).attr("class", "set-cards"))
     };
+    let content: UiChild = if ui.set_tray_expanded {
+        Box::new(el("div", (body, card_editor(ui))))
+    } else {
+        Box::new(el("div", ()))
+    };
 
     Box::new(
         el(
@@ -94,6 +164,16 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                             text(format!("Set · {} cards", ui.set.cards.len())),
                         )
                         .attr("class", "set-heading"),
+                        clickable(
+                            el(
+                                "div",
+                                text(if ui.set_tray_expanded { "Collapse" } else { "Expand" }),
+                            )
+                            .attr("class", "t-btn"),
+                            |ui: &mut UiState, _| {
+                                ui.set_tray_expanded = !ui.set_tray_expanded;
+                            },
+                        ),
                         clickable(
                             el("div", text(loop_label)).attr("class", "t-btn"),
                             |ui: &mut UiState, _| {
@@ -149,7 +229,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     ),
                 )
                 .attr("class", "set-toolbar"),
-                body,
+                content,
             ),
         )
         .attr("class", "set-tray"),

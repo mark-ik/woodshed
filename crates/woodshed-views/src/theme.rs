@@ -241,6 +241,8 @@ pub fn stage_css(p: &Palette) -> String {
 .set-card-title {{ color: {text}; font-size: 13px; margin-top: 3px; }}
 .set-card-meta {{ color: {tertiary}; font-size: 10px; margin-top: 4px; }}
 .set-card-source {{ margin-top: 3px; }}
+.set-editor {{ display: flex; align-items: center; flex-wrap: wrap; border-top-width: 1px; border-top-color: {surface_2}; padding-top: 8px; }}
+.set-editor-label {{ color: {text_dim}; font-size: 11px; margin-right: 8px; }}
 .viewport-narrow .set-card {{ width: 44%; }}
 .viewport-narrow .settings-shell {{ display: block; }}
 .viewport-narrow .settings-nav {{ width: 100%; display: flex; flex-wrap: wrap; margin-bottom: 12px; }}

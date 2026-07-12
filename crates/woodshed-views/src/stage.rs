@@ -16,7 +16,7 @@ use woodshed_core::settings::{AppSettings, SettingsPage};
 use woodshed_core::song::SongDoc;
 use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
-use woodshedding::rehearsal::Set;
+use woodshedding::rehearsal::{FretWindow, Hold, Set, Touch};
 use xilem_serval::{
     clickable, el, map_state, select, text, text_field, AnyView, SelectState, ServalCtx,
     ServalElement, TextInput,
@@ -229,6 +229,8 @@ pub struct UiState {
     pub song_record_replace: bool,
     pub song_record_toggle_requested: bool,
     pub song_clear_loop_requested: bool,
+    /// Whether the document-bottom Set tray shows its Cards and editor.
+    pub set_tray_expanded: bool,
 }
 
 impl Default for UiState {
@@ -277,6 +279,7 @@ impl UiState {
             song_record_replace: false,
             song_record_toggle_requested: false,
             song_clear_loop_requested: false,
+            set_tray_expanded: true,
             stage,
         }
     }
@@ -365,6 +368,79 @@ impl UiState {
     pub fn set_bpm(&mut self, bpm: f32) {
         self.transport.bpm = bpm.clamp(30.0, 300.0);
         self.app_settings.metronome.bpm = self.transport.bpm;
+    }
+
+    fn selected_card_index(&self) -> Option<usize> {
+        (!self.set.cards.is_empty()).then(|| self.set.cursor.min(self.set.cards.len() - 1))
+    }
+
+    pub fn cycle_card_touch(&mut self) {
+        let Some(cursor) = self.selected_card_index() else { return };
+        let card = &mut self.set.cards[cursor];
+        card.touch = match &card.touch {
+            Touch::Block => Touch::Arpeggiate {
+                direction: Default::default(),
+                inversion: 0,
+            },
+            Touch::Arpeggiate { direction, inversion } => {
+                use woodshed_core::arpeggio::ArpeggioDirection as D;
+                match direction {
+                    D::UpDown => Touch::Arpeggiate {
+                        direction: D::Up,
+                        inversion: *inversion,
+                    },
+                    D::Up => Touch::Arpeggiate {
+                        direction: D::Down,
+                        inversion: *inversion,
+                    },
+                    D::Down => Touch::Block,
+                }
+            }
+        };
+    }
+
+    pub fn cycle_card_hold(&mut self) {
+        let Some(cursor) = self.selected_card_index() else { return };
+        let card = &mut self.set.cards[cursor];
+        card.timing.hold = match card.timing.hold {
+            Hold::Manual => Hold::Bars(2),
+            Hold::Bars(2) => Hold::Bars(4),
+            Hold::Bars(4) => Hold::Bars(8),
+            Hold::Bars(_) => Hold::Seconds(30.0),
+            Hold::Seconds(_) | Hold::Reps(_) => Hold::Manual,
+        };
+    }
+
+    pub fn nudge_card_bpm(&mut self, delta: f32) {
+        let Some(cursor) = self.selected_card_index() else { return };
+        let card = &mut self.set.cards[cursor];
+        let base = card.timing.bpm.unwrap_or(self.transport.bpm);
+        card.timing.bpm = Some((base + delta).clamp(30.0, 300.0));
+    }
+
+    pub fn shift_card_window(&mut self, delta: i8) {
+        let Some(cursor) = self.selected_card_index() else { return };
+        let max_fret = self.stage.fret_count;
+        let card = &mut self.set.cards[cursor];
+        let window = card
+            .setting
+            .fret_window
+            .unwrap_or(FretWindow { start: 0, span: 4 });
+        let max_start = max_fret.saturating_sub(window.span);
+        let start = if delta < 0 {
+            window.start.saturating_sub(delta.unsigned_abs())
+        } else {
+            window.start.saturating_add(delta as u8).min(max_start)
+        };
+        card.setting.fret_window = Some(FretWindow {
+            start,
+            span: window.span,
+        });
+    }
+
+    pub fn clear_card_window(&mut self) {
+        let Some(cursor) = self.selected_card_index() else { return };
+        self.set.cards[cursor].setting.fret_window = None;
     }
 
     /// Update the transient layout band after a host resize. Returns whether a

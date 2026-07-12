@@ -369,3 +369,9 @@ receipts are recorded before those platforms are advertised.
   Set; duplicate/remove changed 12 -> 13 -> 12 as expected. P3 remains partial:
   Card timing/touch/placement editing still lives in Rehearsal, and the tray is
   document-bottom rather than a sticky/collapsible bottom rail.
+- **2026-07-11, shared Card editor slice:** Moved touch, dwell, tempo override,
+  and fret-window mutations behind shared `UiState` actions and exposed the
+  same selected-Card editor in both the Stage Set tray and Rehearsal. The Stage
+  tray can now collapse without changing the durable Set. P3 remains partial
+  on reusable user Set save/load and whether the tray should become a sticky
+  bottom rail; it is currently a collapsible document-bottom surface.

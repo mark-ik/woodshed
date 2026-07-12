@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use woodshed_core::step_set;
-use woodshedding::rehearsal::{FretWindow, Hold, LoopMode, Recipe, Touch};
+use woodshedding::rehearsal::{LoopMode, Recipe};
 use xilem_serval::{clickable, el, text};
 
 use super::{UiChild, UiState};
@@ -144,139 +144,9 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
-    // Card editor (S4 slice 9): touch, dwell, tempo override, and the
-    // pinned hand position of the card under the cursor. Edits write
-    // straight into the set (persisted with the session).
-    let card_now = &ui.set.cards[cursor];
-    let touch_label = match &card_now.touch {
-        Touch::Block => "Touch: block".to_string(),
-        Touch::Arpeggiate { direction, .. } => {
-            format!("Touch: arp {}", direction.label())
-        }
-    };
-    let hold_label = match card_now.timing.hold {
-        Hold::Manual => "Hold: manual".to_string(),
-        Hold::Bars(n) => format!("Hold: {n} bars"),
-        Hold::Seconds(s) => format!("Hold: {s:.0}s"),
-        Hold::Reps(r) => format!("Hold: {r} reps"),
-    };
-    let bpm_label = match card_now.timing.bpm {
-        Some(b) => format!("{b:.0} bpm"),
-        None => "transport bpm".to_string(),
-    };
-    let window_label = match card_now.setting.fret_window {
-        Some(w) => format!("frets {}-{}", w.start, w.start + w.span),
-        None => "whole neck".to_string(),
-    };
-    let editor: UiChild = Box::new(
-        el(
-            "div",
-            (
-                clickable(
-                    el("div", text(touch_label)).attr("class", "t-btn"),
-                    move |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        card.touch = match &card.touch {
-                            Touch::Block => Touch::Arpeggiate {
-                                direction: Default::default(),
-                                inversion: 0,
-                            },
-                            Touch::Arpeggiate {
-                                direction,
-                                inversion,
-                            } => {
-                                // Cycle direction; back to block after Down.
-                                use woodshed_core::arpeggio::ArpeggioDirection as D;
-                                match direction {
-                                    D::UpDown => Touch::Arpeggiate {
-                                        direction: D::Up,
-                                        inversion: *inversion,
-                                    },
-                                    D::Up => Touch::Arpeggiate {
-                                        direction: D::Down,
-                                        inversion: *inversion,
-                                    },
-                                    D::Down => Touch::Block,
-                                }
-                            }
-                        };
-                    },
-                ),
-                clickable(
-                    el("div", text(hold_label)).attr("class", "t-btn"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        card.timing.hold = match card.timing.hold {
-                            Hold::Manual => Hold::Bars(2),
-                            Hold::Bars(2) => Hold::Bars(4),
-                            Hold::Bars(4) => Hold::Bars(8),
-                            Hold::Bars(_) => Hold::Seconds(30.0),
-                            Hold::Seconds(_) => Hold::Manual,
-                            Hold::Reps(_) => Hold::Manual,
-                        };
-                    },
-                ),
-                clickable(
-                    el("div", text("-")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        let base = card.timing.bpm.unwrap_or(ui.transport.bpm);
-                        card.timing.bpm = Some((base - 5.0).clamp(30.0, 300.0));
-                    },
-                ),
-                el("div", text(bpm_label)).attr("class", "t-readout"),
-                clickable(
-                    el("div", text("+")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        let base = card.timing.bpm.unwrap_or(ui.transport.bpm);
-                        card.timing.bpm = Some((base + 5.0).clamp(30.0, 300.0));
-                    },
-                ),
-                clickable(
-                    el("div", text("<")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        card.setting.fret_window = match card.setting.fret_window {
-                            None => Some(FretWindow { start: 0, span: 4 }),
-                            Some(w) => Some(FretWindow {
-                                start: w.start.saturating_sub(1),
-                                span: w.span,
-                            }),
-                        };
-                    },
-                ),
-                el("div", text(window_label)).attr("class", "t-readout"),
-                clickable(
-                    el("div", text(">")).attr("class", "t-btn t-narrow"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        let card = &mut ui.set.cards[cursor];
-                        card.setting.fret_window = match card.setting.fret_window {
-                            None => Some(FretWindow { start: 0, span: 4 }),
-                            Some(w) => Some(FretWindow {
-                                start: (w.start + 1).min(ui.stage.fret_count - w.span),
-                                span: w.span,
-                            }),
-                        };
-                    },
-                ),
-                clickable(
-                    el("div", text("free")).attr("class", "t-btn"),
-                    |ui: &mut UiState, _| {
-                        let cursor = ui.set.cursor.min(ui.set.cards.len() - 1);
-                        ui.set.cards[cursor].setting.fret_window = None;
-                    },
-                ),
-            ),
-        )
-        .attr("class", "transport"),
-    );
+    // The same Card editor appears in Stage's Set tray and Rehearsal. Actions
+    // mutate the one persisted Set through UiState helpers.
+    let editor = super::set_tray::card_editor(ui);
 
     // Current card's material on the big board.
     let card = &ui.set.cards[cursor];
