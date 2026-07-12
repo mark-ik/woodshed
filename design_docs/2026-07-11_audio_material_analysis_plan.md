@@ -85,6 +85,29 @@ candidate interpretations. The normalized observation contract remains owned
 by Woodshed. An agent cannot silently promote a guess to catalog truth or
 replace source provenance.
 
+### Use the existing intelligence stack
+
+The Merely stack already has the cross-platform Burn strategy. Do not create a
+Woodshed-owned native/web/mobile inference-runtime family beside it.
+
+- `vates` owns capability-selected inference providers, streaming generation,
+  cancellation, and the Armillary inference actor. A Vates-backed reasoner may
+  orchestrate audio tools and explain competing interpretations.
+- `sibylla` owns embedding providers, semantic retrieval, Burn-backed BERT, and
+  Burn-backed vector-index acceleration. It retrieves catalog and practice
+  context for an observation or region.
+- `armillary` owns background actor execution and host wake-up rather than
+  letting model work block the UI or realtime audio graph.
+
+The uncovered seam is narrower: a structured audio-analysis provider that
+accepts an audio asset plus context and returns normalized observations.
+Vates's current `InferenceProvider` returns generated text, while Sibylla's
+current `EmbeddingProvider` returns vectors; neither should be distorted to
+pretend transcription is generation or embedding. The analyzer should follow
+their provider/capability/stub/feature-gated-Burn pattern and be callable as a
+tool by Vates. Keep it Woodshed-side until Strophe or another consumer proves
+the provider contract is independently reusable.
+
 ## Current Tool Findings
 
 ### Baseline: existing Woodshed DSP
@@ -289,6 +312,11 @@ contribution is measurable.
 Done when the report distinguishes transcription quality from catalog-retrieval
 quality and identifies cases where context causes a wrong confident match.
 
+Use Sibylla for semantic candidate retrieval only after deterministic catalog
+matching has a measured baseline. A Vates provider may compare or explain the
+ranked candidates, but its prose is not a metric input and cannot replace the
+structured resolver output.
+
 ### R5. Compare optional lanes
 
 Add at most one multi-instrument transcription comparator, one separation
@@ -331,3 +359,7 @@ analysis runs at all.
 - Confirmed `basic-pitch` 0.4.0 is published but not installed in the reference
   Python environment. R3 requires a disposable pinned environment and must
   measure setup friction separately from inference.
+- Corrected the runtime framing after auditing sibling repos: Vates already
+  owns inference and actors, while Sibylla already owns Burn embedding and
+  retrieval. The plan now adds only the missing structured audio-analysis tool
+  seam and keeps agents and semantic retrieval in their existing owners.
