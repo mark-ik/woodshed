@@ -45,7 +45,7 @@ winit = "0.30"
 # source-specific [patch] overrides (the mere pattern). serval's internal
 # path deps (layout-dom-api, xilem-core, ...) resolve inside its git
 # checkout; only the crates woodshed names appear here.
-xilem-serval = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/serval.git", branch = "main" }
 chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/serval.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
