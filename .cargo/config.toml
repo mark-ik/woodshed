@@ -24,13 +24,13 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # dirs but NOT serval's support/patches/* so it never collides with the
 # committed [patch.crates-io] taffy/ipc-channel redirects.
 [patch."https://github.com/mark-ik/serval.git"]
-chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
+serval-chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
 "serval-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-layout" }
 "serval-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-scripted-dom" }
 "serval-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-winit-host" }
 "xilem-serval" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
-xilem_core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
+serval-xilem-core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
 
 [patch."https://github.com/mark-ik/tinct"]
 tinct = { path = "C:/Users/mark_/Code/repos/tincture" }
