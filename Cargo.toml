@@ -98,16 +98,19 @@ serde_json = "1.0"
 # taffy + ipc-channel are vendored inside the serval repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
-# stylo_taffy names crates.io stylo/stylo_atoms ^0.18; serval now pins the
-# same crates from the mark-ik/stylo fork (`mark-ik/servo-media-features`
-# branch, Servo-mode capabilities), and stylo declares
-# links = "servo_style_crate" (one Stylo per graph), so mirror serval's
-# patch to the same fork branch to unify. (Was servo/stylo@8bde0e96 until
-# serval moved to the fork.)
-stylo = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
-stylo_atoms = { git = "https://github.com/mark-ik/stylo", branch = "mark-ik/servo-media-features" }
-# serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's
-# vendored float-layout fork, not on crates.io).
+# NO stylo/stylo_atoms patch (2026-07-12, mirroring serval's ring-3 rename):
+# the fork is now the RENAMED `serval-stylo` family, and a `[patch]` cannot
+# rename its target. Serval's crates git-dep serval-stylo by package rename, so
+# no crates.io `stylo` is left to patch — and keeping the old entries pulled the
+# pre-rename fork in beside serval-stylo, which `links = "servo_style_crate"`
+# (one Stylo per graph) makes a hard resolution error.
+#
+# stylo_taffy must be patched for the same reason: the registry copy names
+# crates.io stylo, dragging a second Stylo in. Serval vendors one that git-deps
+# serval-stylo. See serval's 2026-07-12 ring-3 fork-rename plan.
+stylo_taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# serval-layout requires serval's vendored taffy fork (float-layout patches on
+# stable 0.12.1), not on crates.io.
 taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # ipc-channel: serval's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).

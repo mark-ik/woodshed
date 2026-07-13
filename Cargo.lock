@@ -852,12 +852,27 @@ dependencies = [
 
 [[package]]
 name = "chartulary"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "codicil",
  "muniment",
  "petgraph",
+ "rkyv",
  "serde",
+ "slotmap",
+]
+
+[[package]]
+name = "chartulary"
+version = "0.1.1"
+source = "git+https://github.com/mark-ik/chartulary.git?branch=main#28000355909782cf9ae2ef1771004411b067d297"
+dependencies = [
+ "codicil",
+ "muniment",
+ "petgraph",
+ "rkyv",
+ "serde",
+ "slotmap",
 ]
 
 [[package]]
@@ -894,6 +909,7 @@ dependencies = [
 [[package]]
 name = "codicil"
 version = "0.1.0"
+source = "git+https://github.com/mark-ik/codicil.git?branch=main#fe2f0a14f829c75e97b18ab17072c9dbcd71f8a7"
 dependencies = [
  "muniment",
  "serde",
@@ -4382,7 +4398,7 @@ dependencies = [
 name = "scholia"
 version = "0.1.0"
 dependencies = [
- "chartulary",
+ "chartulary 0.1.1 (git+https://github.com/mark-ik/chartulary.git?branch=main)",
  "serde",
  "serde_json",
 ]
@@ -4415,7 +4431,7 @@ dependencies = [
 [[package]]
 name = "selectors"
 version = "0.38.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "bitflags 2.11.1",
  "cssparser",
@@ -4535,18 +4551,18 @@ dependencies = [
  "selectors",
  "serde",
  "serval-paint-types",
+ "serval-stylo",
+ "serval-stylo-atoms",
+ "serval-stylo-dom",
+ "serval-stylo-static-prefs",
  "servo-malloc-size-of",
  "servo-pixels",
  "servo-url",
  "servo_arc",
  "skrifa",
- "stylo",
- "stylo_atoms",
- "stylo_dom",
- "stylo_static_prefs",
  "stylo_taffy",
  "stylo_traits",
- "taffy 0.11.0-experimental-cache-fix.3",
+ "taffy 0.12.1",
  "tracing",
  "url",
  "web-time",
@@ -4584,6 +4600,88 @@ dependencies = [
 ]
 
 [[package]]
+name = "serval-stylo"
+version = "0.18.0"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+dependencies = [
+ "app_units",
+ "arrayvec",
+ "atomic_refcell",
+ "bitflags 2.11.1",
+ "byteorder",
+ "cssparser",
+ "derive_more",
+ "encoding_rs",
+ "euclid",
+ "icu_segmenter",
+ "indexmap",
+ "itertools 0.14.0",
+ "itoa",
+ "log",
+ "malloc_size_of_derive",
+ "mime",
+ "new_debug_unreachable",
+ "num-derive",
+ "num-integer",
+ "num-traits",
+ "num_cpus",
+ "parking_lot",
+ "precomputed-hash",
+ "rayon",
+ "rayon-core",
+ "rustc-hash 2.1.3",
+ "selectors",
+ "serde",
+ "serval-stylo-atoms",
+ "serval-stylo-dom",
+ "serval-stylo-static-prefs",
+ "servo_arc",
+ "smallbitvec",
+ "smallvec",
+ "static_assertions",
+ "string_cache",
+ "strum",
+ "strum_macros",
+ "stylo_derive",
+ "stylo_malloc_size_of",
+ "stylo_traits",
+ "thin-vec",
+ "to_shmem",
+ "to_shmem_derive",
+ "uluru",
+ "url",
+ "void",
+ "walkdir",
+ "web_atoms",
+]
+
+[[package]]
+name = "serval-stylo-atoms"
+version = "0.18.0"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+dependencies = [
+ "string_cache",
+ "string_cache_codegen",
+]
+
+[[package]]
+name = "serval-stylo-dom"
+version = "0.18.0"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+dependencies = [
+ "bitflags 2.11.1",
+ "stylo_malloc_size_of",
+]
+
+[[package]]
+name = "serval-stylo-static-prefs"
+version = "0.18.0"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+dependencies = [
+ "toml",
+]
+
+[[package]]
 name = "serval-winit-host"
 version = "0.2.0"
 dependencies = [
@@ -4593,10 +4691,21 @@ dependencies = [
  "accesskit_windows",
  "netrender",
  "raw-window-handle",
+ "serval-xilem",
  "tracing",
  "wgpu",
  "winit",
- "xilem-serval",
+]
+
+[[package]]
+name = "serval-xilem"
+version = "0.1.0"
+dependencies = [
+ "layout-dom-api",
+ "serval-chisel",
+ "serval-scripted-dom",
+ "serval-xilem-core",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -4648,9 +4757,9 @@ version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
+ "serval-stylo-static-prefs",
  "servo-config-macro",
  "strum",
- "stylo_static_prefs",
 ]
 
 [[package]]
@@ -4683,12 +4792,12 @@ dependencies = [
  "mime",
  "parking_lot",
  "resvg",
+ "serval-stylo",
+ "serval-stylo-dom",
  "servo-allocator",
  "servo_arc",
  "smallvec",
  "string_cache",
- "stylo",
- "stylo_dom",
  "stylo_malloc_size_of",
  "taffy 0.10.1",
  "tendril",
@@ -4731,7 +4840,7 @@ dependencies = [
 [[package]]
 name = "servo_arc"
 version = "0.4.3"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "serde",
  "stable_deref_trait",
@@ -5002,74 +5111,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "stylo"
-version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
-dependencies = [
- "app_units",
- "arrayvec",
- "atomic_refcell",
- "bitflags 2.11.1",
- "byteorder",
- "cssparser",
- "derive_more",
- "encoding_rs",
- "euclid",
- "icu_segmenter",
- "indexmap",
- "itertools 0.14.0",
- "itoa",
- "log",
- "malloc_size_of_derive",
- "mime",
- "new_debug_unreachable",
- "num-derive",
- "num-integer",
- "num-traits",
- "num_cpus",
- "parking_lot",
- "precomputed-hash",
- "rayon",
- "rayon-core",
- "rustc-hash 2.1.3",
- "selectors",
- "serde",
- "servo_arc",
- "smallbitvec",
- "smallvec",
- "static_assertions",
- "string_cache",
- "strum",
- "strum_macros",
- "stylo_atoms",
- "stylo_derive",
- "stylo_dom",
- "stylo_malloc_size_of",
- "stylo_static_prefs",
- "stylo_traits",
- "thin-vec",
- "to_shmem",
- "to_shmem_derive",
- "uluru",
- "url",
- "void",
- "walkdir",
- "web_atoms",
-]
-
-[[package]]
-name = "stylo_atoms"
-version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
-dependencies = [
- "string_cache",
- "string_cache_codegen",
-]
-
-[[package]]
 name = "stylo_derive"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -5079,18 +5123,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "stylo_dom"
-version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
-dependencies = [
- "bitflags 2.11.1",
- "stylo_malloc_size_of",
-]
-
-[[package]]
 name = "stylo_malloc_size_of"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "app_units",
  "cssparser",
@@ -5105,28 +5140,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "stylo_static_prefs"
-version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
-dependencies = [
- "toml",
-]
-
-[[package]]
 name = "stylo_taffy"
-version = "0.3.0-alpha.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51ab273452a622bf33717d66a70e8ff68d193800072ffe1e423e9073577b4bc9"
+version = "0.3.0-beta.1"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
 dependencies = [
- "stylo",
- "stylo_atoms",
- "taffy 0.11.0-experimental-cache-fix.3",
+ "serval-stylo",
+ "serval-stylo-atoms",
+ "taffy 0.12.1",
 ]
 
 [[package]]
 name = "stylo_traits"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "app_units",
  "bitflags 2.11.1",
@@ -5135,8 +5161,8 @@ dependencies = [
  "malloc_size_of_derive",
  "selectors",
  "serde",
+ "serval-stylo-atoms",
  "servo_arc",
- "stylo_atoms",
  "stylo_malloc_size_of",
  "thin-vec",
  "to_shmem",
@@ -5202,8 +5228,8 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.11.0-experimental-cache-fix.3"
-source = "git+https://github.com/mark-ik/serval.git?branch=main#362531052f48cf975a9f1b0f432afff9c910036c"
+version = "0.12.1"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
 dependencies = [
  "arrayvec",
  "grid",
@@ -5218,7 +5244,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.2",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.52.0",
@@ -5429,7 +5455,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "to_shmem"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "cssparser",
  "servo_arc",
@@ -5442,7 +5468,7 @@ dependencies = [
 [[package]]
 name = "to_shmem_derive"
 version = "0.1.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/servo-media-features#56e70cacdbefef0072680d14cb790ba295fce12c"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -6831,7 +6857,7 @@ dependencies = [
 name = "woodshed-graph"
 version = "0.1.0"
 dependencies = [
- "chartulary",
+ "chartulary 0.1.1",
  "scholia",
  "stemma",
  "woodshedding",
@@ -6851,22 +6877,22 @@ dependencies = [
  "serval-layout",
  "serval-scripted-dom",
  "serval-winit-host",
+ "serval-xilem",
  "wgpu",
  "winit",
  "woodshed-audio",
  "woodshed-core",
  "woodshed-views",
- "xilem-serval",
 ]
 
 [[package]]
 name = "woodshed-views"
 version = "0.1.0"
 dependencies = [
+ "serval-xilem",
  "tinct",
  "woodshed-core",
  "woodshedding",
- "xilem-serval",
 ]
 
 [[package]]
@@ -6919,17 +6945,6 @@ name = "xcursor"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
-
-[[package]]
-name = "xilem-serval"
-version = "0.1.0"
-dependencies = [
- "layout-dom-api",
- "serval-chisel",
- "serval-scripted-dom",
- "serval-xilem-core",
- "unicode-segmentation",
-]
 
 [[package]]
 name = "xkbcommon-dl"
