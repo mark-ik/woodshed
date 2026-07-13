@@ -29,7 +29,7 @@ serval-chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
 "serval-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-layout" }
 "serval-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-scripted-dom" }
 "serval-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-winit-host" }
-"xilem-serval" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
+"serval-xilem" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
 serval-xilem-core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
 
 [patch."https://github.com/mark-ik/tinct"]
