@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Build release binary
-        run: cargo build --release -p woodshed-serval --locked
+        run: cargo build --release -p woodshed-genet --locked
       - name: Package portable ZIP
         shell: pwsh
         run: |

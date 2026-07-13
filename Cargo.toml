@@ -6,7 +6,7 @@ members = [
     "crates/audio-primitives",
     "crates/woodshed-core",
     "crates/woodshed-views",
-    "crates/woodshed-serval",
+    "crates/woodshed-genet",
     # The chartulary substrate's first real consumer (G3): woodshed's theory
     # catalog as a content graph. Folded in from its own repo 2026-07-08.
     "crates/woodshed-graph",
@@ -22,7 +22,7 @@ rust-version = "1.80"
 [workspace.dependencies]
 # Internal crates
 woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
-# Portable state/logic core for the serval-host stack (W1.1 split).
+# Portable state/logic core for the genet-host stack (W1.1 split).
 woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 woodshed-graph = { path = "crates/woodshed-graph", version = "0.1.0" }
@@ -35,28 +35,28 @@ audio-primitives = { path = "crates/audio-primitives", version = "0.1.0" }
 # The mark-ik/xilem Masonry fork is fully retired (2026-07-08): its last
 # consumers — the shared xilem-components + audio-widgets crates, used by
 # Strophe's Masonry app — are gone now Strophe runs on xilem_serval with
-# chisel leaves. woodshed itself has been serval-only since the S5 cut.
+# chisel leaves. woodshed itself has been genet-only since the S5 cut.
 winit = "0.30"
 
-# UI — serval host (2026-07-04 serval-host plan). The woodshed app now
+# UI — genet host (2026-07-04 genet-host plan). The woodshed app now
 # rides this stack exclusively. GIT deps on the owned repos so any machine
 # resolves;
 # local checkouts are picked up via the gitignored .cargo/config.toml
-# source-specific [patch] overrides (the mere pattern). serval's internal
+# source-specific [patch] overrides (the mere pattern). genet's internal
 # path deps (layout-dom-api, xilem-core, ...) resolve inside its git
 # checkout; only the crates woodshed names appear here.
-xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/serval.git", branch = "main" }
-chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/serval.git", branch = "main" }
-layout-dom-api = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 netrender_device = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # wgpu for host-side surface/compose types only; backend features come from
-# netrender's own per-target manifest split. The serval stack is wgpu 29;
+# netrender's own per-target manifest split. The genet stack is wgpu 29;
 # the shared Masonry crates' wgpu 28 tree coexists until the Strophe refactor.
 wgpu = { version = "29", default-features = false, features = ["std"] }
 
@@ -92,26 +92,26 @@ serde_json = "1.0"
 # the per-symbol PDB budget (LNK4319) on dev builds; the truncate
 # mode keeps debug info usable while bumping the limit.
 
-# Mirror of serval's [patch.crates-io] entries this workspace's serval
+# Mirror of genet's [patch.crates-io] entries this workspace's genet
 # graph needs — patches are per-workspace-root and do NOT inherit through
 # a git dep (the mere root carries the same mirror). No local paths here:
-# taffy + ipc-channel are vendored inside the serval repo and reached
+# taffy + ipc-channel are vendored inside the genet repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
-# NO stylo/stylo_atoms patch (2026-07-12, mirroring serval's ring-3 rename):
-# the fork is now the RENAMED `serval-stylo` family, and a `[patch]` cannot
-# rename its target. Serval's crates git-dep serval-stylo by package rename, so
+# NO stylo/stylo_atoms patch (2026-07-12, mirroring genet's ring-3 rename):
+# the fork is now the RENAMED `genet-stylo` family, and a `[patch]` cannot
+# rename its target. Genet's crates git-dep genet-stylo by package rename, so
 # no crates.io `stylo` is left to patch — and keeping the old entries pulled the
-# pre-rename fork in beside serval-stylo, which `links = "servo_style_crate"`
+# pre-rename fork in beside genet-stylo, which `links = "servo_style_crate"`
 # (one Stylo per graph) makes a hard resolution error.
 #
 # stylo_taffy must be patched for the same reason: the registry copy names
-# crates.io stylo, dragging a second Stylo in. Serval vendors one that git-deps
-# serval-stylo. See serval's 2026-07-12 ring-3 fork-rename plan.
-stylo_taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-# serval-layout requires serval's vendored taffy fork (float-layout patches on
+# crates.io stylo, dragging a second Stylo in. Genet vendors one that git-deps
+# genet-stylo. See genet's 2026-07-12 ring-3 fork-rename plan.
+stylo_taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# genet-layout requires genet's vendored taffy fork (float-layout patches on
 # stable 0.12.1), not on crates.io.
-taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
-# ipc-channel: serval's in-process fork (force-inprocess default; drops
+taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# ipc-channel: genet's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
-ipc-channel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+ipc-channel = { git = "https://github.com/mark-ik/genet.git", branch = "main" }

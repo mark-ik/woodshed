@@ -1,13 +1,13 @@
 //! S0 static Stage sheet — the walking-skeleton content.
 //!
-//! Ported from serval's `examples/serval_web_smoke` (browser receipt,
+//! Ported from genet's `examples/genet_web_smoke` (browser receipt,
 //! 2026-07-04). Replaced by real `AppState`-driven views in S1; keep this
 //! module free of app state on purpose so S0 only proves the host stack.
 
-use xilem_serval::{el, text, AnyView, ServalCtx, ServalElement, View};
+use xilem_serval::{el, text, AnyView, GenetCtx, GenetElement, View};
 
 /// Boxed heterogeneous child view (the meerkat `NoteChild` pattern).
-pub type Child = Box<dyn AnyView<(), (), ServalCtx, ServalElement>>;
+pub type Child = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
 
 /// Slate-flavored demo stylesheet. The real theme engine (OKLCH seeds → CSS
 /// variables) replaces this in S1.
@@ -82,11 +82,11 @@ pub fn demo_root(_: &()) -> Child {
 }
 
 /// The static Stage sheet: pills nav, catalog sidebar, fretboard dots.
-pub fn demo_view() -> impl View<(), (), ServalCtx, Element = ServalElement> {
+pub fn demo_view() -> impl View<(), (), GenetCtx, Element = GenetElement> {
     el(
         "div",
         (
-            el("div", text("Woodshed — serval host (S0)")).attr("class", "title"),
+            el("div", text("Woodshed — genet host (S0)")).attr("class", "title"),
             el(
                 "div",
                 (
@@ -128,7 +128,7 @@ pub fn demo_view() -> impl View<(), (), ServalCtx, Element = ServalElement> {
             .attr("class", "body"),
             el(
                 "div",
-                text("xilem-serval / serval-layout / netrender / winit host"),
+                text("xilem-serval / genet-layout / netrender / winit host"),
             )
             .attr("class", "caption"),
         ),

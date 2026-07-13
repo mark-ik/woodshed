@@ -59,7 +59,7 @@ product.
 
 ## Delivery status
 
-The current app is a Windows desktop alpha hosted by Serval. It has a shared,
+The current app is a Windows desktop alpha hosted by Genet. It has a shared,
 adaptive product view layer, but Mac and Linux receipts have not been completed.
 A tagged build can produce a checksummed portable Windows ZIP; code signing,
 installer UX, an app icon, and third-party notice aggregation remain before a
@@ -80,7 +80,7 @@ Mobile follows the web host and is not a current delivery target.
 
 - **Language**: Rust.
 - **Product views**: `xilem-serval`, a DOM-shaped Xilem backend.
-- **Layout and paint**: Serval layout, PaintList, and netrender over wgpu.
+- **Layout and paint**: Genet layout, PaintList, and netrender over wgpu.
 - **Desktop host**: winit 0.30.
 - **Audio I/O**: cpal 0.18, with in-house sequencing and DSP helpers.
 - **Pitch detection**: `pitch-detector` and `pitch-detection`.

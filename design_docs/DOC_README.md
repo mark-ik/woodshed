@@ -25,9 +25,9 @@ before any other doc in this directory.
   catalog material and practice history contextually inside Stage. Retires
   Practice as a top-level section and replaces Song/DAW framing with
   Set-derived looping.
-- [2026-07-04_serval_host_cross_platform_plan.md](2026-07-04_serval_host_cross_platform_plan.md)
-  — **The delivery architecture.** The move to the Serval desktop host is
-  complete: one DOM-shaped `xilem_serval` view tree rendered by Serval. The
+- [2026-07-04_genet_host_cross_platform_plan.md](2026-07-04_genet_host_cross_platform_plan.md)
+  — **The delivery architecture.** The move to the Genet desktop host is
+  complete: one DOM-shaped `xilem_serval` view tree rendered by Genet. The
   remaining plan covers browser shell, Web Audio, deploy/PWA, and mobile
   downstream.
 - [2026-06-15_redesign_plan.md](2026-06-15_redesign_plan.md) — UI redesign from
@@ -38,7 +38,7 @@ before any other doc in this directory.
   2026-06-15; cheap layer first. **Product/navigation framing superseded
   2026-07-11** by the Stage/Set/Tools plan; retain as visual reference.
 - [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md) —
-  **Superseded 2026-07-04** by the serval-host plan above; kept for the web
+  **Superseded 2026-07-04** by the genet-host plan above; kept for the web
   profile constraints and the Tier-0 seams (AudioBackend, Storage, timers,
   `Instant`), which carry forward. The Path A/B/C analysis is historical.
 - [2026-05-22_rehearsal_redesign_plan.md](2026-05-22_rehearsal_redesign_plan.md)
@@ -82,7 +82,7 @@ before any other doc in this directory.
   forward without folding the product into one configurable surface.
 - [2026-05-16_xilem_migration_plan.md](2026-05-16_xilem_migration_plan.md)
   — **Superseded 2026-07-04.** Historical Iced-to-Xilem migration record; the
-  live host and delivery path are governed by the Serval-host plan.
+  live host and delivery path are governed by the Genet-host plan.
 
 ## Archive
 
@@ -125,7 +125,7 @@ section whenever a durable working insight emerges from a session.
   configuration; contextual controls edit that same canonical state.
 - **Desktop first, mobile later**: ship to itch.io / Gumroad for desktop
   before attempting mobile. Mobile is a shell around the web build (see the
-  serval-host plan's M track); building toward it is part of the project's
+  genet-host plan's M track); building toward it is part of the project's
   broader value but does not
   block the music app.
 - **Generalize across stringed instruments**: theory model parameterizes

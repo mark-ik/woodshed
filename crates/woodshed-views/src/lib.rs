@@ -1,7 +1,7 @@
 //! Woodshed's xilem_serval view layer.
 //!
-//! View fns + CSS sheets consumed by both hosts (`woodshed-serval` desktop,
-//! `woodshed-web` browser). Views diff into serval's `ScriptedDom`; styling is
+//! View fns + CSS sheets consumed by both hosts (`woodshed-genet` desktop,
+//! `woodshed-web` browser). Views diff into genet's `ScriptedDom`; styling is
 //! plain CSS emitted per sheet, which is where the seed-derived theme engine
 //! plugs in from S1 on.
 //!

@@ -18,8 +18,8 @@ use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{FretWindow, Hold, Set, Touch};
 use xilem_serval::{
-    clickable, el, map_state, select, text, text_field, AnyView, SelectState, ServalCtx,
-    ServalElement, TextInput,
+    clickable, el, map_state, select, text, text_field, AnyView, SelectState, GenetCtx,
+    GenetElement, TextInput,
 };
 
 use crate::theme::ThemeMode;
@@ -544,7 +544,7 @@ impl UiState {
 }
 
 /// Boxed heterogeneous child view over [`UiState`].
-pub type UiChild = Box<dyn AnyView<UiState, (), ServalCtx, ServalElement>>;
+pub type UiChild = Box<dyn AnyView<UiState, (), GenetCtx, GenetElement>>;
 
 fn pill(section: AppSection, active: bool) -> UiChild {
     Box::new(clickable(

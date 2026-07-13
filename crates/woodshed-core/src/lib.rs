@@ -2,7 +2,7 @@
 //!
 //! Pure state over the `woodshedding` theory crate — no UI, no host, no
 //! audio dependency, so the same core feeds the desktop host, the web host,
-//! and tests. This is the serval-host plan's W1.1 split.
+//! and tests. This is the genet-host plan's W1.1 split.
 //!
 //! S2 ships the Stage slice ([`StageState`]) with the lens model: tuning +
 //! root + active lens, with the Scales and Chords lenses resolving to

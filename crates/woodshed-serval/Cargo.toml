@@ -1,11 +1,11 @@
 [package]
-name = "woodshed-serval"
+name = "woodshed-genet"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Woodshed's serval desktop host: winit window + netrender present over the woodshed-views view layer. Serval-host plan S0+."
+description = "Woodshed's genet desktop host: winit window + netrender present over the woodshed-views view layer. Genet-host plan S0+."
 
 [dependencies]
 woodshed-core = { workspace = true }
@@ -14,9 +14,9 @@ woodshed-views = { path = "../woodshed-views" }
 xilem-serval = { workspace = true }
 chisel = { workspace = true }
 layout-dom-api = { workspace = true }
-serval-scripted-dom = { workspace = true }
-serval-layout = { workspace = true }
-serval-winit-host = { workspace = true }
+genet-scripted-dom = { workspace = true }
+genet-layout = { workspace = true }
+genet-winit-host = { workspace = true }
 netrender = { workspace = true }
 paint_list_api = { workspace = true }
 paint_list_render = { workspace = true }

@@ -1,5 +1,5 @@
 //! The desktop [`AudioBackend`]: `woodshed-audio`'s cpal engines behind
-//! the core's seam (serval-host plan W0.1). The web host implements the
+//! the core's seam (genet-host plan W0.1). The web host implements the
 //! same trait over Web Audio / AudioWorklet.
 
 use woodshed_audio::{

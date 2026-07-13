@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Woodshed's xilem_serval view layer: view fns + CSS sheets for the serval host (desktop and web). Serval-host plan S0+."
+description = "Woodshed's xilem_serval view layer: view fns + CSS sheets for the genet host (desktop and web). Genet-host plan S0+."
 
 [dependencies]
 woodshed-core = { workspace = true }

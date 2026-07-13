@@ -1,10 +1,10 @@
-//! Woodshed's serval desktop host (S2: interaction spine).
+//! Woodshed's genet desktop host (S2: interaction spine).
 //!
 //! A winit window presenting `woodshed-views`' Stage screen over live state:
-//! `ServalAppRunner` diffs the views into a `ScriptedDom`, a retained
+//! `GenetAppRunner` diffs the views into a `ScriptedDom`, a retained
 //! `IncrementalLayout` lays it out at logical size (DPI aware, incremental
 //! `apply` for attribute-only batches), paint emission lowers to a
-//! `netrender::Scene`, and `serval-winit-host`'s `SurfaceHost` rasterizes at
+//! `netrender::Scene`, and `genet-winit-host`'s `SurfaceHost` rasterizes at
 //! physical resolution and composites onto the backbuffer.
 //!
 //! Input: clicks hit-test the retained layout and dispatch through the
@@ -34,11 +34,11 @@ use woodshed_views::theme::ThemeMode;
 use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
-use serval_layout::{
+use genet_layout::{
     Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, SourceNodeId,
 };
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
+use genet_scripted_dom::{NodeId, ScriptedDom};
+use genet_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -46,9 +46,9 @@ use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey
 use winit::window::{Window, WindowId};
 use woodshed_views::stage::{stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 use woodshed_views::theme::slate_stage_css;
-use xilem_serval::{clickable, el, text, PointerClick, Propagation, ServalAppRunner};
+use xilem_serval::{clickable, el, text, PointerClick, Propagation, GenetAppRunner};
 
-type Runner = ServalAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
+type Runner = GenetAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
 
 struct ChiselSource<'a>(&'a chisel::RenderedLeaves);
 
@@ -823,7 +823,7 @@ impl ApplicationHandler for App {
                 ..Default::default()
             },
         )
-        .expect("boot serval host");
+        .expect("boot genet host");
         let backend = CpalBackend::new();
         let mut ui = UiState::new();
         ui.set_viewport_width(size.width as f32 / window.scale_factor() as f32);
@@ -832,7 +832,7 @@ impl ApplicationHandler for App {
         if let Some(json) = self.storage.load() {
             match serde_json::from_str(&json) {
                 Ok(session) => ui.apply_persisted(&session),
-                Err(e) => eprintln!("[woodshed-serval] ignoring corrupt session: {e}"),
+                Err(e) => eprintln!("[woodshed-genet] ignoring corrupt session: {e}"),
             }
         }
         self.theme = ui.theme();
@@ -906,7 +906,7 @@ impl ApplicationHandler for App {
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel scrolls the nearest overflow container under the
                 // cursor (the engine hit-tests, clamps, and chains).
-                let (dx, dy) = serval_winit_host::wheel_delta_from_winit(delta);
+                let (dx, dy) = genet_winit_host::wheel_delta_from_winit(delta);
                 let (x, y) = self.cursor;
                 let scrolled = if let (Some(runner), Some(layout)) =
                     (self.runner.as_ref(), self.layout.as_mut())

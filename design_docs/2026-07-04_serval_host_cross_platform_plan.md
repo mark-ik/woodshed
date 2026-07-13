@@ -1,28 +1,28 @@
-# Serval host: one codebase for desktop + web (mobile downstream)
+# Genet host: one codebase for desktop + web (mobile downstream)
 
 Woodshed's UI moves from masonry/xilem (the mark-ik/xilem `woodshed-theme`
-fork) to **xilem_serval**: serval renders the app, on desktop and in the
+fork) to **xilem_serval**: genet renders the app, on desktop and in the
 browser, from one DOM-shaped view tree. This supersedes the web-vs-native
 split in [2026-06-14_web_profile_plan.md](2026-06-14_web_profile_plan.md);
 that plan's Tier 0 seams carry forward here.
 
-Status: **active desktop-alpha hardening.** The Woodshed-side Serval migration
+Status: **active desktop-alpha hardening.** The Woodshed-side Genet migration
 and S5 parity cut are complete; browser, cross-desktop receipts, and publishing
 remain separate release work.
 
 ## Why
 
 - **xilem_serval is a DOM-shaped xilem backend.** It diffs a xilem view tree
-  into serval's `ScriptedDom` (the third backend beside masonry and
+  into genet's `ScriptedDom` (the third backend beside masonry and
   `xilem_web`, same `xilem_core`). A Woodshed written against it is already
   web-vocabulary; there is no second view layer to maintain for the browser.
-- **The browser path is proven, not projected.** `serval/examples/serval_web_smoke`
-  (serval `2422044ad1a`, receipt PASS in Chrome 2026-07-04) renders a
+- **The browser path is proven, not projected.** `genet/examples/genet_web_smoke`
+  (genet `2422044ad1a`, receipt PASS in Chrome 2026-07-04) renders a
   woodshed-mock UI through the full chain on wasm32/WebGPU: xilem-serval →
-  ScriptedDom → serval-layout → PaintList → paint_list_render → netrender →
+  ScriptedDom → genet-layout → PaintList → paint_list_render → netrender →
   canvas. Pills nav, sidebar, fretboard dots, Roboto text via the new
-  `serval_layout::register_host_font` seam.
-- **Ecosystem direction.** Woodshed becomes serval's second consumer app
+  `genet_layout::register_host_font` seam.
+- **Ecosystem direction.** Woodshed becomes genet's second consumer app
   after meerkat, pressuring the HTML lanes (popups, text input, scroll,
   catalogs) the way Strophe pressures the audio layer. The mark-ik/xilem
   fork and its wgpu-28 skew retire.
@@ -31,7 +31,7 @@ remain separate release work.
 installers for all five targets, hot patching, Dioxus Native (Blitz/wgpu).
 Strongest tooling for pure product speed; not chosen because it feeds
 nothing back into the Merely stack and adds a foreign framework. Revisit
-trigger: serval churn blocking Woodshed shipping for an extended stretch.
+trigger: genet churn blocking Woodshed shipping for an extended stretch.
 
 ## Shape
 
@@ -43,19 +43,19 @@ trigger: serval churn blocking Woodshed shipping for an extended stretch.
   seed-derived theme engine keeps its OKLCH math and emits CSS (variables +
   sheets) instead of masonry properties. Slate/Ember and the P1-P3 redesign
   language re-express here.
-- **`woodshed-serval`** (new host): winit window + netrender present +
+- **`woodshed-genet`** (new host): winit window + netrender present +
   input dispatch, the meerkat main.rs shape (borrow its harness patterns,
   don't import meerkat).
 - **`woodshed-web`** (new host): canvas + rAF/resize loop + input
-  translation to `ServalAppRunner::dispatch_*`, generalized from
-  serval_web_smoke. PWA manifest + service worker when deploy lands.
+  translation to `GenetAppRunner::dispatch_*`, generalized from
+  genet_web_smoke. PWA manifest + service worker when deploy lands.
 - **`woodshed-xilem`**: frozen at migration start, deleted at the parity
   cut (S5). Zero users; no parallel maintenance.
 
-Serval/netrender are consumed as git deps (mark-ik remotes) with the usual
+Genet/netrender are consumed as git deps (mark-ik remotes) with the usual
 gitignored local `paths` override for development. The woodshed workspace
-must mirror serval's `[patch.crates-io]` set (stylo, stylo_atoms, taffy,
-sonic-rs); this is a standing cost of consuming serval outside its
+must mirror genet's `[patch.crates-io]` set (stylo, stylo_atoms, taffy,
+sonic-rs); this is a standing cost of consuming genet outside its
 workspace and the smoke already models it.
 
 ## Platform seams (from the web profile plan, still the spine)
@@ -66,7 +66,7 @@ workspace and the smoke already models it.
   browser; cpal upstream input support is not the gate.
 - **Storage (W0.2)**: native = fs (`directories`); web = **OPFS** (matches
   the Mere direction), localStorage acceptable for first settings.
-- **Time (W0.3)**: `web-time` pattern, already landed in serval-layout and
+- **Time (W0.3)**: `web-time` pattern, already landed in genet-layout and
   netrender where the smoke hit it.
 - **Timers (W0.4)**: the ten tokio interval loops move behind a host
   scheduler seam. The metronome moves to audio-clock lookahead scheduling
@@ -76,9 +76,9 @@ workspace and the smoke already models it.
 
 ## Phases
 
-- **S0 — scaffold.** `woodshed-views` + `woodshed-serval` crates in the
-  workspace, serval/netrender git deps resolving, patch mirror in place,
-  `woodshed-xilem` still building. *Done when:* a serval host window opens
+- **S0 — scaffold.** `woodshed-views` + `woodshed-genet` crates in the
+  workspace, genet/netrender git deps resolving, patch mirror in place,
+  `woodshed-xilem` still building. *Done when:* a genet host window opens
   and renders a static sheet on Windows.
 - **S1 — Stage walking skeleton.** Real `AppState` behind it: pills nav,
   catalog sidebar, fretboard as transform-positioned DOM dots, theme CSS
@@ -95,7 +95,7 @@ workspace and the smoke already models it.
   Rehearsal, Settings. The outstanding redesign phases (fretboard-layout
   setting, Rehearsal filmstrip + transport deck, Practice recipe tiles)
   land directly in the new stack; they are not built twice.
-  *Done when:* every screen exists in woodshed-serval and the redesign
+  *Done when:* every screen exists in woodshed-genet and the redesign
   plan's P4-P6 done-conditions hold there.
 - **S5 — parity cut.** Delete `woodshed-xilem`, the xilem fork dep, and
   `xilem_fork_patches.md` (archive). Cross-platform desktop validation on
@@ -117,31 +117,31 @@ workspace and the smoke already models it.
 
 ## Known risks and gaps
 
-- **Serval churn.** Active concurrent development (shell-partition, paint
-  emission). Pin via lock to known-good serval commits; bump deliberately.
-- **Serval-side feature gaps Woodshed will surface**: overlay popups for
+- **Genet churn.** Active concurrent development (shell-partition, paint
+  emission). Pin via lock to known-good genet commits; bump deliberately.
+- **Genet-side feature gaps Woodshed will surface**: overlay popups for
   the header dropdowns (meerkat has the patterns), IME/text-input depth,
-  a11y tree exposure on web (canvas rendering carries no DOM a11y; serval
+  a11y tree exposure on web (canvas rendering carries no DOM a11y; genet
   has accesskit plumbing, browser exposure is unproven).
 - **audio-widgets / xilem-components** stay masonry-based with Strophe as
-  their consumer once Woodshed leaves; Woodshed's serval equivalents grow
+  their consumer once Woodshed leaves; Woodshed's genet equivalents grow
   fresh in `woodshed-views`. Decide their long-term stewardship in the
   Strophe context, not here.
 - **WebGPU reach**: Chrome/Edge/Safari 26/recent Firefox. No DOM fallback;
   acceptable for a practice tool, revisit only if reach data says otherwise.
-- **Unpushed dependencies**: the receipt commits (serval `2422044ad1a`,
+- **Unpushed dependencies**: the receipt commits (genet `2422044ad1a`,
   netrender `83e4be37a` + `6520d74ed`) exist locally; git-dep consumption
   needs them pushed.
 
 ## Findings
 
-- serval engine core (xilem-serval, serval-scripted-dom, serval-layout)
+- genet engine core (xilem-serval, genet-scripted-dom, genet-layout)
   checks clean on wasm32 from current main; the June 6 P1 pass landed.
 - Browser swapchains reject vello's storage-texture write; render into an
   intermediate `STORAGE_BINDING | TEXTURE_BINDING` RGBA8 texture and blit
   (`wgpu::util::TextureBlitter`). Every web shell must do this.
 - `std::time::Instant` panics on wasm; `web-time` fixes landed in
-  serval-layout and netrender. Audit woodshed code for the same during S3.
+  genet-layout and netrender. Audit woodshed code for the same during S3.
 - xilem_serval's control set (button, select, slider, radio_group,
   styled_text_field, overlay) already covers most of Woodshed's widget
   needs; the header dropdown work from redesign P3b maps to `overlay_at`.
@@ -163,7 +163,7 @@ workspace and the smoke already models it.
   shipped web/mobile product.
 - 2026-07-09: **Adaptive-shell foundation.** CSD titlebar controls and their
   desktop-only drag/resize behavior moved out of the shared product root and
-  into `woodshed-serval`; a future browser host therefore composes the same
+  into `woodshed-genet`; a future browser host therefore composes the same
   app content without inheriting unusable window controls. The desktop host now
   derives Wide / Medium / Narrow width bands from logical window width. Below
   1180px the Stage catalog moves below the neck; below 760px navigation wraps,
@@ -172,7 +172,7 @@ workspace and the smoke already models it.
   monitor with a 24px margin instead of assuming a 1100px-wide display. This
   is the adaptable-shell seam, not yet a web host or a mobile layout receipt.
 - 2026-07-08: **S5 parity cut (woodshed half) — woodshed-xilem deleted.**
-  The old Masonry app is gone (`git rm`); woodshed-serval is now THE
+  The old Masonry app is gone (`git rm`); woodshed-genet is now THE
   woodshed app. The mark-ik/xilem fork stays for now: audio-widgets +
   xilem-components (Masonry-coupled shared crates) are still consumed by
   Strophe, and because they're woodshed members their `workspace = true`
@@ -183,11 +183,11 @@ workspace and the smoke already models it.
   custom paint — a canonical chisel-leaf fit; xilem-components is mostly
   reactive structure that `xilem_serval` does natively, so it dissolves).
   Deferred to that Strophe refactor. Manifest housekeeping: synced
-  woodshed's `[patch.crates-io] stylo`/`stylo_atoms` mirror to serval's
-  fork (`mark-ik/stylo`, `mark-ik/servo-media-features` branch — serval
+  woodshed's `[patch.crates-io] stylo`/`stylo_atoms` mirror to genet's
+  fork (`mark-ik/stylo`, `mark-ik/servo-media-features` branch — genet
   moved stylo there); build woodshed **from its own cwd** so the
-  local-serval `[patch]` applies (Code-root + `--manifest-path` falls back
-  to the pinned git serval, which lacks the newer transition API).
+  local-genet `[patch]` applies (Code-root + `--manifest-path` falls back
+  to the pinned git genet, which lacks the newer transition API).
 - 2026-07-08: **Polish tail — window fixes, CSS transitions, Hero receipt.**
   - Right-edge clip fixed (`.root` was `width:100%` + 32px padding in
     content-box, so it rendered wider than the window and the search field
@@ -198,9 +198,9 @@ workspace and the smoke already models it.
     Shipped with the clip fix + a default-window shrink (720→664 logical,
     top-anchored, so it clears the taskbar on a 720-tall laptop screen) as
     `c7044fe`.
-  - CSS transitions on serval's new `transition_events` / `tick_animations`:
+  - CSS transitions on genet's new `transition_events` / `tick_animations`:
     subtle hover/active fades on buttons, tabs, lenses, and cards. The host
-    ticks serval's animation clock each frame (in redraw before `apply`,
+    ticks genet's animation clock each frame (in redraw before `apply`,
     and in hover before `set_interaction`, so a flip runs from *now* not a
     stale idle clock) and requests frames only while
     `has_active_animations()`, so idle surfaces stay idle.
@@ -268,7 +268,7 @@ workspace and the smoke already models it.
     complete one-shot voice path (`SongEngineHandle::play_note_now`,
     `oneshot_voices`/`oneshot_clock`, mixed while the song is stopped)
     plus `chord_audio::render_chord` (additive synth, strum/block, ADSR)
-    — but the serval host's thin `AudioBackend` seam only exposed
+    — but the genet host's thin `AudioBackend` seam only exposed
     metronome + tuner + song, so none of it was reachable. This slice
     widens the seam, it doesn't write DSP.
   - Engine: added `play_chord_now(pitches, dur, strum_ms)` beside
@@ -293,7 +293,7 @@ workspace and the smoke already models it.
   - Deferred (audio depth II+): MIDI in/out, calibration/timing, the
     bar-aligned looper — all still built-and-tested in `woodshed-audio`,
     waiting on the same seam-widening pattern.
-- 2026-07-06: **S4 slice 11 — corpus search field (serval text input
+- 2026-07-06: **S4 slice 11 — corpus search field (genet text input
   dogfood).** A small always-on search field in the nav row (right of
   the tabs, no toolbar reorg). `woodshed_core::search::search_corpus`
   ranks one query (exact → prefix → word-start → substring) across every
@@ -305,10 +305,10 @@ workspace and the smoke already models it.
   recipe, or swap the tuning) and clears the field. Driven receipts:
   typed "dorian" → ranked list (exact Dorian first) → clicked → landed
   on Stage/Scales/A Dorian; "caged" → three recipe hits. 5 core tests.
-  - **Serval dogfood outcomes**: real text input works end to end
+  - **Genet dogfood outcomes**: real text input works end to end
     (caret, key routing to the focused field, focus-on-click). Two
-    engine-behavior lessons for any serval UI: `<input>` is `inline` in
-    serval's UA sheet (Stylo default) so it needs `display: block` to
+    engine-behavior lessons for any genet UI: `<input>` is `inline` in
+    genet's UA sheet (Stylo default) so it needs `display: block` to
     take a width (meerkat sets this too); and `width` is content-box, so
     a padded field wants `box-sizing: border-box` or its border-box
     overflows the wrap (was clipping at the window edge). Both are host
@@ -349,11 +349,11 @@ workspace and the smoke already models it.
   parked on the next card's manual hold.
   - **Workspace lesson (cost an hour): never use cargo's global
     `paths` override.** It matches by package NAME graph-wide, so the
-    xilem fork's `xilem_core` hijacked serval's vendored `xilem_core`
-    (surfaced when a concurrent serval edit extended a trait). A
+    xilem fork's `xilem_core` hijacked genet's vendored `xilem_core`
+    (surfaced when a concurrent genet edit extended a trait). A
     source-keyed `[patch]` can't express it either (two path-sourced
     same-version packages collide in the lock). Resolution: the
-    dormant xilem fork rides its git dep; only the active serval
+    dormant xilem fork rides its git dep; only the active genet
     family keeps local overrides.
 - 2026-07-05: **S4 slice 8 — P4 fretboard layouts + CSD chrome + polish
   batch.**
@@ -396,12 +396,12 @@ workspace and the smoke already models it.
   editing slice.
 - 2026-07-05: **S4 slice 6 — Practice tab (P6 recipe tiles) + `:hover`
   via a new engine feature.**
-  - **Engine: `IncrementalLayout::set_interaction`** (serval
+  - **Engine: `IncrementalLayout::set_interaction`** (genet
     `b4e0edc051f`) — the cascade had `restyle_for_interaction` but the
     retained session had no way to reach it, so no host had ever wired
     `:hover`. The new method lands on the same paths as `apply`
     (RepaintOnly for color-tier rules, full relayout for geometry,
-    Unchanged when nothing matched); woodshed-serval is the first
+    Unchanged when nothing matched); woodshed-genet is the first
     consumer (CursorMoved → hit test → restyle on target change).
     Hover rules added across the app's sheets.
   - **Practice tab**: the P6 treatment — `woodshedding::practice`
@@ -441,7 +441,7 @@ workspace and the smoke already models it.
   nav + all six themes.** `woodshed_core::storage` defines the seam
   (`Storage` trait + `PersistedSession`, serde with
   `#[serde(default)]` forward-compat and clamping restore) and the
-  `Tab` enum; the desktop host persists to `serval-state.json` beside
+  `Tab` enum; the desktop host persists to `genet-state.json` beside
   the xilem app's `state.json` (same ProjectDirs, distinct file — no
   clobbering during coexistence), saving after every dispatch and
   restoring at boot. Pills nav is real tab switching (Practice / Song
@@ -497,7 +497,7 @@ workspace and the smoke already models it.
 - 2026-07-05: **S3 spine done — engines through the W0.1 seam.**
   `woodshed_core::audio` defines the seam (`AudioBackend` trait +
   `TransportState`/`TunerState`/`TunerReading`, pure data);
-  `woodshed-serval::audio::CpalBackend` realizes it over woodshed-audio's
+  `woodshed-genet::audio::CpalBackend` realizes it over woodshed-audio's
   `SequencerEngine` (4/4 `Sound::click()` pattern) and
   `InputEngineBuilder::with_pitch`, degrading to an in-UI error string
   when devices are missing. Transport row (Play/Stop, ±5 bpm, Tuner
@@ -516,7 +516,7 @@ workspace and the smoke already models it.
   Chord / Arpeggio / Progression / Exercise) with Scales + Chords lenses
   resolving on the board (`positions_for_chord`) and the other three as
   S4 placeholders; Tab traversal + Enter activation through
-  `focus_traverse` / `dispatch_key` with the `serval-winit-host` key
+  `focus_traverse` / `dispatch_key` with the `genet-winit-host` key
   mapping; incremental `apply` for attribute-only mutation batches.
   Driven receipts: Chord lens by mouse and by Tab-Tab-Enter, Root → C
   through the overlay ("C Major — 21 positions", C-E-G).
@@ -524,10 +524,10 @@ workspace and the smoke already models it.
     `tincture`) — Slate seeds → `derive_palette` → CSS. The
     audio-widgets extraction question is closed; audio-widgets can
     itself migrate to tinct later if wanted.
-  - **Serval engine fix #3, found by the dropdown:** hit-testing walked
+  - **Genet engine fix #3, found by the dropdown:** hit-testing walked
     DOM order, so the open select overlay lost clicks to the in-flow
     sidebar behind it (clicks went *through* the popup). Fixed in
-    serval-layout by lifting positioned subtrees over the whole in-flow
+    genet-layout by lifting positioned subtrees over the whole in-flow
     hit walk, mirroring paint's plane split (two commits: sibling-level
     reorder `d15455130a1` proved insufficient for the cross-subtree
     shape; the deferred-queue lift `db0c9751d81` fixes it; regression
@@ -536,7 +536,7 @@ workspace and the smoke already models it.
   - Polish deferred: focus-ring styling (traversal is functional but
     invisible), select caret glyph, `Escape` closing an open list.
 - 2026-07-05: **S1 done — Stage renders from live state and a click selects
-  a scale** (screenshots: `woodshed-serval-s1-initial.png` /
+  a scale** (screenshots: `woodshed-genet-s1-initial.png` /
   `-clicked.png`; synthetic click on "Major" moved the selection, the
   caption updated to "A Major — 47 positions", and the dots re-spelled to
   sharps from the theory crate).
@@ -552,26 +552,26 @@ workspace and the smoke already models it.
     touches the Strophe-shared `audio-widgets`, so it wants its own call.
   - Host: DPI-aware (`IncrementalLayout` at logical size,
     `rasterize_scaled` at physical), retained layout hit-testing, click
-    dispatch through `ServalAppRunner::dispatch_click`. Layout is rebuilt
+    dispatch through `GenetAppRunner::dispatch_click`. Layout is rebuilt
     per frame (fine at this scale); incremental `apply` lands with S2.
 - 2026-07-05: **S0 done.** `woodshed-views` (demo Stage sheet ported from
-  the smoke) + `woodshed-serval` (winit host on `serval-winit-host`'s
+  the smoke) + `woodshed-genet` (winit host on `genet-winit-host`'s
   `SurfaceHost`: rasterize → acquire → `compose_external_texture` →
-  present). Serval/netrender consumed as git deps with the mere-pattern
+  present). Genet/netrender consumed as git deps with the mere-pattern
   local `[patch]` overrides in the gitignored `.cargo/config.toml` (whose
   long-inert xilem-woodshed `paths` override was also fixed: it sat below
   a `[target]` header and parsed as a key of that table). Committed patch
   mirror: stylo/stylo_atoms (servo/stylo rev), taffy + ipc-channel via
-  mark-ik/serval. Verified by screenshot: window renders the sheet on
+  mark-ik/genet. Verified by screenshot: window renders the sheet on
   Windows, colors matching the browser receipt.
-  - **Finding: sRGB surfaces double-encode the serval scene.** vello
-    writes display-referred bytes; `serval-winit-host::create_surface`
+  - **Finding: sRGB surfaces double-encode the genet scene.** vello
+    writes display-referred bytes; `genet-winit-host::create_surface`
     preferred the sRGB backbuffer, which re-encodes and washes out every
-    color. Fixed in serval (`40e5dd92760`, prefer non-srgb). Meerkat uses
+    color. Fixed in genet (`40e5dd92760`, prefer non-srgb). Meerkat uses
     the same path and will darken to true colors on its next build.
   - Note: S0 lays out at physical pixels (no DPI scaling); wire
     `scale_factor` through `rasterize_scaled` during S1.
 - 2026-07-04: Plan created. Decision locked: xilem_serval host, Dioxus
   recorded as the alternative. Prior receipts: cpal 0.18 bump (`aaa7cde`),
-  serval browser render receipt (serval `2422044ad1a`), netrender wasm
+  genet browser render receipt (genet `2422044ad1a`), netrender wasm
   backend split (`6520d74ed`) + web-time (`83e4be37a`).

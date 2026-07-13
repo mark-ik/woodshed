@@ -127,7 +127,7 @@ practice without changing the Set.
 
 Split the monolithic `woodshed-views/src/stage.rs` into an application shell,
 Stage, Rehearsal, Looper, Tools, Settings, and shared controls. Keep coordination
-in `woodshed-core`; keep desktop realization in `woodshed-serval`.
+in `woodshed-core`; keep desktop realization in `woodshed-genet`.
 
 Done when each product section can be changed and tested without editing one
 multi-thousand-line screen file, existing session loading still works, and the
@@ -291,7 +291,7 @@ receipts are recorded before those platforms are advertised.
   selections; and added a responsive Related panel with Select and Stage
   actions. Renamed the existing `+ Rehearse` action to `Stage`. Verified 8
   graph tests and 35 core tests, `cargo check -p woodshed-views`,
-  `cargo build -p woodshed-serval`, and a live Windows receipt at 1100x664.
+  `cargo build -p woodshed-genet`, and a live Windows receipt at 1100x664.
   The receipt proved that staging a suggestion changes the catalog projection
   and increments the Set; the test Card was removed afterward. P4 is partial:
   practice-history ranking, arpeggio nodes, richer relations, and the Chisel

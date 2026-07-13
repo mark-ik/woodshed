@@ -15,9 +15,9 @@ $target = if ($env:CARGO_TARGET_DIR) {
 } else {
     Join-Path $root "target"
 }
-$binary = Join-Path $target "release\woodshed-serval.exe"
+$binary = Join-Path $target "release\woodshed-genet.exe"
 if (-not (Test-Path -LiteralPath $binary)) {
-    throw "Release binary not found: $binary. Run 'cargo build --release -p woodshed-serval' first."
+    throw "Release binary not found: $binary. Run 'cargo build --release -p woodshed-genet' first."
 }
 
 $output = Join-Path $root $OutputDir

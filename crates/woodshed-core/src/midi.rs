@@ -1,4 +1,4 @@
-//! The MIDI seam (serval-host plan; audio-depth slice 13).
+//! The MIDI seam (genet-host plan; audio-depth slice 13).
 //!
 //! The core describes what the app wants from MIDI in neutral data; a
 //! host supplies a [`MidiBackend`] that realizes it — `midir` on

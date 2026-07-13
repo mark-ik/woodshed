@@ -17,7 +17,7 @@ hook).
   satisfy the trait bound on stock xilem). When #1822 merges and a masonry
   release ships with #1821, Woodshed drops to crates.io with zero patches.
 - **Renderer:** rides upstream's `wgpu-28 / vello-0.8 / parley-0.8`. The newer
-  `wgpu-29 / vello-0.9` pins were mere/serval's; Woodshed never used them.
+  `wgpu-29 / vello-0.9` pins were mere/genet's; Woodshed never used them.
   Adapting to upstream cost two API renames: `content_box_size()` became
   `content_box().size()`, and parley `Layout::align` regained its leading
   `container_width` argument (passed `None`).
@@ -92,7 +92,7 @@ Consumer: Woodshed's fretboard tabs share `AppState.split_ratio` (persisted in
 
 These two patches are the *only* upstream divergence Woodshed actually needs
 (it does not need the wgpu-29 pins or the external-compositor work — those are
-the mere/serval ecosystem's). Both are small, in-use, human-authored API
+the mere/genet ecosystem's). Both are small, in-use, human-authored API
 additions; offering them upstream would let Woodshed ride stock `linebender/xilem`.
 
 Source: fork commit `129d330e` on `mere-wgpu-29-vello-0-9`. To prepare each PR,

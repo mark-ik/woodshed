@@ -10,21 +10,21 @@ practice environment.
 The theory model supports arbitrary string counts and tunings, so bass,
 ukulele, banjo, and custom instruments are first-class rather than afterthoughts.
 
-Built in Rust on [Serval](https://github.com/mark-ik/serval): a shared
-DOM-shaped Xilem view tree is laid out and painted by Serval/netrender, with a
+Built in Rust on [Genet](https://github.com/mark-ik/genet): a shared
+DOM-shaped Xilem view tree is laid out and painted by Genet/netrender, with a
 winit desktop host today and a browser host planned from the same view layer.
 
 **Made with AI**
 
 ## Status
 
-Desktop alpha. The Serval migration is complete on the Woodshed side and the
+Desktop alpha. The Genet migration is complete on the Woodshed side and the
 Windows host is functional, but this is not a packaged public release yet.
 The next release work is adaptive-screen polish, Mac and Linux receipts,
 packaging, and a current public build/install path. Browser and mobile hosts are
 separate work, not implied by the shared view layer.
 
-See [the Serval host plan](design_docs/2026-07-04_serval_host_cross_platform_plan.md)
+See [the Genet host plan](design_docs/2026-07-04_genet_host_cross_platform_plan.md)
 for the delivery architecture and [the documentation index](design_docs/DOC_README.md)
 for the wider project record.
 
@@ -38,7 +38,7 @@ crates/
                      calibration, and offline render.
   woodshed-core/     Portable application state and host seams.
   woodshed-views/    Shared xilem_serval product views and CSS themes.
-  woodshed-serval/   Desktop winit + netrender host. The application binary.
+  woodshed-genet/   Desktop winit + netrender host. The application binary.
   woodshed-graph/    Theory catalog projection into the chartulary graph.
 design_docs/         Product description, plans, and documentation policy.
 ```
@@ -53,7 +53,7 @@ design_docs/         Product description, plans, and documentation policy.
   host-facing seams. It does not own desktop windowing or browser APIs.
 - `woodshed-views` owns product composition and responsive presentation.
   It contains neither desktop window chrome nor audio drivers.
-- `woodshed-serval` owns the desktop frame, winit event loop, CSD resize/drag
+- `woodshed-genet` owns the desktop frame, winit event loop, CSD resize/drag
   behavior, native storage, audio, and MIDI realization.
 
 `audio-primitives` is shared infrastructure for sibling Merely projects. The
@@ -63,18 +63,18 @@ old Masonry-specific UI crates and Woodshed's Xilem app have been retired.
 
 ```powershell
 # Build the desktop app
-cargo build -p woodshed-serval
+cargo build -p woodshed-genet
 
 # Run it
-cargo run -p woodshed-serval
+cargo run -p woodshed-genet
 
 # Run the workspace tests
 cargo test --workspace
 ```
 
-The binary target is `woodshed-serval` in
-`crates/woodshed-serval/src/main.rs`. Local development may use gitignored
-`.cargo/config.toml` patches for sibling Serval, netrender, and tincture
+The binary target is `woodshed-genet` in
+`crates/woodshed-genet/src/main.rs`. Local development may use gitignored
+`.cargo/config.toml` patches for sibling Genet, netrender, and tincture
 checkouts; the committed manifest resolves those dependencies from their owned
 Git repositories.
 
@@ -82,8 +82,8 @@ Git repositories.
 
 | Area | Crate / role |
 |---|---|
-| Product views | `xilem-serval` over Serval's `ScriptedDom` |
-| Layout and paint | `serval-layout`, `paint-list`, `netrender` |
+| Product views | `xilem-serval` over Genet's `ScriptedDom` |
+| Layout and paint | `genet-layout`, `paint-list`, `netrender` |
 | Desktop host | `winit` 0.30, `wgpu` 29 |
 | Audio I/O | `cpal` 0.18 |
 | Pitch detection | `pitch-detector` and `pitch-detection` |

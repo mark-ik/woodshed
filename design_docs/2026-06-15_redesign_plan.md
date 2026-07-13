@@ -145,7 +145,7 @@ the per-screen reworks. Mobile is a separate downstream track.
     overlay popup. So P3b's "instrument / tuning / root use dropdowns" bar is met.
   - **Fast-iteration loop:** the fork is iterated via the local
     `crates/xilem-woodshed` worktree, wired through a gitignored `paths` override
-    in `Code/.cargo/config.toml` (serval temporarily disabled there — it vendors
+    in `Code/.cargo/config.toml` (genet temporarily disabled there — it vendors
     a wgpu-29 `vello`/`xilem_core` that collided with woodshed's wgpu-28 build).
   - **Deferred polish:** a `▼` caret on the header triggers (needs a small
     Selector-widget change so only the trigger, not the menu items, carries it),

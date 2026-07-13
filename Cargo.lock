@@ -1510,7 +1510,7 @@ version = "0.1.0"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
- "serval-paint-types",
+ "genet-paint-types",
  "servo-malloc-size-of",
 ]
 
@@ -2359,7 +2359,7 @@ dependencies = [
 [[package]]
 name = "ipc-channel"
 version = "0.22.0"
-source = "git+https://github.com/mark-ik/serval.git?branch=main#362531052f48cf975a9f1b0f432afff9c910036c"
+source = "git+https://github.com/mark-ik/genet.git?branch=main#362531052f48cf975a9f1b0f432afff9c910036c"
 dependencies = [
  "crossbeam-channel",
  "libc",
@@ -4431,7 +4431,7 @@ dependencies = [
 [[package]]
 name = "selectors"
 version = "0.38.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "bitflags 2.11.1",
  "cssparser",
@@ -4527,7 +4527,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "serval-layout"
+name = "genet-layout"
 version = "0.2.0"
 dependencies = [
  "accesskit",
@@ -4550,11 +4550,11 @@ dependencies = [
  "rustc-hash 2.1.3",
  "selectors",
  "serde",
- "serval-paint-types",
- "serval-stylo",
- "serval-stylo-atoms",
- "serval-stylo-dom",
- "serval-stylo-static-prefs",
+ "genet-paint-types",
+ "genet-stylo",
+ "genet-stylo-atoms",
+ "genet-stylo-dom",
+ "genet-stylo-static-prefs",
  "servo-malloc-size-of",
  "servo-pixels",
  "servo-url",
@@ -4569,7 +4569,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "serval-paint-types"
+name = "genet-paint-types"
 version = "0.1.0"
 dependencies = [
  "app_units",
@@ -4580,18 +4580,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "serval-scripted-dom"
+name = "genet-scripted-dom"
 version = "0.1.0"
 dependencies = [
  "engine-observables-api",
  "html5ever",
  "layout-dom-api",
  "markup5ever",
- "serval-static-dom",
+ "genet-static-dom",
 ]
 
 [[package]]
-name = "serval-static-dom"
+name = "genet-static-dom"
 version = "0.1.0"
 dependencies = [
  "html5ever",
@@ -4600,9 +4600,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "serval-stylo"
+name = "genet-stylo"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "app_units",
  "arrayvec",
@@ -4632,9 +4632,9 @@ dependencies = [
  "rustc-hash 2.1.3",
  "selectors",
  "serde",
- "serval-stylo-atoms",
- "serval-stylo-dom",
- "serval-stylo-static-prefs",
+ "genet-stylo-atoms",
+ "genet-stylo-dom",
+ "genet-stylo-static-prefs",
  "servo_arc",
  "smallbitvec",
  "smallvec",
@@ -4656,33 +4656,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "serval-stylo-atoms"
+name = "genet-stylo-atoms"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "string_cache",
  "string_cache_codegen",
 ]
 
 [[package]]
-name = "serval-stylo-dom"
+name = "genet-stylo-dom"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "bitflags 2.11.1",
  "stylo_malloc_size_of",
 ]
 
 [[package]]
-name = "serval-stylo-static-prefs"
+name = "genet-stylo-static-prefs"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "toml",
 ]
 
 [[package]]
-name = "serval-winit-host"
+name = "genet-winit-host"
 version = "0.2.0"
 dependencies = [
  "accesskit",
@@ -4703,7 +4703,7 @@ version = "0.1.0"
 dependencies = [
  "layout-dom-api",
  "serval-chisel",
- "serval-scripted-dom",
+ "genet-scripted-dom",
  "serval-xilem-core",
  "unicode-segmentation",
 ]
@@ -4743,7 +4743,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "serval-paint-types",
+ "genet-paint-types",
  "servo-config",
  "servo-malloc-size-of",
  "time",
@@ -4757,7 +4757,7 @@ version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
- "serval-stylo-static-prefs",
+ "genet-stylo-static-prefs",
  "servo-config-macro",
  "strum",
 ]
@@ -4792,8 +4792,8 @@ dependencies = [
  "mime",
  "parking_lot",
  "resvg",
- "serval-stylo",
- "serval-stylo-dom",
+ "genet-stylo",
+ "genet-stylo-dom",
  "servo-allocator",
  "servo_arc",
  "smallvec",
@@ -4819,7 +4819,7 @@ dependencies = [
  "log",
  "malloc_size_of_derive",
  "serde",
- "serval-paint-types",
+ "genet-paint-types",
  "servo-base",
  "servo-malloc-size-of",
 ]
@@ -4840,7 +4840,7 @@ dependencies = [
 [[package]]
 name = "servo_arc"
 version = "0.4.3"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "serde",
  "stable_deref_trait",
@@ -5113,7 +5113,7 @@ dependencies = [
 [[package]]
 name = "stylo_derive"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -5125,7 +5125,7 @@ dependencies = [
 [[package]]
 name = "stylo_malloc_size_of"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "app_units",
  "cssparser",
@@ -5142,17 +5142,17 @@ dependencies = [
 [[package]]
 name = "stylo_taffy"
 version = "0.3.0-beta.1"
-source = "git+https://github.com/mark-ik/serval.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
+source = "git+https://github.com/mark-ik/genet.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
 dependencies = [
- "serval-stylo",
- "serval-stylo-atoms",
+ "genet-stylo",
+ "genet-stylo-atoms",
  "taffy 0.12.1",
 ]
 
 [[package]]
 name = "stylo_traits"
 version = "0.18.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "app_units",
  "bitflags 2.11.1",
@@ -5161,7 +5161,7 @@ dependencies = [
  "malloc_size_of_derive",
  "selectors",
  "serde",
- "serval-stylo-atoms",
+ "genet-stylo-atoms",
  "servo_arc",
  "stylo_malloc_size_of",
  "thin-vec",
@@ -5229,7 +5229,7 @@ dependencies = [
 [[package]]
 name = "taffy"
 version = "0.12.1"
-source = "git+https://github.com/mark-ik/serval.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
+source = "git+https://github.com/mark-ik/genet.git?branch=main#acfca6c5cf2a87544489214d425ca57e34f7be2d"
 dependencies = [
  "arrayvec",
  "grid",
@@ -5455,7 +5455,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "to_shmem"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "cssparser",
  "servo_arc",
@@ -5468,7 +5468,7 @@ dependencies = [
 [[package]]
 name = "to_shmem_derive"
 version = "0.1.0"
-source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/serval-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
+source = "git+https://github.com/mark-ik/stylo?branch=mark-ik/genet-publish-names#efaa436663694c9f3cb6a5f275ac9a5b32a0f886"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -6864,7 +6864,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "woodshed-serval"
+name = "woodshed-genet"
 version = "0.1.0"
 dependencies = [
  "directories",
@@ -6874,9 +6874,9 @@ dependencies = [
  "paint_list_render",
  "serde_json",
  "serval-chisel",
- "serval-layout",
- "serval-scripted-dom",
- "serval-winit-host",
+ "genet-layout",
+ "genet-scripted-dom",
+ "genet-winit-host",
  "serval-xilem",
  "wgpu",
  "winit",

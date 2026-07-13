@@ -32,12 +32,12 @@ Three tests: sealed-at-rest + round-trip, wrong-key-degrades-to-`None`, and the
 carry property (a second device with the same persona seed reads the sealed
 session; a different persona cannot).
 
-## Deferred: host wiring (woodshed-serval)
+## Deferred: host wiring (woodshed-genet)
 
-The app's `FsStorage` (writes `serval-state.json`) wraps in
+The app's `FsStorage` (writes `genet-state.json`) wraps in
 `SealedStorage::for_provider(fs, &provider)`, where `provider` is a personae
 identity unlocked at startup (Windows DPAPI via personae's `startup_unlock`; a
-passphrase elsewhere). That is the one heavier step, it builds the serval app and
+passphrase elsewhere). That is the one heavier step, it builds the genet app and
 adds identity bootstrap to `main`, so it is left for a focused host pass.
 
 ## Follow-ons

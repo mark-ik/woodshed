@@ -1,4 +1,4 @@
-//! The storage seam (serval-host plan W0.2) and the persisted session.
+//! The storage seam (genet-host plan W0.2) and the persisted session.
 //!
 //! The core describes what survives a restart as one serde struct; a host
 //! supplies a [`Storage`] that moves the serialized form — filesystem on

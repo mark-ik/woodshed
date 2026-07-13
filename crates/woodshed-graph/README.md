@@ -34,7 +34,7 @@ practice session is an `Owner` in stemma whose visits branch, keyed by the same
 node ids as the graph, which is how the two layers integrate: by shared identity,
 consumer-recorded, not by coupling the graph spine to the lineage.
 
-Depends on the pure `woodshedding` theory crate (no UI, audio, or serval), plus
+Depends on the pure `woodshedding` theory crate (no UI, audio, or genet), plus
 chartulary and stemma. See [`design_docs/`](design_docs/).
 
 Part of the [woodshed](https://github.com/mark-ik/woodshed) workspace; dual MIT OR Apache-2.0.

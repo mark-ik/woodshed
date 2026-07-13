@@ -5,10 +5,10 @@ decision that gates it. Grounded in a code+web investigation (2026-06-14)
 verified against the live fork checkout and `Cargo.lock`.
 
 Status: **superseded 2026-07-04 by
-[2026-07-04_serval_host_cross_platform_plan.md](2026-07-04_serval_host_cross_platform_plan.md).**
+[2026-07-04_genet_host_cross_platform_plan.md](2026-07-04_genet_host_cross_platform_plan.md).**
 The path decision came out differently than the A/B/C menu here: Woodshed
-moves to a serval host (xilem_serval), which renders the same view tree on
-desktop and in the browser (receipt: serval `examples/serval_web_smoke`,
+moves to a genet host (xilem_serval), which renders the same view tree on
+desktop and in the browser (receipt: genet `examples/genet_web_smoke`,
 PASS 2026-07-04). The Tier 0 seams below (AudioBackend, storage, Instant,
 timers) carry forward unchanged into that plan; the Path A/B analysis is
 historical. Constraint updates since writing: the tuner CAN listen in the

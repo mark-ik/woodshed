@@ -1,4 +1,4 @@
-//! The desktop [`Storage`]: `serval-state.json` in the same config dir the
+//! The desktop [`Storage`]: `genet-state.json` in the same config dir the
 //! xilem app uses (`ProjectDirs dev/Woodshed/Woodshed`), under its own
 //! filename so the two apps never clobber each other during the migration.
 //! The web host implements the same trait over OPFS.
@@ -17,7 +17,7 @@ pub struct FsStorage {
 impl FsStorage {
     pub fn new() -> Self {
         let path = ProjectDirs::from("dev", "Woodshed", "Woodshed")
-            .map(|dirs| dirs.config_dir().join("serval-state.json"));
+            .map(|dirs| dirs.config_dir().join("genet-state.json"));
         Self { path }
     }
 }
@@ -35,7 +35,7 @@ impl Storage for FsStorage {
             let _ = std::fs::create_dir_all(parent);
         }
         if let Err(e) = std::fs::write(path, contents) {
-            eprintln!("[woodshed-serval] failed to persist session: {e}");
+            eprintln!("[woodshed-genet] failed to persist session: {e}");
         }
     }
 }

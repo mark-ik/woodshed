@@ -1,9 +1,9 @@
-//! Theme CSS for the serval host, derived through `tinct`.
+//! Theme CSS for the genet host, derived through `tinct`.
 //!
 //! A theme is a few seed colours; `tinct::derive_palette` produces the full
 //! semantic palette (surface ladder, text tiers, tonal triad, flags), and
 //! this module renders it as the CSS sheet the views class against. Same
-//! seeds as `audio-widgets::theme`'s Slate, so the serval host and the
+//! seeds as `audio-widgets::theme`'s Slate, so the genet host and the
 //! xilem app agree until the parity cut.
 
 use tinct::{color_from_hex, color_to_hex, derive_palette, Palette, Seeds};
@@ -13,7 +13,7 @@ fn hex(s: &str) -> tinct::Srgb {
 }
 
 /// The built-in themes (seed sets match audio-widgets' engine, so the
-/// serval host and the xilem app agree until the parity cut).
+/// genet host and the xilem app agree until the parity cut).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ThemeMode {
     #[default]
@@ -323,7 +323,7 @@ pub fn stage_css(p: &Palette) -> String {
 .select-option:hover {{ background-color: {surface_hover}; }}
 .film-card:hover {{ border: 1px solid {secondary}; }}
 .prog-card:hover {{ background-color: {surface_hover}; }}
-/* CSS transitions (serval transition_events): subtle hover/active fades
+/* CSS transitions (genet transition_events): subtle hover/active fades
    on the interactive chrome. The host ticks the animation clock each
    frame while any transition runs. */
 .t-btn, .chrome-btn, .side-item, .select-box, .select-option,

@@ -23,4 +23,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo check -p woodshed-serval --locked
+      - run: cargo check -p woodshed-genet --locked

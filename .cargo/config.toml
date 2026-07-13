@@ -2,8 +2,8 @@
 #
 # NO override for the mark-ik/xilem fork: woodshed-xilem rides its git dep.
 # The old global `paths = [".../xilem-woodshed"]` override matched by package
-# NAME across the whole graph, so the fork's `xilem_core` hijacked serval's
-# vendored `xilem_core` (surfaced 2026-07-05 when serval's copy grew
+# NAME across the whole graph, so the fork's `xilem_core` hijacked genet's
+# vendored `xilem_core` (surfaced 2026-07-05 when genet's copy grew
 # ElementSplice::hoist_pending); and a source-keyed [patch] can't work either,
 # because two PATH-sourced `xilem_core v0.4.0` collide in the lockfile. If
 # fork iteration resumes, prefer pushing to the fork branch and re-locking.
@@ -18,17 +18,17 @@
 [target.'cfg(all(windows, target_env = "msvc"))']
 rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 
-# Local serval/netrender checkouts (the mere pattern: source-specific
+# Local genet/netrender checkouts (the mere pattern: source-specific
 # [patch] entries, not `paths`, so dependency-list changes in the sibling
 # checkouts don't trigger the path-override warning storm). Lists component
-# dirs but NOT serval's support/patches/* so it never collides with the
+# dirs but NOT genet's support/patches/* so it never collides with the
 # committed [patch.crates-io] taffy/ipc-channel redirects.
-[patch."https://github.com/mark-ik/serval.git"]
+[patch."https://github.com/mark-ik/genet.git"]
 serval-chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
-"serval-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-layout" }
-"serval-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-scripted-dom" }
-"serval-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/serval-winit-host" }
+"genet-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-layout" }
+"genet-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-scripted-dom" }
+"genet-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-winit-host" }
 "serval-xilem" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
 serval-xilem-core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
 

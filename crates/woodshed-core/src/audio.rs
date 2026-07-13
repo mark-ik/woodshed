@@ -1,4 +1,4 @@
-//! The audio seam (serval-host plan W0.1).
+//! The audio seam (genet-host plan W0.1).
 //!
 //! The core describes what the app wants (transport state, tuner state) in
 //! pure data; a host supplies an [`AudioBackend`] that realizes it — cpal
