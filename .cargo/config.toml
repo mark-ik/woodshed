@@ -32,6 +32,7 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 
 [patch."https://github.com/mark-ik/cambium.git"]
 cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
+"cambium-winit" = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium-winit" }
 sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
 
 [patch."https://github.com/mark-ik/tinct"]

@@ -812,6 +812,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cambium-winit"
+version = "0.1.0"
+dependencies = [
+ "cambium",
+ "winit",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6670,6 +6678,7 @@ name = "woodshed-genet"
 version = "0.1.0"
 dependencies = [
  "cambium",
+ "cambium-winit",
  "directories",
  "genet-layout",
  "genet-scripted-dom",

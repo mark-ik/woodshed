@@ -38,7 +38,8 @@ use genet_layout::{
     Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, SourceNodeId,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use genet_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
+use cambium_winit::{key_event_from_winit, modifiers_from_winit};
+use genet_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -494,7 +495,7 @@ impl App {
             let layout = self.layout.as_ref().expect("layout just ensured");
             let anim_active = layout.has_active_animations();
             let sizes: HashMap<u64, (f32, f32)> =
-                layout.chisel_leaf_boxes().into_iter().collect();
+                layout.custom_leaf_boxes().into_iter().collect();
             self.neighborhood_leaves.render_into(
                 |key| {
                     sizes

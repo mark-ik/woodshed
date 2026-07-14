@@ -45,6 +45,7 @@ winit = "0.30"
 # source-specific [patch] overrides (the Mere pattern). Cambium supplies
 # the view toolkit and Sprigging leaves; Genet supplies the engine and host.
 cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+cambium-winit = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 sprigging = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }

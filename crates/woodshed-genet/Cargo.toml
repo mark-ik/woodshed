@@ -12,6 +12,7 @@ woodshed-core = { workspace = true }
 woodshed-audio = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 cambium = { workspace = true }
+cambium-winit = { workspace = true }
 sprigging = { workspace = true }
 layout-dom-api = { workspace = true }
 genet-scripted-dom = { workspace = true }
