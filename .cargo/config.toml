@@ -21,8 +21,9 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # Local genet/netrender checkouts (the mere pattern: source-specific
 # [patch] entries, not `paths`, so dependency-list changes in the sibling
 # checkouts don't trigger the path-override warning storm). Lists component
-# dirs but NOT genet's support/patches/* so it never collides with the
-# committed [patch.crates-io] taffy/ipc-channel redirects.
+# dirs plus the direct crates.io override required for the vendored
+# stylo_taffy adapter. Cargo does not chain a second patch through the
+# committed crates.io -> Genet Git redirect.
 [patch."https://github.com/mark-ik/genet.git"]
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
 "genet-layout" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-layout" }
@@ -44,3 +45,6 @@ netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }
 netrender_device = { path = "C:/Users/mark_/Code/repos/netrender/netrender_device" }
 paint_list_api = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_api" }
 paint_list_render = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_render" }
+
+[patch.crates-io]
+stylo_taffy = { path = "C:/Users/mark_/Code/repos/genet/support/patches/stylo_taffy" }
