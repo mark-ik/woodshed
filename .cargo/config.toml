@@ -45,6 +45,3 @@ netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }
 netrender_device = { path = "C:/Users/mark_/Code/repos/netrender/netrender_device" }
 paint_list_api = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_api" }
 paint_list_render = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_render" }
-
-[patch.crates-io]
-stylo_taffy = { path = "C:/Users/mark_/Code/repos/genet/support/patches/stylo_taffy" }

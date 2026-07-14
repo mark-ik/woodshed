@@ -105,12 +105,12 @@ serde_json = "1.0"
 # (one Stylo per graph) makes a hard resolution error.
 #
 # stylo_taffy must be patched for the same reason: the registry copy names
-# crates.io stylo, dragging a second Stylo in. Genet vendors one that git-deps
-# genet-stylo. See genet's 2026-07-12 ring-3 fork-rename plan.
-stylo_taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# crates.io stylo, dragging a second Stylo in. Direct sibling paths keep Cargo
+# from treating Genet's large workspace as a crates.io patch source.
+stylo_taffy = { path = "../genet/support/patches/stylo_taffy" }
 # genet-layout requires genet's vendored taffy fork (float-layout patches on
 # stable 0.12.1), not on crates.io.
-taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+taffy = { path = "../genet/support/patches/taffy" }
 # ipc-channel: genet's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
-ipc-channel = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+ipc-channel = { path = "../genet/support/patches/ipc-channel" }
