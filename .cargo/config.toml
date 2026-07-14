@@ -24,6 +24,13 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # dirs plus the direct crates.io override required for the vendored
 # stylo_taffy adapter. Cargo does not chain a second patch through the
 # committed crates.io -> Genet Git redirect.
+[patch.crates-io]
+cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
+cambium-winit = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium-winit" }
+sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
+layout-dom-api = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
+genet-scripted-dom = { path = "C:/Users/mark_/Code/repos/genet/components/genet-scripted-dom" }
+
 [patch."https://github.com/mark-ik/genet.git"]
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
 "genet-layout" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-layout" }

@@ -44,11 +44,11 @@ winit = "0.30"
 # local checkouts are picked up via the gitignored .cargo/config.toml
 # source-specific [patch] overrides (the Mere pattern). Cambium supplies
 # the view toolkit and Sprigging leaves; Genet supplies the engine and host.
-cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
-cambium-winit = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
-sprigging = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
-layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+cambium = "0.2.0"
+cambium-winit = "0.2.0"
+sprigging = "0.1.0"
+layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
@@ -98,6 +98,8 @@ serde_json = "1.0"
 # taffy + ipc-channel are vendored inside the genet repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
+layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 # NO stylo/stylo_atoms patch (2026-07-12, mirroring genet's ring-3 rename):
 # the fork is now the RENAMED `genet-stylo` family, and a `[patch]` cannot
 # rename its target. Genet's crates git-dep genet-stylo by package rename, so
