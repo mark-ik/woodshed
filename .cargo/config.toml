@@ -24,10 +24,10 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # dirs but NOT genet's support/patches/* so it never collides with the
 # committed [patch.crates-io] taffy/ipc-channel redirects.
 [patch."https://github.com/mark-ik/genet.git"]
-"layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
-"genet-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-layout" }
-"genet-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-scripted-dom" }
-"genet-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-winit-host" }
+"layout-dom-api" = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
+"genet-layout" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-layout" }
+"genet-scripted-dom" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-scripted-dom" }
+"genet-winit-host" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-winit-host" }
 
 [patch."https://github.com/mark-ik/cambium.git"]
 cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
