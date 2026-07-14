@@ -37,7 +37,7 @@ crates/
   woodshed-audio/    cpal-backed audio, pitch/onset analysis, MIDI, looping,
                      calibration, and offline render.
   woodshed-core/     Portable application state and host seams.
-  woodshed-views/    Shared xilem_serval product views and CSS themes.
+  woodshed-views/    Shared Cambium product views and CSS themes.
   woodshed-genet/   Desktop winit + netrender host. The application binary.
   woodshed-graph/    Theory catalog projection into the chartulary graph.
 design_docs/         Product description, plans, and documentation policy.
