@@ -24,13 +24,14 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # dirs but NOT genet's support/patches/* so it never collides with the
 # committed [patch.crates-io] taffy/ipc-channel redirects.
 [patch."https://github.com/mark-ik/genet.git"]
-serval-chisel = { path = "C:/Users/mark_/Code/repos/serval/components/chisel" }
 "layout-dom-api" = { path = "C:/Users/mark_/Code/repos/serval/components/shared/layout-dom" }
 "genet-layout" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-layout" }
 "genet-scripted-dom" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-scripted-dom" }
 "genet-winit-host" = { path = "C:/Users/mark_/Code/repos/serval/components/genet-winit-host" }
-"serval-xilem" = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-serval" }
-serval-xilem-core = { path = "C:/Users/mark_/Code/repos/serval/components/xilem-core" }
+
+[patch."https://github.com/mark-ik/cambium.git"]
+cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
+sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
 
 [patch."https://github.com/mark-ik/tinct"]
 tinct = { path = "C:/Users/mark_/Code/repos/tincture" }

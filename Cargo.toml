@@ -34,19 +34,18 @@ audio-primitives = { path = "crates/audio-primitives", version = "0.1.0" }
 
 # The mark-ik/xilem Masonry fork is fully retired (2026-07-08): its last
 # consumers — the shared xilem-components + audio-widgets crates, used by
-# Strophe's Masonry app — are gone now Strophe runs on xilem_serval with
-# chisel leaves. woodshed itself has been genet-only since the S5 cut.
+# Strophe's Masonry app — are gone now Strophe runs on Cambium with
+# Sprigging leaves. Woodshed itself has been Genet-only since the S5 cut.
 winit = "0.30"
 
 # UI — genet host (2026-07-04 genet-host plan). The woodshed app now
 # rides this stack exclusively. GIT deps on the owned repos so any machine
 # resolves;
 # local checkouts are picked up via the gitignored .cargo/config.toml
-# source-specific [patch] overrides (the mere pattern). genet's internal
-# path deps (layout-dom-api, xilem-core, ...) resolve inside its git
-# checkout; only the crates woodshed names appear here.
-xilem-serval = { package = "serval-xilem", git = "https://github.com/mark-ik/genet.git", branch = "main" }
-chisel = { package = "serval-chisel", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# source-specific [patch] overrides (the Mere pattern). Cambium supplies
+# the view toolkit and Sprigging leaves; Genet supplies the engine and host.
+xilem-serval = { package = "cambium", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+chisel = { package = "sprigging", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
