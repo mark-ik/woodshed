@@ -1,5 +1,5 @@
 use woodshed_core::audio::CalibrationStatus;
-use xilem_serval::{clickable, el, map_state, select, text};
+use cambium::{clickable, el, map_state, select, text};
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
 use crate::theme::ThemeMode;

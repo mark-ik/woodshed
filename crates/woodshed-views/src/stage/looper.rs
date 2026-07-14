@@ -1,5 +1,5 @@
 use woodshed_core::song::{song_from_progression, SECTION_LABELS};
-use xilem_serval::{clickable, el, text};
+use cambium::{clickable, el, text};
 
 use super::{UiChild, UiState};
 

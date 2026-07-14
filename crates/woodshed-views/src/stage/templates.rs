@@ -1,5 +1,5 @@
 use woodshed_core::set_from_practice;
-use xilem_serval::{clickable, el, text};
+use cambium::{clickable, el, text};
 
 use super::{UiChild, UiState};
 

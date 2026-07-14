@@ -1,4 +1,4 @@
-use xilem_serval::{chisel_leaf, clickable, el, text};
+use cambium::{clickable, custom_leaf, el, text};
 
 use super::{UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 
@@ -114,7 +114,7 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
         Box::new(
             el(
                 "div",
-                chisel_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
+                custom_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
             )
             .attr("class", "related-graph"),
         )

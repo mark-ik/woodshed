@@ -4,7 +4,7 @@
 //! 2026-07-04). Replaced by real `AppState`-driven views in S1; keep this
 //! module free of app state on purpose so S0 only proves the host stack.
 
-use xilem_serval::{el, text, AnyView, GenetCtx, GenetElement, View};
+use cambium::{AnyView, GenetCtx, GenetElement, View, el, text};
 
 /// Boxed heterogeneous child view (the meerkat `NoteChild` pattern).
 pub type Child = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
@@ -128,7 +128,7 @@ pub fn demo_view() -> impl View<(), (), GenetCtx, Element = GenetElement> {
             .attr("class", "body"),
             el(
                 "div",
-                text("xilem-serval / genet-layout / netrender / winit host"),
+                text("Cambium / genet-layout / netrender / winit host"),
             )
             .attr("class", "caption"),
         ),

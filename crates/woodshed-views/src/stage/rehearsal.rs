@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use woodshed_core::step_set;
 use woodshedding::rehearsal::{LoopMode, Recipe};
-use xilem_serval::{clickable, el, text};
+use cambium::{clickable, el, text};
 
 use super::{UiChild, UiState};
 
@@ -197,4 +197,3 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         ),
     ))
 }
-

@@ -1,6 +1,6 @@
 //! The Stage screen over live state (S2).
 //!
-//! Header dropdowns (tuning, root — xilem_serval `select`), the lens strip
+//! Header dropdowns (tuning, root, using Cambium `select`), the lens strip
 //! (Scale / Chord / Arpeggio / Progression / Exercise), a per-lens catalog
 //! sidebar, and the fretboard rendered as DOM dots. The runner state is
 //! [`UiState`]: the portable `woodshed_core::StageState` plus the
@@ -17,7 +17,7 @@ use woodshed_core::song::SongDoc;
 use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{FretWindow, Hold, Set, Touch};
-use xilem_serval::{
+use cambium::{
     clickable, el, map_state, select, text, text_field, AnyView, SelectState, GenetCtx,
     GenetElement, TextInput,
 };

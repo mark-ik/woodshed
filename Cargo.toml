@@ -44,8 +44,8 @@ winit = "0.30"
 # local checkouts are picked up via the gitignored .cargo/config.toml
 # source-specific [patch] overrides (the Mere pattern). Cambium supplies
 # the view toolkit and Sprigging leaves; Genet supplies the engine and host.
-xilem-serval = { package = "cambium", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
-chisel = { package = "sprigging", git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+cambium = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
+sprigging = { git = "https://github.com/mark-ik/cambium.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }

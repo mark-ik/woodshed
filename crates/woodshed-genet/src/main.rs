@@ -46,13 +46,13 @@ use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey
 use winit::window::{Window, WindowId};
 use woodshed_views::stage::{stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 use woodshed_views::theme::slate_stage_css;
-use xilem_serval::{clickable, el, text, PointerClick, Propagation, GenetAppRunner};
+use cambium::{GenetAppRunner, PointerClick, Propagation, clickable, el, text};
 
 type Runner = GenetAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
 
-struct ChiselSource<'a>(&'a chisel::RenderedLeaves);
+struct SpriggingSource<'a>(&'a sprigging::RenderedLeaves);
 
-impl LeafPaintSource for ChiselSource<'_> {
+impl LeafPaintSource for SpriggingSource<'_> {
     fn leaf_commands(&self, key: u64) -> Option<&[paint_list_api::PaintCmd]> {
         self.0.get(key)
     }
@@ -103,8 +103,8 @@ struct App {
     layout: Option<IncrementalLayout<NodeId>>,
     /// Logical size the retained layout was built at.
     layout_size: (f32, f32),
-    neighborhood_leaves: chisel::LeafRegistry<u64>,
-    neighborhood_rendered: chisel::RenderedLeaves,
+    neighborhood_leaves: sprigging::LeafRegistry<u64>,
+    neighborhood_rendered: sprigging::RenderedLeaves,
     neighborhood_sig: u64,
     sheet: String,
     /// Cursor position in logical coordinates.
@@ -206,7 +206,7 @@ impl App {
         }
 
         let count = snapshot.nodes.len();
-        let nodes: Vec<chisel::GraphGlyphNode> = snapshot
+        let nodes: Vec<sprigging::GraphGlyphNode> = snapshot
             .nodes
             .iter()
             .enumerate()
@@ -229,10 +229,10 @@ impl App {
                     _ => [0.72, 0.74, 0.78],
                 };
                 let strength = 0.55 + node.score as f32 / 100.0 * 0.45;
-                chisel::GraphGlyphNode {
+                sprigging::GraphGlyphNode {
                     x,
                     y,
-                    color: chisel::ColorF {
+                    color: sprigging::ColorF {
                         r: r * strength,
                         g: g * strength,
                         b: b * strength,
@@ -241,17 +241,17 @@ impl App {
                 }
             })
             .collect();
-        let mut glyph = chisel::GraphGlyph::new(
+        let mut glyph = sprigging::GraphGlyph::new(
             nodes,
             snapshot.edges,
-            chisel::Size {
+            sprigging::Size {
                 width: 232.0,
                 height: 112.0,
             },
         );
         glyph.node_radius = 5.0;
         glyph.edge_width = 1.4;
-        glyph.edge_color = chisel::ColorF {
+        glyph.edge_color = sprigging::ColorF {
             r: 0.38,
             g: 0.40,
             b: 0.46,
@@ -499,11 +499,11 @@ impl App {
                 |key| {
                     sizes
                         .get(&key)
-                        .map(|&(width, height)| chisel::Size { width, height })
+                        .map(|&(width, height)| sprigging::Size { width, height })
                 },
                 &mut self.neighborhood_rendered,
             );
-            let source = ChiselSource(&self.neighborhood_rendered);
+            let source = SpriggingSource(&self.neighborhood_rendered);
             let list = layout.emit_paint_list_with_leaves(
                 &*dom_ref,
                 &ScrollOffsets::default(),
@@ -942,8 +942,8 @@ fn main() {
         runner: None,
         layout: None,
         layout_size: (0.0, 0.0),
-        neighborhood_leaves: chisel::LeafRegistry::new(),
-        neighborhood_rendered: chisel::RenderedLeaves::new(),
+        neighborhood_leaves: sprigging::LeafRegistry::new(),
+        neighborhood_rendered: sprigging::RenderedLeaves::new(),
         neighborhood_sig: 0,
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),

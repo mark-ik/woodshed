@@ -1,6 +1,6 @@
 use woodshedding::rehearsal::{Hold, LoopMode, Recipe, Touch};
 use woodshed_core::storage::AppSection;
-use xilem_serval::{clickable, el, text};
+use cambium::{clickable, el, text};
 
 use super::{UiChild, UiState};
 

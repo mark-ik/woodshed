@@ -1,4 +1,4 @@
-use xilem_serval::{clickable, el, text};
+use cambium::{clickable, el, text};
 
 use super::{board, ToolPage, UiChild, UiState};
 

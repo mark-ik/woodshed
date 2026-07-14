@@ -1,4 +1,4 @@
-//! Woodshed's xilem_serval view layer.
+//! Woodshed's Cambium view layer.
 //!
 //! View fns + CSS sheets consumed by both hosts (`woodshed-genet` desktop,
 //! `woodshed-web` browser). Views diff into genet's `ScriptedDom`; styling is
@@ -13,4 +13,4 @@ pub mod demo;
 pub mod stage;
 pub mod theme;
 
-pub use xilem_serval;
+pub use cambium;
