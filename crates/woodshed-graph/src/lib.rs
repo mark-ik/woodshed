@@ -431,7 +431,7 @@ mod tests {
 
     #[test]
     fn a_practice_session_records_lineage_over_the_same_node_ids() {
-        use stemma::{EntryPrivacy, Stemma, TransitionKind};
+        use chartulary::stemma::{EntryPrivacy, Stemma, TransitionKind};
 
         // The lineage is keyed by the SAME identities as the chartulary graph, so
         // the two layers integrate by shared id, not by coupling. The consumer

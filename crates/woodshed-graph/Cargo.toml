@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "woodshed's real theory catalog (scales, chords, progressions, exercises) related as a content-addressed container graph over chartulary, with practice lineage over stemma. The chartulary substrate's first real consumer (G3), proving the stack end to end on woodshed's existing data."
+description = "woodshed's real theory catalog (scales, chords, progressions, exercises) related as a content-addressed container graph over chartulary, with practice lineage over `chartulary::stemma`. The chartulary substrate's first real consumer (G3), proving the stack end to end on woodshed's existing data."
 keywords = ["knowledge-graph", "music-theory", "chartulary", "woodshed"]
 categories = ["data-structures"]
 
@@ -14,6 +14,5 @@ categories = ["data-structures"]
 # The chartulary substrate lives in sibling repos alongside woodshed.
 chartulary = { path = "../../../chartulary" }
 scholia = { path = "../../../scholia" }
-stemma = { path = "../../../stemma" }
 # woodshed's own theory-catalog crate, now a workspace sibling.
 woodshedding = { workspace = true }

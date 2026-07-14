@@ -1528,7 +1528,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "engine-observables-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "genet-paint-types",
  "malloc_size_of_derive",
@@ -5043,15 +5043,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "stemma"
-version = "0.1.0"
-dependencies = [
- "rkyv",
- "serde",
- "slotmap",
-]
-
-[[package]]
 name = "strength_reduce"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5350,7 +5341,7 @@ dependencies = [
 
 [[package]]
 name = "tinct"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
 ]
@@ -6702,7 +6693,6 @@ version = "0.1.0"
 dependencies = [
  "chartulary 0.1.1",
  "scholia",
- "stemma",
  "woodshedding",
 ]
 

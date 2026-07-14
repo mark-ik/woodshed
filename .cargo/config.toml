@@ -36,7 +36,7 @@ cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
 sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
 
 [patch."https://github.com/mark-ik/tinct"]
-tinct = { path = "C:/Users/mark_/Code/repos/tincture" }
+tinct = { path = "C:/Users/mark_/Code/repos/genet/components/tinct" }
 
 [patch."https://github.com/mark-ik/muniment.git"]
 muniment = { path = "C:/Users/mark_/Code/repos/muniment" }
