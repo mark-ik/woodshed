@@ -18,8 +18,12 @@ use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{FretWindow, Hold, Set, Touch};
 use cambium::{
-    clickable, el, map_state, select, text, text_field, AnyView, SelectState, GenetCtx,
-    GenetElement, TextInput,
+    clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, SelectState,
+    GenetCtx, GenetElement, TextInput,
+};
+
+use crate::fretboard_leaf::{
+    fretboard_px_size, note_center_x, string_center_y, FRETBOARD_LEAF_KEY, MARKER_H, MARKER_W,
 };
 
 use crate::theme::ThemeMode;
@@ -210,6 +214,9 @@ pub struct UiState {
     /// One-shot "♪ Hear" request the host consumes after dispatch: voice
     /// the current lens (or rehearsal card) through the audio backend.
     pub preview_requested: bool,
+    /// One-shot single-note play request (frequency, Hz) from a marker card's
+    /// play button; the host consumes it via the backend's `preview_note`.
+    pub preview_note_requested: Option<f32>,
     /// MIDI panel state (Settings tab).
     pub midi: MidiUiState,
     /// Latency-calibration state (Settings tab). `calib_active` drives
@@ -231,6 +238,9 @@ pub struct UiState {
     pub song_clear_loop_requested: bool,
     /// Whether the document-bottom Set tray shows its Cards and editor.
     pub set_tray_expanded: bool,
+    /// Note markers the user has pinned as `(string_index, fret)` to keep their
+    /// detail card open. Multi-pin, to compare. Transient (not persisted).
+    pub pinned_markers: Vec<(usize, u8)>,
 }
 
 impl Default for UiState {
@@ -267,6 +277,7 @@ impl UiState {
             root_dd: SelectState::new(stage.root_idx),
             search: TextInput::new(""),
             preview_requested: false,
+            preview_note_requested: None,
             midi: MidiUiState::new(),
             calib_status: CalibrationStatus::Idle,
             calib_active: false,
@@ -280,6 +291,7 @@ impl UiState {
             song_record_toggle_requested: false,
             song_clear_loop_requested: false,
             set_tray_expanded: true,
+            pinned_markers: Vec::new(),
             stage,
         }
     }
@@ -358,6 +370,49 @@ impl UiState {
 
     pub fn set_board_layout(&mut self, layout: BoardLayout) {
         self.app_settings.fretboard.board_layout = layout.label().to_string();
+    }
+
+    /// Pin or unpin a marker's detail card (multi-pin, so clicking toggles).
+    pub fn toggle_pin(&mut self, string_index: usize, fret: u8) {
+        let key = (string_index, fret);
+        if let Some(i) = self.pinned_markers.iter().position(|&p| p == key) {
+            self.pinned_markers.remove(i);
+        } else {
+            self.pinned_markers.push(key);
+        }
+    }
+
+    pub fn is_pinned(&self, string_index: usize, fret: u8) -> bool {
+        self.pinned_markers.contains(&(string_index, fret))
+    }
+
+    pub fn clear_pins(&mut self) {
+        self.pinned_markers.clear();
+    }
+
+    /// Toggle a board position's membership in the card under the Rehearsal
+    /// cursor: click a note to deactivate it, click again to bring it back. The
+    /// board is the material editor ("click edits, hover shows").
+    pub fn toggle_card_mute(&mut self, string_index: usize, fret: u8) {
+        if self.set.cards.is_empty() {
+            return;
+        }
+        let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+        let muted = &mut self.set.cards[cursor].setting.muted;
+        let key = (string_index, fret);
+        if let Some(i) = muted.iter().position(|&p| p == key) {
+            muted.remove(i);
+        } else {
+            muted.push(key);
+        }
+    }
+
+    /// Whether a board position is deactivated on the card under the cursor.
+    pub fn card_muted(&self, string_index: usize, fret: u8) -> bool {
+        self.set
+            .cards
+            .get(self.set.cursor.min(self.set.cards.len().saturating_sub(1)))
+            .is_some_and(|c| c.setting.muted.contains(&(string_index, fret)))
     }
 
     pub fn nudge_bpm(&mut self, delta: f32) {
@@ -673,7 +728,7 @@ fn lens_strip(ui: &UiState) -> UiChild {
         "lens"
     };
     items.push(Box::new(clickable(
-        el("div", text("Set Templates")).attr("class", templates_class),
+        el("div", text("Sets")).attr("class", templates_class),
         |ui: &mut UiState, _| ui.stage_page = StagePage::Templates,
     )));
     Box::new(el("div", items).attr("class", "lens-strip"))
@@ -790,6 +845,55 @@ fn sidebar(ui: &UiState) -> UiChild {
     Box::new(el("div", items).attr("class", "side"))
 }
 
+/// The class for one fret cell. Fret 0 is the open-string column and carries the
+/// nut. Inlay position markers are shown by the fret-number ruler (bolded at the
+/// marker frets); proper on-board inlays wait for the board-layer rendering pass.
+fn fret_cell_class(fret: u8) -> &'static str {
+    if fret == 0 {
+        "fret nut-gap"
+    } else {
+        "fret"
+    }
+}
+
+/// The fret-number ruler under a board. One cell per fret column, sharing the
+/// `.fret` grid metrics so each number sits under its own fret.
+fn fret_number_row(fret_count: u8) -> UiChild {
+    let cells: Vec<UiChild> = (0..=fret_count)
+        .map(|fret| {
+            let class = if matches!(fret, 3 | 5 | 7 | 9 | 12 | 15 | 17 | 19 | 21 | 24) {
+                "fret-num fret-num-marker"
+            } else {
+                "fret-num"
+            };
+            Box::new(el("div", text(fret.to_string())).attr("class", class)) as UiChild
+        })
+        .collect();
+    Box::new(el("div", cells).attr("class", "fret-nums")) as UiChild
+}
+
+/// A board's string rows with the fret-number ruler appended beneath them. Every
+/// board view builds its rows the same way, so they all get a numbered board.
+fn fretboard(mut rows: Vec<UiChild>, fret_count: u8) -> Vec<UiChild> {
+    rows.push(fret_number_row(fret_count));
+    rows
+}
+
+/// Wrap a string's fret cells in its row, tagging the row with a thickness tier
+/// (`string-1` thick .. `string-6` thin). Lower strings (smaller index, since
+/// tunings read low to high) render thicker. The thickness itself is CSS, so the
+/// tier just selects it.
+fn string_row(cells: Vec<UiChild>, string_index: usize, string_count: usize) -> UiChild {
+    let tier = if string_count > 1 {
+        // 0.0 at the lowest string, 1.0 at the highest, mapped onto tiers 1..=6.
+        let t = string_index as f32 / (string_count - 1) as f32;
+        1 + (t * 5.0).round() as u32
+    } else {
+        3
+    };
+    Box::new(el("div", cells).attr("class", format!("string string-{tier}"))) as UiChild
+}
+
 fn exercise_board_view(ui: &UiState) -> UiChild {
     let state = &ui.stage;
     let board = state.exercise_board();
@@ -834,7 +938,7 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
         .map(|string_index| {
             let cells: Vec<UiChild> = (0..=state.fret_count)
                 .map(|fret| {
-                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    let cell_class = fret_cell_class(fret);
                     match dots.get(&(string_index, fret)) {
                         Some((recency, label)) => {
                             let dot_class = if *recency == 0 {
@@ -854,7 +958,7 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
                     }
                 })
                 .collect();
-            Box::new(el("div", cells).attr("class", "string")) as UiChild
+            string_row(cells, string_index, state.string_count())
         })
         .collect();
     Box::new(
@@ -862,7 +966,7 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
             "div",
             (
                 deck,
-                el("div", rows),
+                el("div", fretboard(rows, ui.stage.fret_count)),
                 el(
                     "div",
                     text(format!(
@@ -925,7 +1029,7 @@ fn progression_board_view(ui: &UiState) -> UiChild {
         .map(|string_index| {
             let cells: Vec<UiChild> = (0..=state.fret_count)
                 .map(|fret| {
-                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    let cell_class = fret_cell_class(fret);
                     match dots.get(&(string_index, fret)) {
                         Some((is_root, label)) => {
                             let dot_class = if *is_root { "dot root-dot" } else { "dot" };
@@ -941,7 +1045,7 @@ fn progression_board_view(ui: &UiState) -> UiChild {
                     }
                 })
                 .collect();
-            Box::new(el("div", cells).attr("class", "string")) as UiChild
+            string_row(cells, string_index, state.string_count())
         })
         .collect();
     Box::new(
@@ -949,7 +1053,7 @@ fn progression_board_view(ui: &UiState) -> UiChild {
             "div",
             (
                 el("div", cards).attr("class", "prog-cards"),
-                el("div", rows),
+                el("div", fretboard(rows, ui.stage.fret_count)),
                 el(
                     "div",
                     text(format!(
@@ -1045,7 +1149,7 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
         .map(|string_index| {
             let cells: Vec<UiChild> = (0..=state.fret_count)
                 .map(|fret| {
-                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
+                    let cell_class = fret_cell_class(fret);
                     match dots.get(&(string_index, fret)) {
                         Some((is_root, is_current, label)) => {
                             let dot_class = if *is_current {
@@ -1067,7 +1171,7 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
                     }
                 })
                 .collect();
-            Box::new(el("div", cells).attr("class", "string")) as UiChild
+            string_row(cells, string_index, state.string_count())
         })
         .collect();
     Box::new(
@@ -1075,7 +1179,7 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
             "div",
             (
                 deck,
-                el("div", rows),
+                el("div", fretboard(rows, ui.stage.fret_count)),
                 el(
                     "div",
                     text(format!(
@@ -1094,6 +1198,50 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
     )
 }
 
+const CARD_W: f32 = 132.0;
+/// Approximate card height, for edge-flip placement (title, two rows, play).
+const CARD_H: f32 = 112.0;
+
+/// A pinned marker's detail card, placed just above or below its marker (top-half
+/// markers get the card below, bottom-half above, to keep it inside the board).
+/// Shows note + octave, scale degree + interval, and the string/fret.
+fn note_card(d: &woodshed_core::FretDot, string_count: usize) -> UiChild {
+    let cx = note_center_x(d.fret);
+    let cy = string_center_y(d.string_index);
+    let below = d.string_index < string_count / 2;
+    let top = if below {
+        cy + MARKER_H / 2.0 + 6.0
+    } else {
+        cy - MARKER_H / 2.0 - 6.0 - CARD_H
+    };
+    let left = (cx - CARD_W / 2.0).max(2.0);
+    let title = format!("{}{}", d.label, d.octave);
+    let sub = if d.degree.is_empty() {
+        d.interval_name.clone()
+    } else {
+        format!("{} · {}", d.degree, d.interval_name)
+    };
+    // Guitar-style numbering: string 1 is the highest (largest index).
+    let pos = format!("string {} · fret {}", string_count - d.string_index, d.fret);
+    let freq = d.frequency;
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text(title)).attr("class", "note-card-title"),
+                el("div", text(sub)).attr("class", "note-card-row"),
+                el("div", text(pos)).attr("class", "note-card-row"),
+                clickable(
+                    el("div", text("♪ Play")).attr("class", "note-card-play"),
+                    move |ui: &mut UiState, _| ui.preview_note_requested = Some(freq),
+                ),
+            ),
+        )
+        .attr("class", "note-card")
+        .attr("style", format!("left:{left:.1}px; top:{top:.1}px; width:{CARD_W:.1}px")),
+    ) as UiChild
+}
+
 pub(super) fn board(ui: &UiState) -> UiChild {
     let state = &ui.stage;
     if state.lens == Lens::Arpeggios {
@@ -1105,48 +1253,95 @@ pub(super) fn board(ui: &UiState) -> UiChild {
     if state.lens == Lens::Exercises {
         return exercise_board_view(ui);
     }
-    let dots: HashMap<(usize, u8), (bool, String)> = state
-        .dots()
-        .into_iter()
-        .map(|d| ((d.string_index, d.fret), (d.is_root, d.label)))
+    let dot_list = state.dots();
+    let string_count = state.string_count();
+    // The board is painted by a Sprigging leaf (crisp strings/wires/nut/inlays
+    // and coloured markers). Over it sit two CSS layers: the note labels (each a
+    // click target that pins its detail card — multi-pin, so clicking toggles)
+    // and the pinned cards. Positions come from the leaf's own marker geometry so
+    // overlay and paint align.
+    let (w, h) = fretboard_px_size(string_count, state.fret_count);
+    let labels: Vec<UiChild> = dot_list
+        .iter()
+        .map(|d| {
+            let (si, fret) = (d.string_index, d.fret);
+            let lx = note_center_x(fret) - MARKER_W / 2.0;
+            let ly = string_center_y(si) - MARKER_H / 2.0;
+            let class = if ui.is_pinned(si, fret) {
+                "fret-label pinned"
+            } else {
+                "fret-label"
+            };
+            Box::new(clickable(
+                el("div", text(d.label.clone())).attr("class", class).attr(
+                    "style",
+                    format!("left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"),
+                ),
+                move |ui: &mut UiState, _| ui.toggle_pin(si, fret),
+            )) as UiChild
+        })
         .collect();
-    let rows: Vec<UiChild> = (0..state.string_count())
-        .map(|string_index| {
-            let cells: Vec<UiChild> = (0..=state.fret_count)
-                .map(|fret| {
-                    let cell_class = if fret == 0 { "fret nut-gap" } else { "fret" };
-                    match dots.get(&(string_index, fret)) {
-                        Some((is_root, label)) => {
-                            let dot_class = if *is_root { "dot root-dot" } else { "dot" };
-                            Box::new(
-                                el(
-                                    "div",
-                                    (el("div", text(label.clone())).attr("class", dot_class),),
-                                )
-                                .attr("class", cell_class),
-                            ) as UiChild
-                        }
-                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
-                    }
-                })
-                .collect();
-            Box::new(el("div", cells).attr("class", "string")) as UiChild
+    let cards: Vec<UiChild> = ui
+        .pinned_markers
+        .iter()
+        .filter_map(|&(si, fret)| {
+            dot_list
+                .iter()
+                .find(|d| d.string_index == si && d.fret == fret)
+                .map(|d| note_card(d, string_count))
         })
         .collect();
     Box::new(
         el(
             "div",
             (
-                el("div", rows),
                 el(
                     "div",
-                    text(format!(
-                        "{} — {} positions",
-                        state.material_name(),
-                        dots.len()
-                    )),
+                    (
+                        custom_leaf::<UiState, ()>(FRETBOARD_LEAF_KEY, w, h),
+                        el("div", labels).attr("class", "label-layer"),
+                        el("div", cards).attr("class", "card-layer"),
+                    ),
                 )
-                .attr("class", "scale-name"),
+                .attr("class", "fretboard-stack")
+                .attr("style", format!("width:{w}px; height:{h}px")),
+                el(
+                    "div",
+                    (
+                        clickable(
+                            el(
+                                "div",
+                                text(if state.scale_run_playing {
+                                    "■ Stop"
+                                } else {
+                                    "♪ Run"
+                                }),
+                            )
+                            .attr("class", "run-btn"),
+                            |ui: &mut UiState, _| ui.stage.toggle_scale_run(),
+                        ),
+                        el(
+                            "div",
+                            text(format!(
+                                "{} — {} positions",
+                                state.material_name(),
+                                dot_list.len()
+                            )),
+                        )
+                        .attr("class", "scale-name"),
+                        (!ui.pinned_markers.is_empty()).then(|| {
+                            clickable(
+                                el(
+                                    "div",
+                                    text(format!("Close {} cards", ui.pinned_markers.len())),
+                                )
+                                .attr("class", "clear-pins"),
+                                |ui: &mut UiState, _| ui.clear_pins(),
+                            )
+                        }),
+                    ),
+                )
+                .attr("class", "board-caption"),
             ),
         )
         .attr("class", "board"),
@@ -1220,8 +1415,14 @@ fn search_view(ui: &UiState) -> UiChild {
             .attr("class", "search-list")
             .attr("style", "position: absolute; top: 100%; right: 0;")
     });
+    // The field renders its buffer as element content, so it has no native
+    // placeholder; overlay a hint while the query is empty. It is pointer-transparent
+    // (see `.search-hint`), so clicking the hint still focuses the field.
+    let hint = query
+        .is_empty()
+        .then(|| el("div", text("Search catalog")).attr("class", "search-hint"));
     Box::new(
-        el("div", (field, list))
+        el("div", (field, hint, list))
             .attr("class", "search-wrap")
             .attr("style", "position: relative;"),
     )

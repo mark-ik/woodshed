@@ -328,12 +328,27 @@ fn fretboard_page(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
+    let markers: Vec<UiChild> = ["Sharp", "Rounded", "Circle", "Diamond"]
+        .iter()
+        .map(|&name| {
+            let active = ui.app_settings.fretboard.marker_style.as_str() == name;
+            let class = if active { "side-item side-active" } else { "side-item" };
+            Box::new(clickable(
+                el("div", text(name)).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.app_settings.fretboard.marker_style = name.to_string();
+                },
+            )) as UiChild
+        })
+        .collect();
     Box::new(
         el(
             "div",
             (
-                el("div", text("Fretboard")).attr("class", "settings-heading"),
+                el("div", text("Layout")).attr("class", "settings-heading"),
                 el("div", layouts).attr("class", "settings-options"),
+                el("div", text("Markers")).attr("class", "settings-heading settings-gap"),
+                el("div", markers).attr("class", "settings-options"),
             ),
         )
         .attr("class", "board settings-page"),

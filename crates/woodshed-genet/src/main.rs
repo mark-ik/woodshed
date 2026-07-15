@@ -107,6 +107,8 @@ struct App {
     neighborhood_leaves: sprigging::LeafRegistry<u64>,
     neighborhood_rendered: sprigging::RenderedLeaves,
     neighborhood_sig: u64,
+    fretboard_sig: u64,
+    rehearsal_fretboard_sig: u64,
     sheet: String,
     /// Cursor position in logical coordinates.
     cursor: (f32, f32),
@@ -263,6 +265,130 @@ impl App {
         self.neighborhood_sig = sig;
     }
 
+    /// Rebuild the fretboard leaf from the current board when it changes. Mirrors
+    /// [`Self::sync_neighborhood_leaf`]: the board's dots plus its shape are the
+    /// model; the leaf paints the neck and markers.
+    fn sync_fretboard_leaf(&mut self) {
+        let Some(runner) = self.runner.as_ref() else {
+            return;
+        };
+        let state = runner.state();
+        let st = &state.stage;
+        let string_count = st.string_count();
+        let fret_count = st.fret_count;
+        let marker_style = state.app_settings.fretboard.marker_style.clone();
+        let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
+            .dots()
+            .into_iter()
+            .map(|d| woodshed_views::fretboard_leaf::Dot {
+                string_index: d.string_index,
+                fret: d.fret,
+                is_root: d.is_root,
+                muted: false,
+            })
+            .collect();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        string_count.hash(&mut hasher);
+        fret_count.hash(&mut hasher);
+        marker_style.hash(&mut hasher);
+        for d in &dots {
+            d.string_index.hash(&mut hasher);
+            d.fret.hash(&mut hasher);
+            d.is_root.hash(&mut hasher);
+        }
+        let sig = hasher.finish();
+        if sig == self.fretboard_sig {
+            return;
+        }
+        let leaf = woodshed_views::fretboard_leaf::FretboardLeaf::new(
+            string_count,
+            fret_count,
+            dots,
+            woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
+        );
+        self.neighborhood_leaves
+            .insert(woodshed_views::fretboard_leaf::FRETBOARD_LEAF_KEY, Box::new(leaf));
+        self.fretboard_sig = sig;
+    }
+
+    /// Push the scale run's active note into the fretboard leaf each frame so the
+    /// sounding note lights up. The leaf is otherwise only rebuilt on a board
+    /// change, and the run advances between those.
+    fn sync_fretboard_active(&mut self) {
+        let active = self.runner.as_ref().and_then(|r| {
+            let st = &r.state().stage;
+            st.scale_run_playing.then_some(st.scale_run_active).flatten()
+        });
+        if let Some(leaf) = self
+            .neighborhood_leaves
+            .get_mut_as::<woodshed_views::fretboard_leaf::FretboardLeaf>(
+                &woodshed_views::fretboard_leaf::FRETBOARD_LEAF_KEY,
+            )
+        {
+            leaf.set_active(active);
+        }
+    }
+
+    /// The Rehearsal board is a second fretboard leaf, fed from the card under
+    /// the cursor (not the live Stage lens) and carrying that card's muted
+    /// positions. Only rebuilt while Rehearsal is on screen and the model
+    /// changes; the labels overlay drives click-to-toggle.
+    fn sync_rehearsal_fretboard_leaf(&mut self) {
+        let Some(runner) = self.runner.as_ref() else {
+            return;
+        };
+        let state = runner.state();
+        if state.section != woodshed_core::storage::AppSection::Rehearsal
+            || state.set.cards.is_empty()
+        {
+            return;
+        }
+        let cursor = state.set.cursor.min(state.set.cards.len() - 1);
+        let card = &state.set.cards[cursor];
+        let st = &state.stage;
+        let string_count = st.string_count();
+        let fret_count = st.fret_count;
+        let marker_style = state.app_settings.fretboard.marker_style.clone();
+        let muted: std::collections::HashSet<(usize, u8)> =
+            card.setting.muted.iter().copied().collect();
+        let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
+            .dots_for_card(card)
+            .into_iter()
+            .map(|d| woodshed_views::fretboard_leaf::Dot {
+                string_index: d.string_index,
+                fret: d.fret,
+                is_root: d.is_root,
+                muted: muted.contains(&(d.string_index, d.fret)),
+            })
+            .collect();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        cursor.hash(&mut hasher);
+        string_count.hash(&mut hasher);
+        fret_count.hash(&mut hasher);
+        marker_style.hash(&mut hasher);
+        for d in &dots {
+            d.string_index.hash(&mut hasher);
+            d.fret.hash(&mut hasher);
+            d.is_root.hash(&mut hasher);
+            d.muted.hash(&mut hasher);
+        }
+        let sig = hasher.finish();
+        if sig == self.rehearsal_fretboard_sig {
+            return;
+        }
+        let leaf = woodshed_views::fretboard_leaf::FretboardLeaf::new(
+            string_count,
+            fret_count,
+            dots,
+            woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
+        );
+        self.neighborhood_leaves.insert(
+            woodshed_views::fretboard_leaf::REHEARSAL_FRETBOARD_LEAF_KEY,
+            Box::new(leaf),
+        );
+        self.rehearsal_fretboard_sig = sig;
+    }
+
     /// Refresh the shared view's transient width band after a resize or DPI
     /// change. The view only rebuilds when crossing a band boundary.
     fn sync_viewport(&mut self) {
@@ -378,7 +504,9 @@ impl App {
                 } else {
                     *last_rehearsal = None;
                 }
-                let stepping = ui.stage.arpeggio_playing || ui.stage.exercise_playing;
+                let stepping = ui.stage.arpeggio_playing
+                    || ui.stage.exercise_playing
+                    || ui.stage.scale_run_playing;
                 if stepping {
                     let beat =
                         std::time::Duration::from_secs_f32(60.0 / ui.transport.bpm.max(30.0));
@@ -396,6 +524,11 @@ impl App {
                             if ui.stage.exercise_playing {
                                 ui.stage.exercise_advance();
                                 if let Some(freq) = ui.stage.exercise_current_pitch_hz() {
+                                    backend.preview_note(freq, note_secs);
+                                }
+                            }
+                            if ui.stage.scale_run_playing {
+                                if let Some(freq) = ui.stage.scale_run_tick() {
                                     backend.preview_note(freq, note_secs);
                                 }
                             }
@@ -446,6 +579,9 @@ impl App {
         self.midi
             .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
         self.sync_neighborhood_leaf();
+        self.sync_fretboard_leaf();
+        self.sync_fretboard_active();
+        self.sync_rehearsal_fretboard_leaf();
         let tuner_live = animating;
         let (Some(window), Some(host), Some(runner)) = (
             self.window.as_ref(),
@@ -577,6 +713,9 @@ impl App {
                         if !pitches.is_empty() {
                             backend.preview_pitches(&pitches, dur, strum);
                         }
+                    }
+                    if let Some(freq) = ui.preview_note_requested.take() {
+                        backend.preview_note(freq, 0.9);
                     }
                     // Latency-calibration requests.
                     if std::mem::take(&mut ui.calib_start_requested) {
@@ -946,6 +1085,8 @@ fn main() {
         neighborhood_leaves: sprigging::LeafRegistry::new(),
         neighborhood_rendered: sprigging::RenderedLeaves::new(),
         neighborhood_sig: 0,
+        fretboard_sig: 0,
+        rehearsal_fretboard_sig: 0,
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),
         modifiers: ModifiersState::empty(),

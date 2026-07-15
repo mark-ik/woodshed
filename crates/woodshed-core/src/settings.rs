@@ -91,11 +91,16 @@ pub struct StageSettings {
 #[serde(default)]
 pub struct FretboardSettings {
     pub board_layout: String,
+    /// How the painted board draws its note markers: "Sharp" or "Rounded".
+    pub marker_style: String,
 }
 
 impl Default for FretboardSettings {
     fn default() -> Self {
-        Self { board_layout: "Two pane".into() }
+        Self {
+            board_layout: "Two pane".into(),
+            marker_style: "Sharp".into(),
+        }
     }
 }
 

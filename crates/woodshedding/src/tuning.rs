@@ -27,16 +27,34 @@ pub enum Instrument {
     Ukulele,
     Banjo,
     Mandolin,
+    Violin,
+    Viola,
+    Cello,
+    DoubleBass,
+    Bouzouki,
+    Charango,
+    Cavaquinho,
+    Balalaika,
+    MountainDulcimer,
     Other,
 }
 
 impl Instrument {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 15] = [
         Self::Guitar,
         Self::Bass,
         Self::Ukulele,
         Self::Banjo,
         Self::Mandolin,
+        Self::Violin,
+        Self::Viola,
+        Self::Cello,
+        Self::DoubleBass,
+        Self::Bouzouki,
+        Self::Charango,
+        Self::Cavaquinho,
+        Self::Balalaika,
+        Self::MountainDulcimer,
         Self::Other,
     ];
 }
@@ -49,6 +67,15 @@ impl fmt::Display for Instrument {
             Instrument::Ukulele => "Ukulele",
             Instrument::Banjo => "Banjo",
             Instrument::Mandolin => "Mandolin",
+            Instrument::Violin => "Violin",
+            Instrument::Viola => "Viola",
+            Instrument::Cello => "Cello",
+            Instrument::DoubleBass => "Double Bass",
+            Instrument::Bouzouki => "Bouzouki",
+            Instrument::Charango => "Charango",
+            Instrument::Cavaquinho => "Cavaquinho",
+            Instrument::Balalaika => "Balalaika",
+            Instrument::MountainDulcimer => "Mountain Dulcimer",
             Instrument::Other => "Other",
         })
     }
@@ -1329,6 +1356,239 @@ static CATALOG: &[TuningSpec] = &[
         instrument: Instrument::Mandolin,
         category: TuningCategory::Specialized,
     },
+    // === BOWED FAMILY ===
+    // The orchestral string family. Violin/viola/cello are tuned in fifths and
+    // share the mandolin family's pitches (mandolin=violin, mandola=viola,
+    // mandocello=cello); the double bass is the outlier, tuned in fourths. The
+    // model does not care that these are fretless — that is a rendering concern.
+    TuningSpec {
+        // GDAE, in fifths — identical pitches to the mandolin
+        name: "Standard",
+        strings: &[
+            p(NoteName::G, 3),
+            p(NoteName::D, 4),
+            p(NoteName::A, 4),
+            p(NoteName::E, 5),
+        ],
+        instrument: Instrument::Violin,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // Old-time fiddle cross-tuning: first string up to A (AEAE)
+        name: "Cross-tuning (AEAE)",
+        strings: &[
+            p(NoteName::A, 3),
+            p(NoteName::E, 4),
+            p(NoteName::A, 4),
+            p(NoteName::E, 5),
+        ],
+        instrument: Instrument::Violin,
+        category: TuningCategory::Specialized,
+    },
+    TuningSpec {
+        // "Sawmill"/"Calico" cross-tuning (ADAE)
+        name: "Cross-tuning (ADAE)",
+        strings: &[
+            p(NoteName::A, 3),
+            p(NoteName::D, 4),
+            p(NoteName::A, 4),
+            p(NoteName::E, 5),
+        ],
+        instrument: Instrument::Violin,
+        category: TuningCategory::Specialized,
+    },
+    TuningSpec {
+        // CGDA, in fifths — a fifth below the violin, identical to the mandola
+        name: "Standard",
+        strings: &[
+            p(NoteName::C, 3),
+            p(NoteName::G, 3),
+            p(NoteName::D, 4),
+            p(NoteName::A, 4),
+        ],
+        instrument: Instrument::Viola,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // CGDA, in fifths — one octave below the viola, identical to mandocello
+        name: "Standard",
+        strings: &[
+            p(NoteName::C, 2),
+            p(NoteName::G, 2),
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+        ],
+        instrument: Instrument::Cello,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // 5-string cello adds a high E above the A
+        name: "5-string (high E)",
+        strings: &[
+            p(NoteName::C, 2),
+            p(NoteName::G, 2),
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::E, 4),
+        ],
+        instrument: Instrument::Cello,
+        category: TuningCategory::ExtendedRange,
+    },
+    TuningSpec {
+        // Orchestral double bass: EADG in fourths (the bowed-family outlier).
+        // Same pitches as a bass guitar's low four, a different instrument.
+        name: "Orchestral (fourths)",
+        strings: &[
+            p(NoteName::E, 1),
+            p(NoteName::A, 1),
+            p(NoteName::D, 2),
+            p(NoteName::G, 2),
+        ],
+        instrument: Instrument::DoubleBass,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // Solo tuning: a whole step up (F#BEA), still in fourths
+        name: "Solo (fourths)",
+        strings: &[
+            ps(NoteName::F, 1),
+            p(NoteName::B, 1),
+            p(NoteName::E, 2),
+            p(NoteName::A, 2),
+        ],
+        instrument: Instrument::DoubleBass,
+        category: TuningCategory::AlternativeStandard,
+    },
+    TuningSpec {
+        // 5-string double bass adds a low B below the E
+        name: "5-string (low B)",
+        strings: &[
+            p(NoteName::B, 0),
+            p(NoteName::E, 1),
+            p(NoteName::A, 1),
+            p(NoteName::D, 2),
+            p(NoteName::G, 2),
+        ],
+        instrument: Instrument::DoubleBass,
+        category: TuningCategory::ExtendedRange,
+    },
+    // === WORLD / FOLK ===
+    // Common fretted 12-TET instruments. Multi-course instruments (bouzouki,
+    // charango, cavaquinho) are modelled as one string per course, as the
+    // mandolin is; the doubled/octave strings are a courses-phase refinement.
+    // The mountain dulcimer's tuning is faithful, but its real fretboard is
+    // diatonic, which is a fret-pattern refinement for a later phase.
+    // --- Bouzouki (Irish 4-course and Greek) ---
+    TuningSpec {
+        // Irish bouzouki, the most common Irish tuning (GDAD)
+        name: "Irish (GDAD)",
+        strings: &[
+            p(NoteName::G, 2),
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::D, 4),
+        ],
+        instrument: Instrument::Bouzouki,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // Irish bouzouki in fifths (GDAE) — same pitches as octave mandolin
+        name: "Irish (GDAE)",
+        strings: &[
+            p(NoteName::G, 2),
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::E, 4),
+        ],
+        instrument: Instrument::Bouzouki,
+        category: TuningCategory::AlternativeStandard,
+    },
+    TuningSpec {
+        // Modern Greek bouzouki, four-course (tetrachordo): CFAD
+        name: "Greek Tetrachordo (CFAD)",
+        strings: &[
+            p(NoteName::C, 3),
+            p(NoteName::F, 3),
+            p(NoteName::A, 3),
+            p(NoteName::D, 4),
+        ],
+        instrument: Instrument::Bouzouki,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // Older Greek bouzouki, three-course (trichordo): DAD
+        name: "Greek Trichordo (DAD)",
+        strings: &[
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::D, 4),
+        ],
+        instrument: Instrument::Bouzouki,
+        category: TuningCategory::AlternativeStandard,
+    },
+    // --- Charango (Andean 5-course, re-entrant) ---
+    TuningSpec {
+        // Standard GCEAE; the centre E course is a re-entrant octave pair on a
+        // real charango (the "little bird"), flattened to one string here.
+        name: "Standard (GCEAE)",
+        strings: &[
+            p(NoteName::G, 4),
+            p(NoteName::C, 5),
+            p(NoteName::E, 5),
+            p(NoteName::A, 4),
+            p(NoteName::E, 5),
+        ],
+        instrument: Instrument::Charango,
+        category: TuningCategory::Standard,
+    },
+    // --- Cavaquinho (Brazilian 4-string) ---
+    TuningSpec {
+        // Brazilian cavaquinho standard: DGBD
+        name: "Brazilian (DGBD)",
+        strings: &[
+            p(NoteName::D, 4),
+            p(NoteName::G, 4),
+            p(NoteName::B, 4),
+            p(NoteName::D, 5),
+        ],
+        instrument: Instrument::Cavaquinho,
+        category: TuningCategory::Standard,
+    },
+    // --- Balalaika (prima, 3-string) ---
+    TuningSpec {
+        // Prima balalaika academic tuning: two unison E strings and an A (EEA)
+        name: "Prima (EEA)",
+        strings: &[
+            p(NoteName::E, 4),
+            p(NoteName::E, 4),
+            p(NoteName::A, 4),
+        ],
+        instrument: Instrument::Balalaika,
+        category: TuningCategory::Standard,
+    },
+    // --- Mountain dulcimer (Appalachian, diatonic frets) ---
+    TuningSpec {
+        // Modern Ionian DAD
+        name: "D-A-D",
+        strings: &[
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::D, 4),
+        ],
+        instrument: Instrument::MountainDulcimer,
+        category: TuningCategory::Standard,
+    },
+    TuningSpec {
+        // Older Ionian D-A-A
+        name: "D-A-A",
+        strings: &[
+            p(NoteName::D, 3),
+            p(NoteName::A, 3),
+            p(NoteName::A, 3),
+        ],
+        instrument: Instrument::MountainDulcimer,
+        category: TuningCategory::AlternativeStandard,
+    },
 ];
 
 #[cfg(test)]
@@ -1658,5 +1918,136 @@ mod tests {
         for (i, m) in irish.strings.iter().zip(mandolin.strings.iter()) {
             assert_eq!(m.midi() - i.midi(), 12);
         }
+    }
+
+    // === Bowed family (first-pass instrument variety) ===
+
+    #[test]
+    fn bowed_family_are_named_instruments() {
+        assert!(Tuning::find_for("Standard", Instrument::Violin).is_some());
+        assert!(Tuning::find_for("Standard", Instrument::Viola).is_some());
+        assert!(Tuning::find_for("Standard", Instrument::Cello).is_some());
+        assert!(Tuning::find_for("Orchestral (fourths)", Instrument::DoubleBass).is_some());
+    }
+
+    #[test]
+    fn violin_viola_cello_match_the_mandolin_family_pitches() {
+        // Same fifths tunings, so the pitches are identical to the
+        // mandolin-family entries they were previously only reachable through.
+        let violin = Tuning::find_for("Standard", Instrument::Violin).unwrap();
+        let mandolin = Tuning::find_for("Standard", Instrument::Mandolin).unwrap();
+        assert_eq!(pitch_midis(&violin), pitch_midis(&mandolin));
+
+        let viola = Tuning::find_for("Standard", Instrument::Viola).unwrap();
+        let mandola = Tuning::find_for("Mandola (CGDA)", Instrument::Mandolin).unwrap();
+        assert_eq!(pitch_midis(&viola), pitch_midis(&mandola));
+
+        let cello = Tuning::find_for("Standard", Instrument::Cello).unwrap();
+        let mandocello = Tuning::find_for("Mandocello (CGDA)", Instrument::Mandolin).unwrap();
+        assert_eq!(pitch_midis(&cello), pitch_midis(&mandocello));
+    }
+
+    #[test]
+    fn bowed_quartet_standard_tunings_are_in_fifths() {
+        for inst in [Instrument::Violin, Instrument::Viola, Instrument::Cello] {
+            let t = Tuning::find_for("Standard", inst).unwrap();
+            for w in pitch_midis(&t).windows(2) {
+                assert_eq!(w[1] - w[0], 7, "{inst} strings should be a perfect fifth apart");
+            }
+        }
+    }
+
+    #[test]
+    fn cello_is_an_octave_below_viola() {
+        let viola = Tuning::find_for("Standard", Instrument::Viola).unwrap();
+        let cello = Tuning::find_for("Standard", Instrument::Cello).unwrap();
+        for (c, v) in cello.strings.iter().zip(viola.strings.iter()) {
+            assert_eq!(v.midi() - c.midi(), 12);
+        }
+    }
+
+    #[test]
+    fn double_bass_orchestral_is_in_fourths() {
+        let db = Tuning::find_for("Orchestral (fourths)", Instrument::DoubleBass).unwrap();
+        for w in pitch_midis(&db).windows(2) {
+            assert_eq!(w[1] - w[0], 5, "double bass orchestral strings should be a perfect fourth apart");
+        }
+    }
+
+    #[test]
+    fn catalog_for_covers_the_bowed_family() {
+        assert!(catalog_for(Instrument::Violin).count() >= 1);
+        assert!(catalog_for(Instrument::Viola).count() >= 1);
+        assert!(catalog_for(Instrument::Cello).count() >= 1);
+        assert!(catalog_for(Instrument::DoubleBass).count() >= 1);
+    }
+
+    #[test]
+    fn find_disambiguates_bass_from_double_bass() {
+        // "Orchestral (fourths)" double bass and a bass guitar's "Standard 4"
+        // share pitches but are different instruments.
+        let db = Tuning::find_for("Orchestral (fourths)", Instrument::DoubleBass).unwrap();
+        let bass = Tuning::find_for("Standard 4", Instrument::Bass).unwrap();
+        assert_eq!(pitch_midis(&db), pitch_midis(&bass));
+        assert_ne!(db.instrument, bass.instrument);
+    }
+
+    // === World / folk (second-pass instrument variety) ===
+
+    #[test]
+    fn world_folk_are_named_instruments() {
+        assert!(Tuning::find_for("Irish (GDAD)", Instrument::Bouzouki).is_some());
+        assert!(Tuning::find_for("Standard (GCEAE)", Instrument::Charango).is_some());
+        assert!(Tuning::find_for("Brazilian (DGBD)", Instrument::Cavaquinho).is_some());
+        assert!(Tuning::find_for("Prima (EEA)", Instrument::Balalaika).is_some());
+        assert!(Tuning::find_for("D-A-D", Instrument::MountainDulcimer).is_some());
+    }
+
+    #[test]
+    fn irish_bouzouki_gdae_shares_octave_mandolin_pitches() {
+        // GDAE Irish bouzouki is tuned one octave below the mandolin, which is
+        // exactly the octave mandolin already in the catalog.
+        let bouzouki = Tuning::find_for("Irish (GDAE)", Instrument::Bouzouki).unwrap();
+        let octave_mando = Tuning::find_for("Octave Mandolin", Instrument::Mandolin).unwrap();
+        assert_eq!(pitch_midis(&bouzouki), pitch_midis(&octave_mando));
+    }
+
+    #[test]
+    fn balalaika_prima_has_two_unison_e_strings() {
+        let t = Tuning::find_for("Prima (EEA)", Instrument::Balalaika).unwrap();
+        assert_eq!(t.string_count(), 3);
+        assert_eq!(t.strings[0], t.strings[1]);
+        assert_eq!(t.strings[0], Pitch::natural(NoteName::E, 4));
+    }
+
+    #[test]
+    fn charango_standard_is_re_entrant() {
+        // The centre course sits above the one after it (GCEAE): not monotonic.
+        let t = Tuning::find_for("Standard (GCEAE)", Instrument::Charango).unwrap();
+        assert_eq!(t.string_count(), 5);
+        let midis = pitch_midis(&t);
+        assert!(
+            midis.windows(2).any(|w| w[1] < w[0]),
+            "charango is re-entrant, some string dips below its predecessor"
+        );
+    }
+
+    #[test]
+    fn cavaquinho_brazilian_is_dgbd() {
+        let t = Tuning::find_for("Brazilian (DGBD)", Instrument::Cavaquinho).unwrap();
+        let names: Vec<NoteName> = t.strings.iter().map(|p| p.name).collect();
+        assert_eq!(
+            names,
+            vec![NoteName::D, NoteName::G, NoteName::B, NoteName::D]
+        );
+    }
+
+    #[test]
+    fn catalog_for_covers_world_folk() {
+        assert!(catalog_for(Instrument::Bouzouki).count() >= 1);
+        assert!(catalog_for(Instrument::Charango).count() >= 1);
+        assert!(catalog_for(Instrument::Cavaquinho).count() >= 1);
+        assert!(catalog_for(Instrument::Balalaika).count() >= 1);
+        assert!(catalog_for(Instrument::MountainDulcimer).count() >= 1);
     }
 }

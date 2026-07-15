@@ -119,6 +119,12 @@ pub struct Setting {
     /// = use the live fret window.
     #[serde(default)]
     pub fret_window: Option<FretWindow>,
+    /// Board positions the player has deactivated on this card, as
+    /// guitar-model `(string_index, fret)`. A muted position still renders
+    /// (dimmed) and stays clickable to reactivate — the board is a material
+    /// editor. Neck-space, so it lives with the setting.
+    #[serde(default)]
+    pub muted: Vec<(usize, u8)>,
 }
 
 /// How you play the card.

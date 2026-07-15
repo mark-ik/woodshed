@@ -11,4 +11,5 @@ description = "Woodshed's Cambium view layer: view fns + CSS sheets for the Gene
 woodshed-core = { workspace = true }
 woodshedding = { workspace = true }
 cambium = { workspace = true }
+sprigging = { workspace = true }
 tinct = { workspace = true }

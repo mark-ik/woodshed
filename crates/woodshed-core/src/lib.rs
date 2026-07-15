@@ -118,6 +118,45 @@ pub const ROOT_NAMES: [&str; 12] = [
 /// resolution (pitch-class matching) but midi space needs one.
 const ROOT_BASE_MIDI: i32 = 57;
 
+/// Scale-degree label for an interval measured in semitones from the root
+/// ("1", "b3", "5"). Empty for anything outside an octave slot.
+pub fn degree_label(semitones: i32) -> &'static str {
+    match semitones.rem_euclid(12) {
+        0 => "1",
+        1 => "b2",
+        2 => "2",
+        3 => "b3",
+        4 => "3",
+        5 => "4",
+        6 => "b5",
+        7 => "5",
+        8 => "b6",
+        9 => "6",
+        10 => "b7",
+        11 => "7",
+        _ => "",
+    }
+}
+
+/// Interval name from the root ("Root", "Minor 3rd") for a semitone distance.
+pub fn interval_name(semitones: i32) -> &'static str {
+    match semitones.rem_euclid(12) {
+        0 => "Root",
+        1 => "Minor 2nd",
+        2 => "Major 2nd",
+        3 => "Minor 3rd",
+        4 => "Major 3rd",
+        5 => "Perfect 4th",
+        6 => "Tritone",
+        7 => "Perfect 5th",
+        8 => "Minor 6th",
+        9 => "Major 6th",
+        10 => "Minor 7th",
+        11 => "Major 7th",
+        _ => "",
+    }
+}
+
 /// One rendered fretboard dot: a position resolved against the current
 /// tuning, ready for a view layer to place.
 #[derive(Clone, Debug)]
@@ -128,15 +167,28 @@ pub struct FretDot {
     pub is_root: bool,
     /// Note name without octave ("A", "C#") — the dot label.
     pub label: String,
+    /// Pitch octave, for the detail card.
+    pub octave: i8,
+    /// Scale degree relative to the root ("1", "b3"), empty if unknown.
+    pub degree: String,
+    /// Interval name from the root ("Root", "Minor 3rd"), empty if unknown.
+    pub interval_name: String,
+    /// The note's frequency in Hz, for the card's play button (0.0 if unknown).
+    pub frequency: f32,
 }
 
 impl FretDot {
     fn from_position(p: Position) -> Self {
+        let semis = p.interval_from_root.map(|i| i.semitones());
         Self {
             string_index: p.string_index,
             fret: p.fret,
-            is_root: p.interval_from_root.is_some_and(|i| i.semitones() == 0),
+            is_root: semis == Some(0),
             label: format!("{}{}", p.pitch.name, p.pitch.accidental),
+            octave: p.pitch.octave,
+            degree: semis.map(degree_label).unwrap_or("").to_string(),
+            interval_name: semis.map(interval_name).unwrap_or("").to_string(),
+            frequency: p.pitch.frequency() as f32,
         }
     }
 }
@@ -165,6 +217,13 @@ pub struct StageState {
     pub arpeggio_step_idx: usize,
     /// True while the step-through transport is auto-advancing.
     pub arpeggio_playing: bool,
+    /// Scale-run transport (Scale/Chord lens): step through the board's notes at
+    /// tempo, sounding and highlighting each. The keystone of touch-as-behavior;
+    /// transient (not persisted).
+    pub scale_run_playing: bool,
+    pub scale_run_step: usize,
+    /// The note sounding right now during a run, for the board highlight.
+    pub scale_run_active: Option<(usize, u8)>,
     pub arpeggio_direction: ArpeggioDirection,
     /// Inversion: which chord tone the run starts on (0 = root),
     /// clamped to the tone count.
@@ -480,6 +539,9 @@ impl StageState {
             arpeggio_position_idx: 0,
             arpeggio_step_idx: 0,
             arpeggio_playing: false,
+            scale_run_playing: false,
+            scale_run_step: 0,
+            scale_run_active: None,
             arpeggio_direction: ArpeggioDirection::default(),
             arpeggio_inversion: 0,
             progression_idx: None,
@@ -985,6 +1047,12 @@ impl StageState {
                                 } else {
                                     s.finger.to_string()
                                 },
+                                // Exercise steps carry a finger, not a resolved
+                                // pitch, so there is no note detail to show.
+                                octave: 0,
+                                degree: String::new(),
+                                interval_name: String::new(),
+                                frequency: 0.0,
                             })
                             .collect()
                     })
@@ -1001,14 +1069,7 @@ impl StageState {
             .map(|ps| {
                 ps.into_iter()
                     .filter(|p| in_window(p.fret))
-                    .map(|p| FretDot {
-                        string_index: p.string_index,
-                        fret: p.fret,
-                        is_root: p
-                            .interval_from_root
-                            .is_some_and(|iv| iv.semitones() == 0),
-                        label: format!("{}{}", p.pitch.name, p.pitch.accidental),
-                    })
+                    .map(FretDot::from_position)
                     .collect()
             })
             .unwrap_or_default()
@@ -1061,14 +1122,7 @@ impl StageState {
             .positions_for_chord(chord.formula, chord.root)
             .map(|ps| {
                 ps.into_iter()
-                    .map(|p| FretDot {
-                        string_index: p.string_index,
-                        fret: p.fret,
-                        is_root: p
-                            .interval_from_root
-                            .is_some_and(|iv| iv.semitones() == 0),
-                        label: format!("{}{}", p.pitch.name, p.pitch.accidental),
-                    })
+                    .map(FretDot::from_position)
                     .collect()
             })
             .unwrap_or_default();
@@ -1118,6 +1172,38 @@ impl StageState {
 
     pub fn arpeggio_advance(&mut self) {
         self.arpeggio_step_idx = self.arpeggio_step_idx.wrapping_add(1);
+    }
+
+    /// The scale-run path: the current board dots sorted ascending by pitch, each
+    /// as `(string, fret, frequency)`. A run climbs the neck through them.
+    pub fn scale_run_path(&self) -> Vec<(usize, u8, f32)> {
+        let mut dots: Vec<(usize, u8, f32)> = self
+            .dots()
+            .into_iter()
+            .map(|d| (d.string_index, d.fret, d.frequency))
+            .collect();
+        dots.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+        dots
+    }
+
+    /// Advance the run one step: mark the note now sounding (for the board
+    /// highlight), return its frequency to play, and move the cursor on. Wraps.
+    pub fn scale_run_tick(&mut self) -> Option<f32> {
+        let path = self.scale_run_path();
+        if path.is_empty() {
+            self.scale_run_active = None;
+            return None;
+        }
+        let (s, f, freq) = path[self.scale_run_step % path.len()];
+        self.scale_run_active = Some((s, f));
+        self.scale_run_step = self.scale_run_step.wrapping_add(1);
+        Some(freq)
+    }
+
+    pub fn toggle_scale_run(&mut self) {
+        self.scale_run_playing = !self.scale_run_playing;
+        self.scale_run_step = 0;
+        self.scale_run_active = None;
     }
 
     /// The inversion's bass tone (the run's starting chord tone).

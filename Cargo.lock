@@ -6707,6 +6707,7 @@ name = "woodshed-views"
 version = "0.1.0"
 dependencies = [
  "cambium",
+ "sprigging",
  "tinct",
  "woodshed-core",
  "woodshedding",

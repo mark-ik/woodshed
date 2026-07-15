@@ -10,6 +10,7 @@
 //! static [`demo`] module is kept for host smoke tests until S2.
 
 pub mod demo;
+pub mod fretboard_leaf;
 pub mod stage;
 pub mod theme;
 

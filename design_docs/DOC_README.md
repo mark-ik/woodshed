@@ -13,6 +13,29 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-07-15_material_and_touch_model.md](2026-07-15_material_and_touch_model.md)
+  — **The unifying model.** Content is arranged notes and relationships; the five
+  lenses are treatments, not content types. Two axes: Material (with an
+  abstraction level, so progressions assemble from key-free generics) and Touch
+  (content-aware path, rhythm, and selection). Playback as the expression of
+  touch is the keystone; the board becomes a material editor (click to toggle
+  membership). Reframes the Stage/Set model; phased path from stepping-playback
+  through generics and authoring.
+- [2026-07-15_fretboard_marker_detail_plan.md](2026-07-15_fretboard_marker_detail_plan.md)
+  — **Interactive fretboard markers.** Hover a marker for an ephemeral detail
+  card, click to pin (multi-pin, to compare). The card shows note name, scale
+  degree, interval, octave, string/fret, and plays the note. Interaction lives in
+  the view-layer per-marker overlay, not the leaf; hover peek uses CSS `:hover`
+  today (genet has no hover events yet) and moves to real hover events when they
+  land. Design-doc-first; not built yet.
+- [2026-07-14_instruments_and_fretboard_rendering_plan.md](2026-07-14_instruments_and_fretboard_rendering_plan.md)
+  — **Instrument variety and configurable fretboard rendering.** The theory model
+  is already tuning-general, so this is additive catalog work (bowed family and
+  world instruments) plus a view redesign: note *regions* instead of dots,
+  realistic vs schematic spacing (automatic, ratio-only), full-neck vs windowed
+  extent, markers, and scale-degree fill, all exposed in Settings. Phases A/B
+  (pure `woodshedding`) verify independently of the blocked host build; courses,
+  microtonal frets, and physical scale length are flagged out of scope.
 - [2026-07-11_audio_material_analysis_plan.md](2026-07-11_audio_material_analysis_plan.md)
   — **The audio-to-material research lane.** Treats recordings as immutable
   evidence and model output as versioned observations; defines a model-neutral
