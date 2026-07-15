@@ -1,6 +1,6 @@
 use woodshed_core::step_set;
-use woodshedding::rehearsal::{LoopMode, Recipe};
-use cambium::{clickable, custom_leaf, el, text};
+use woodshedding::rehearsal::{LoopMode, MarkMode, Recipe};
+use cambium::{clickable, custom_leaf, el, on_hover, text, HoverEvent, HoverPhase};
 
 use super::{UiChild, UiState};
 use crate::fretboard_leaf::{
@@ -151,10 +151,11 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
     let editor = super::set_tray::card_editor(ui);
 
     // Current card's material on the big board — the same Sprigging paint leaf
-    // the Stage board uses (crisp neck, coloured markers). Over it sits one
-    // clickable label per note: click toggles that note's membership in the card
-    // (deactivate / reactivate). A deactivated note stays visible, dimmed, so it
-    // remains a target to switch back on. This is the board-as-editor surface.
+    // the Stage board uses. Over it, one clickable label per note: click *marks*
+    // the note (a neutral selection, an accent ring). The [Off · Solo · Mute]
+    // control below sets what marks do (Solo plays only the marked, Mute
+    // silences them), and the board dims whatever the mode excludes. This is the
+    // Selection axis of touch, made interactive.
     let card = &ui.set.cards[cursor];
     let dot_list = ui.stage.dots_for_card(card);
     let string_count = ui.stage.string_count();
@@ -165,22 +166,58 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             let (si, fret) = (d.string_index, d.fret);
             let lx = note_center_x(fret) - MARKER_W / 2.0;
             let ly = string_center_y(si) - MARKER_H / 2.0;
-            let class = if ui.card_muted(si, fret) {
-                "fret-label muted"
-            } else {
-                "fret-label"
-            };
-            Box::new(clickable(
-                el("div", text(d.label.clone())).attr("class", class).attr(
-                    "style",
-                    format!(
-                        "left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"
+            let mut class = String::from("fret-label");
+            if ui.card_marked(si, fret) {
+                class.push_str(" marked");
+            }
+            if ui.card_excluded(si, fret) {
+                class.push_str(" excluded");
+            }
+            // click marks the note; hover peeks its detail card (the resolved
+            // "click marks, hover shows").
+            Box::new(on_hover(
+                clickable(
+                    el("div", text(d.label.clone())).attr("class", class).attr(
+                        "style",
+                        format!(
+                            "left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"
+                        ),
                     ),
+                    move |ui: &mut UiState, _| ui.toggle_card_mark(si, fret),
                 ),
-                move |ui: &mut UiState, _| ui.toggle_card_mute(si, fret),
+                move |ui: &mut UiState, ev: HoverEvent| match ev.phase {
+                    HoverPhase::Enter | HoverPhase::Move => ui.hover_peek = Some((si, fret)),
+                    HoverPhase::Leave => {
+                        if ui.hover_peek == Some((si, fret)) {
+                            ui.hover_peek = None;
+                        }
+                    }
+                },
             )) as UiChild
         })
         .collect();
+    // The hovered marker's ephemeral detail card (reuses the Stage board's card).
+    let peek: Vec<UiChild> = ui
+        .hover_peek
+        .and_then(|(si, fret)| {
+            dot_list
+                .iter()
+                .find(|d| d.string_index == si && d.fret == fret)
+                .map(|d| super::note_card(d, string_count))
+        })
+        .into_iter()
+        .collect();
+    // The mode control: a small [Off · Solo · Mute] segmented toggle, not a loose
+    // button row. Sets what the marked set does to this card.
+    let mode = ui.card_mark_mode();
+    let mark_count = card.setting.marked.len();
+    let seg = |m: MarkMode| -> UiChild {
+        let cls = if mode == m { "seg active" } else { "seg" };
+        Box::new(clickable(
+            el("div", text(m.label())).attr("class", cls),
+            move |ui: &mut UiState, _| ui.set_card_mark_mode(m),
+        )) as UiChild
+    };
     Box::new(el(
         "div",
         (
@@ -195,11 +232,30 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                         (
                             custom_leaf::<UiState, ()>(REHEARSAL_FRETBOARD_LEAF_KEY, w, h),
                             el("div", labels).attr("class", "label-layer"),
+                            el("div", peek).attr("class", "card-layer"),
                         ),
                     )
                     .attr("class", "fretboard-stack")
                     .attr("style", format!("width:{w}px; height:{h}px")),
-                    el("div", text(card.label.clone())).attr("class", "scale-name"),
+                    el(
+                        "div",
+                        (
+                            el(
+                                "div",
+                                (seg(MarkMode::Off), seg(MarkMode::Solo), seg(MarkMode::Mute)),
+                            )
+                            .attr("class", "mode-seg"),
+                            el("div", text(card.label.clone())).attr("class", "scale-name"),
+                            (mark_count > 0).then(|| {
+                                clickable(
+                                    el("div", text(format!("Clear {mark_count} marks")))
+                                        .attr("class", "clear-pins"),
+                                    |ui: &mut UiState, _| ui.clear_card_marks(),
+                                )
+                            }),
+                        ),
+                    )
+                    .attr("class", "board-caption"),
                 ),
             )
             .attr("class", "board"),

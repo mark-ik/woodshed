@@ -251,6 +251,7 @@ mod tests {
             },
             fretboard: crate::settings::FretboardSettings {
                 board_layout: "Hero".into(),
+                marker_style: "Sharp".into(),
             },
             metronome: crate::settings::MetronomeSettings { bpm: 96.0 },
             ..AppSettings::default()

@@ -99,6 +99,32 @@ pub struct FretWindow {
     pub span: u8,
 }
 
+/// What the card's marked notes mean for playback. Marking a note is a neutral
+/// selection; the mode is what you *do* with the selection. A general
+/// select-then-act primitive (the "node" is a fretboard marker here, but the
+/// same shape applies to graph nodes). Realizes the touch model's Selection
+/// axis: which notes take part.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MarkMode {
+    /// Marks are just a saved selection; every note still sounds.
+    #[default]
+    Off,
+    /// Only the marked notes play; the rest go quiet (and dim).
+    Solo,
+    /// The marked notes go quiet (and dim); the rest play.
+    Mute,
+}
+
+impl MarkMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Solo => "Solo",
+            Self::Mute => "Mute",
+        }
+    }
+}
+
 /// How the card sits on the neck (the space axis): instrument setup +
 /// where / which shape on the neck.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -119,12 +145,15 @@ pub struct Setting {
     /// = use the live fret window.
     #[serde(default)]
     pub fret_window: Option<FretWindow>,
-    /// Board positions the player has deactivated on this card, as
-    /// guitar-model `(string_index, fret)`. A muted position still renders
-    /// (dimmed) and stays clickable to reactivate — the board is a material
-    /// editor. Neck-space, so it lives with the setting.
+    /// Notes the player has marked on the board, as guitar-model
+    /// `(string_index, fret)`. Marking is a neutral selection; `mark_mode`
+    /// decides what it does to playback (solo / mute). Neck-space, so it lives
+    /// with the setting.
     #[serde(default)]
-    pub muted: Vec<(usize, u8)>,
+    pub marked: Vec<(usize, u8)>,
+    /// What the marked set does to playback and display.
+    #[serde(default)]
+    pub mark_mode: MarkMode,
 }
 
 /// How you play the card.

@@ -1,20 +1,29 @@
-use cambium::{clickable, custom_leaf, el, text};
+use cambium::{clickable, el, graph_canvas_swatch, on_hover, text, HoverEvent, HoverPhase};
+use woodshed_core::RelatedTarget;
 
-use super::{UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
+use super::{related_swatch, UiChild, UiState, RELATED_LIMIT};
 
 pub(super) fn panel(ui: &UiState) -> UiChild {
     let suggestions = ui.stage.related_material_configured(
         &ui.practice_history,
         &ui.app_settings.stage.related,
-        5,
+        RELATED_LIMIT,
     );
+
+    // The suggestions as a structured pane: one row each, columns for kind /
+    // name+why / actions. Hovering a row (or its graph node) highlights the
+    // other through `related_hover`; the copy navigates, Stage stages, × hides.
     let rows: Vec<UiChild> = suggestions
-        .into_iter()
+        .iter()
         .map(|item| {
-            let select_target = item.target;
-            let stage_target = item.target;
-            let dismiss_id = ui.stage.related_target_id(item.target);
-            Box::new(
+            let target = item.target;
+            let dismiss_id = ui.stage.related_target_id(target);
+            let row_class = if ui.related_hover == Some(target) {
+                "related-row hovered"
+            } else {
+                "related-row"
+            };
+            Box::new(on_hover(
                 el(
                     "div",
                     (
@@ -22,18 +31,23 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                             el(
                                 "div",
                                 (
-                                    el("div", text(format!("{} · {}", item.kind, item.title)))
-                                        .attr("class", "related-title"),
+                                    el("div", text(item.kind))
+                                        .attr("class", format!("related-kind kind-{}", item.kind.to_lowercase())),
                                     el(
                                         "div",
-                                        text(format!("{} · {}", item.score, item.reason)),
+                                        (
+                                            el("div", text(item.title.clone()))
+                                                .attr("class", "related-name"),
+                                            el("div", text(item.reason.clone()))
+                                                .attr("class", "related-why"),
+                                        ),
                                     )
-                                    .attr("class", "related-reason"),
+                                    .attr("class", "related-copy-text"),
                                 ),
                             )
                             .attr("class", "related-copy"),
                             move |ui: &mut UiState, _| {
-                                ui.stage.select_related(select_target);
+                                ui.stage.select_related(target);
                             },
                         ),
                         el(
@@ -43,12 +57,12 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                                     el("div", text("Stage")).attr("class", "related-stage"),
                                     move |ui: &mut UiState, _| {
                                         let from_id = ui.stage.catalog_id();
-                                        ui.stage.select_related(stage_target);
+                                        ui.stage.select_related(target);
                                         ui.stage_current(from_id);
                                     },
                                 ),
                                 clickable(
-                                    el("div", text("Hide")).attr("class", "related-hide"),
+                                    el("div", text("×")).attr("class", "related-hide"),
                                     move |ui: &mut UiState, _| {
                                         let related = &mut ui.app_settings.stage.related;
                                         if !related.dismissed_ids.contains(&dismiss_id) {
@@ -61,18 +75,55 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                         .attr("class", "related-actions"),
                     ),
                 )
-                .attr("class", "related-item"),
-            ) as UiChild
+                .attr("class", row_class),
+                move |ui: &mut UiState, ev: HoverEvent| match ev.phase {
+                    HoverPhase::Enter | HoverPhase::Move => ui.related_hover = Some(target),
+                    HoverPhase::Leave => {
+                        if ui.related_hover == Some(target) {
+                            ui.related_hover = None;
+                        }
+                    }
+                },
+            )) as UiChild
         })
         .collect();
 
-    let body: UiChild = if rows.is_empty() {
+    let pane: UiChild = if rows.is_empty() {
         Box::new(
             el("div", text("Choose material with catalog relations to see suggestions."))
                 .attr("class", "related-empty"),
         )
     } else {
         Box::new(el("div", rows).attr("class", "related-list"))
+    };
+
+    // The interactive graph swatch: click a node to navigate, hover to link it to
+    // its row, Expand to grow the canvas. Node click/hover route through the same
+    // dispatch the pane uses, so the two stay in sync.
+    let graph: UiChild = if ui.app_settings.stage.related.show_neighborhood {
+        let swatch = related_swatch(ui);
+        Box::new(
+            el(
+                "div",
+                graph_canvas_swatch(
+                    &swatch,
+                    |ui: &mut UiState, id: Option<RelatedTarget>| {
+                        if let Some(target) = id {
+                            ui.stage.select_related(target);
+                        }
+                    },
+                    |ui: &mut UiState, id: Option<Option<RelatedTarget>>| {
+                        ui.related_hover = id.flatten();
+                    },
+                    |ui: &mut UiState| {
+                        ui.related_expanded = !ui.related_expanded;
+                    },
+                ),
+            )
+            .attr("class", "related-graph-col"),
+        )
+    } else {
+        Box::new(el("div", ()))
     };
 
     let recent: Vec<UiChild> = ui
@@ -110,28 +161,16 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
             .attr("class", "related-history"),
         )
     };
-    let graph: UiChild = if ui.app_settings.stage.related.show_neighborhood {
-        Box::new(
-            el(
-                "div",
-                custom_leaf::<UiState, ()>(NEIGHBORHOOD_LEAF_KEY, 232, 112),
-            )
-            .attr("class", "related-graph"),
-        )
-    } else {
-        Box::new(el("div", ()))
-    };
 
     Box::new(
         el(
             "aside",
             (
                 el("div", text("Related")).attr("class", "related-heading"),
-                el("div", text("What might I stage next?"))
-                    .attr("class", "related-subtitle"),
-                graph,
+                el("div", text("What might I stage next?")).attr("class", "related-subtitle"),
+                el("div", (graph, el("div", pane).attr("class", "related-pane-col")))
+                    .attr("class", "related-body"),
                 history,
-                body,
             ),
         )
         .attr("class", "related-panel"),

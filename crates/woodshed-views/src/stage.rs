@@ -15,11 +15,12 @@ use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::settings::{AppSettings, SettingsPage};
 use woodshed_core::song::SongDoc;
 use woodshed_core::storage::{AppSection, PersistedSession};
-use woodshed_core::{set_from_practice, tunings, Lens, StageState, ROOT_NAMES};
-use woodshedding::rehearsal::{FretWindow, Hold, Set, Touch};
+use woodshed_core::{set_from_practice, tunings, Lens, RelatedTarget, StageState, ROOT_NAMES};
+use woodshedding::rehearsal::{Card, FretWindow, Hold, MarkMode, Set, Touch};
 use cambium::{
-    clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, SelectState,
-    GenetCtx, GenetElement, TextInput,
+    clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, GenetCtx,
+    GenetElement, GraphCanvasEdge, GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch,
+    SelectState, TextInput,
 };
 
 use crate::fretboard_leaf::{
@@ -37,6 +38,60 @@ mod templates;
 mod tools;
 
 pub const NEIGHBORHOOD_LEAF_KEY: u64 = 0x5753_4e42;
+
+/// How many related suggestions the graph swatch and the pane both show, so a
+/// node and its row stay in lockstep.
+pub const RELATED_LIMIT: usize = 6;
+
+/// The Related graph as a Cambium swatch: the current material at the centre,
+/// each suggestion a kind-coloured satellite, star edges. A node's id is the
+/// suggestion's [`RelatedTarget`] (`None` = the centre), so a node links 1:1 to
+/// its pane row and clicking navigates. Built once and shared by the view (which
+/// renders it) and the host (which paints its leaf), the sanctioned pattern.
+pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, &'static str> {
+    use std::f32::consts::{FRAC_PI_2, TAU};
+    let mut nodes: Vec<GraphCanvasNode<Option<RelatedTarget>, &'static str>> = Vec::new();
+    let mut edges: Vec<GraphCanvasEdge<Option<RelatedTarget>>> = Vec::new();
+    let has_center = ui.stage.catalog_id().is_some();
+    if let Some(id) = ui.stage.catalog_id() {
+        let title = id.split_once(':').map(|(_, t)| t).unwrap_or(id.as_str()).to_string();
+        nodes.push(GraphCanvasNode {
+            id: None,
+            kind: ui.stage.lens.label(),
+            position: (0.5, 0.5),
+            label: title,
+        });
+    }
+    let suggestions =
+        ui.stage
+            .related_material_configured(&ui.practice_history, &ui.app_settings.stage.related, RELATED_LIMIT);
+    let n = suggestions.len();
+    for (i, s) in suggestions.into_iter().enumerate() {
+        let angle = i as f32 / n.max(1) as f32 * TAU - FRAC_PI_2;
+        nodes.push(GraphCanvasNode {
+            id: Some(s.target),
+            kind: s.kind,
+            position: (0.5 + angle.cos() * 0.40, 0.5 + angle.sin() * 0.40),
+            label: s.title,
+        });
+        if has_center {
+            edges.push(GraphCanvasEdge {
+                from: None,
+                to: Some(s.target),
+            });
+        }
+    }
+    let (w, h) = if ui.related_expanded {
+        (300, 210)
+    } else {
+        (232, 120)
+    };
+    let mut swatch = GraphCanvasSwatch::new(NEIGHBORHOOD_LEAF_KEY, GraphCanvasSubgraph { nodes, edges })
+        .with_size(w, h)
+        .with_label("What might I stage next");
+    swatch.hovered = ui.related_hover.map(Some);
+    swatch
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum StagePage {
@@ -241,6 +296,15 @@ pub struct UiState {
     /// Note markers the user has pinned as `(string_index, fret)` to keep their
     /// detail card open. Multi-pin, to compare. Transient (not persisted).
     pub pinned_markers: Vec<(usize, u8)>,
+    /// The marker under the pointer right now, as `(string_index, fret)`, whose
+    /// detail card peeks (hover shows, click marks). Set on hover Enter, cleared
+    /// on Leave. Transient.
+    pub hover_peek: Option<(usize, u8)>,
+    /// The Related suggestion under the pointer, shared by the graph swatch and
+    /// the suggestions pane so hovering either highlights the other. Transient.
+    pub related_hover: Option<RelatedTarget>,
+    /// Whether the Related graph swatch is expanded to its taller size.
+    pub related_expanded: bool,
 }
 
 impl Default for UiState {
@@ -292,6 +356,9 @@ impl UiState {
             song_clear_loop_requested: false,
             set_tray_expanded: true,
             pinned_markers: Vec::new(),
+            hover_peek: None,
+            related_hover: None,
+            related_expanded: false,
             stage,
         }
     }
@@ -390,29 +457,78 @@ impl UiState {
         self.pinned_markers.clear();
     }
 
-    /// Toggle a board position's membership in the card under the Rehearsal
-    /// cursor: click a note to deactivate it, click again to bring it back. The
-    /// board is the material editor ("click edits, hover shows").
-    pub fn toggle_card_mute(&mut self, string_index: usize, fret: u8) {
+    /// Mark or unmark a board position on the card under the Rehearsal cursor.
+    /// Marking is a neutral selection; [`Self::card_mark_mode`] decides what it
+    /// does to playback. The board is the material editor ("click edits, hover
+    /// shows").
+    pub fn toggle_card_mark(&mut self, string_index: usize, fret: u8) {
         if self.set.cards.is_empty() {
             return;
         }
         let cursor = self.set.cursor.min(self.set.cards.len() - 1);
-        let muted = &mut self.set.cards[cursor].setting.muted;
+        let marked = &mut self.set.cards[cursor].setting.marked;
         let key = (string_index, fret);
-        if let Some(i) = muted.iter().position(|&p| p == key) {
-            muted.remove(i);
+        if let Some(i) = marked.iter().position(|&p| p == key) {
+            marked.remove(i);
         } else {
-            muted.push(key);
+            marked.push(key);
         }
     }
 
-    /// Whether a board position is deactivated on the card under the cursor.
-    pub fn card_muted(&self, string_index: usize, fret: u8) -> bool {
+    /// The card under the Rehearsal cursor, if any.
+    fn current_card(&self) -> Option<&Card> {
         self.set
             .cards
             .get(self.set.cursor.min(self.set.cards.len().saturating_sub(1)))
-            .is_some_and(|c| c.setting.muted.contains(&(string_index, fret)))
+    }
+
+    /// Whether a board position is marked on the card under the cursor.
+    pub fn card_marked(&self, string_index: usize, fret: u8) -> bool {
+        self.current_card()
+            .is_some_and(|c| c.setting.marked.contains(&(string_index, fret)))
+    }
+
+    /// The mark mode of the card under the cursor (Off if there is no card).
+    pub fn card_mark_mode(&self) -> MarkMode {
+        self.current_card()
+            .map(|c| c.setting.mark_mode)
+            .unwrap_or_default()
+    }
+
+    /// Set the mark mode of the card under the cursor.
+    pub fn set_card_mark_mode(&mut self, mode: MarkMode) {
+        if self.set.cards.is_empty() {
+            return;
+        }
+        let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+        self.set.cards[cursor].setting.mark_mode = mode;
+    }
+
+    /// Clear every mark on the card under the cursor.
+    pub fn clear_card_marks(&mut self) {
+        if self.set.cards.is_empty() {
+            return;
+        }
+        let cursor = self.set.cursor.min(self.set.cards.len() - 1);
+        self.set.cards[cursor].setting.marked.clear();
+    }
+
+    /// Whether a position is silenced (and dimmed) by the current mark mode:
+    /// Solo excludes the unmarked, Mute excludes the marked. With nothing
+    /// marked the mode is inert.
+    pub fn card_excluded(&self, string_index: usize, fret: u8) -> bool {
+        let Some(card) = self.current_card() else {
+            return false;
+        };
+        if card.setting.marked.is_empty() {
+            return false;
+        }
+        let marked = card.setting.marked.contains(&(string_index, fret));
+        match card.setting.mark_mode {
+            MarkMode::Off => false,
+            MarkMode::Solo => !marked,
+            MarkMode::Mute => marked,
+        }
     }
 
     pub fn nudge_bpm(&mut self, delta: f32) {
@@ -517,7 +633,7 @@ impl UiState {
     pub fn preview_voicing(&self) -> (Vec<f32>, f32, f32) {
         if self.section == AppSection::Rehearsal && !self.set.cards.is_empty() {
             let cursor = self.set.cursor.min(self.set.cards.len() - 1);
-            return self.stage.card_voicing(&self.set.cards[cursor]);
+            return self.stage.card_sounding_pitches(&self.set.cards[cursor]);
         }
         self.stage.voicing_preview()
     }
@@ -1319,6 +1435,17 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                             )
                             .attr("class", "run-btn"),
                             |ui: &mut UiState, _| ui.stage.toggle_scale_run(),
+                        ),
+                        clickable(
+                            el("div", text("Path")).attr(
+                                "class",
+                                if state.path_shown {
+                                    "run-btn path-on"
+                                } else {
+                                    "run-btn"
+                                },
+                            ),
+                            |ui: &mut UiState, _| ui.stage.toggle_path(),
                         ),
                         el(
                             "div",

@@ -223,9 +223,11 @@ pub fn stage_css(p: &Palette) -> String {
               cursor: pointer; }}
 .fret-label.pinned {{ border: 1.5px solid {tertiary}; border-radius: 4px;
                      box-sizing: border-box; }}
-/* A deactivated note on the editable board: label faded to match its dim
-   marker, still a click target to switch back on. */
-.fret-label.muted {{ opacity: 0.4; }}
+/* Marked note: label brightened to match its leaf selection ring. Excluded note
+   (what the current mode silences): faded to match its dim marker, still a click
+   target. */
+.fret-label.marked {{ color: {text_header}; }}
+.fret-label.excluded {{ opacity: 0.4; }}
 /* Pinned marker detail cards (quiet floating popovers over the board). */
 .card-layer {{ position: absolute; top: 0; left: 0; }}
 .note-card {{ position: absolute; background-color: {surface_2};
@@ -244,6 +246,15 @@ pub fn stage_css(p: &Palette) -> String {
 .run-btn {{ padding: 4px 12px; border-radius: 6px; background-color: {surface_2};
            color: {tertiary}; font-size: 12px; cursor: pointer; margin-right: 12px; }}
 .run-btn:hover {{ background-color: {surface_hover}; color: {text_header}; }}
+/* The Path toggle, lit when the touch's trail is shown. */
+.run-btn.path-on {{ background-color: {surface_hover}; color: {tertiary}; }}
+/* Segmented mode control [Off · Solo · Mute]: a structured toggle, not a loose
+   button row. The active segment is lit. */
+.mode-seg {{ display: flex; margin-right: 12px; border-radius: 6px; }}
+.seg {{ padding: 4px 12px; font-size: 12px; color: {text_dim}; cursor: pointer;
+       background-color: {surface_2}; }}
+.seg:hover {{ color: {text}; }}
+.seg.active {{ background-color: {surface_hover}; color: {text_header}; }}
 /* The board is a grid of fret cells. Each cell paints its own fret wire (the
    right border) and the segment of string running through it (a 2px band at the
    cell's vertical centre, via a background-image), so the rows must sit flush:
@@ -291,11 +302,20 @@ pub fn stage_css(p: &Palette) -> String {
 .side-strip {{ margin-top: 12px; }}
 .side-strip .side {{ width: 100%; display: flex; flex-wrap: wrap; margin-right: 0; }}
 .side-strip .side-item {{ margin-right: 6px; margin-bottom: 6px; }}
-.related-panel {{ width: 260px; flex: 0 0 260px; margin-left: 16px; background-color: {surface}; border-radius: 10px; padding: 14px; }}
+.related-panel {{ width: 380px; flex: 0 0 380px; margin-left: 16px; background-color: {surface}; border-radius: 10px; padding: 14px; }}
 .related-heading {{ color: {text}; font-size: 15px; font-weight: 700; }}
-.related-subtitle, .related-empty, .related-reason {{ color: {text_dim}; font-size: 12px; }}
+.related-subtitle, .related-empty, .related-why {{ color: {text_dim}; font-size: 12px; }}
 .related-subtitle {{ margin-top: 2px; margin-bottom: 10px; }}
-.related-graph {{ display: flex; justify-content: center; background-color: {surface_2}; border-radius: 8px; padding: 4px; margin-bottom: 10px; }}
+/* Graph swatch and suggestions pane sit side by side (wrap when the panel is
+   narrow). */
+.related-body {{ display: flex; align-items: flex-start; flex-wrap: wrap; }}
+.related-graph-col {{ flex: 0 0 auto; background-color: {surface_2}; border-radius: 8px; padding: 4px; margin-right: 10px; margin-bottom: 10px; }}
+.related-pane-col {{ flex: 1; min-width: 150px; }}
+/* Cambium graph-canvas-swatch: the painted leaf shows the nodes and emphasis;
+   the buttons are transparent hit targets. A small quiet Expand button. */
+.graph-canvas-swatch-node {{ background-color: transparent; border-width: 0; cursor: pointer; }}
+.graph-canvas-swatch-expand {{ background-color: {surface}; color: {text_dim}; border-width: 0; border-radius: 4px; font-size: 10px; padding: 2px 5px; cursor: pointer; }}
+.graph-canvas-swatch-expand:hover {{ color: {text}; }}
 .related-history {{ margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 1px; border-bottom-color: {surface_2}; }}
 .history-heading {{ color: {text_dim}; font-size: 11px; margin-bottom: 4px; }}
 .history-list {{ display: flex; flex-wrap: wrap; }}
@@ -323,17 +343,20 @@ pub fn stage_css(p: &Palette) -> String {
 .viewport-narrow .set-card {{ width: 44%; }}
 .viewport-narrow .settings-shell {{ display: block; }}
 .viewport-narrow .settings-nav {{ width: 100%; display: flex; flex-wrap: wrap; margin-bottom: 12px; }}
-.related-item {{ display: flex; align-items: center; border-top-width: 1px; border-top-color: {surface_2}; padding-top: 8px; padding-bottom: 8px; }}
-.related-copy {{ flex: 1; min-width: 0; cursor: pointer; }}
-.related-title {{ color: {text}; font-size: 13px; }}
-.related-reason {{ margin-top: 2px; }}
-.related-stage {{ color: {tertiary}; font-size: 12px; margin-left: 8px; padding: 5px 7px; border-radius: 5px; cursor: pointer; }}
-.related-actions {{ margin-left: 8px; }}
-.related-hide {{ color: {text_dim}; font-size: 10px; padding: 2px 7px; cursor: pointer; text-align: right; }}
-.related-stage:hover, .related-hide:hover, .related-copy:hover .related-title {{ background-color: {surface_2}; color: {text}; }}
-.viewport-medium .related-panel, .viewport-narrow .related-panel {{ width: auto; margin-left: 0; margin-top: 12px; }}
-.viewport-medium .related-list {{ display: flex; flex-wrap: wrap; }}
-.viewport-medium .related-item {{ width: 46%; margin-right: 12px; }}
+/* Suggestions pane: one structured row each. A row (or its graph node) lights
+   the other via `.hovered`. */
+.related-row {{ display: flex; align-items: center; border-top-width: 1px; border-top-color: {surface_2}; padding: 6px 4px; border-radius: 6px; }}
+.related-row.hovered {{ background-color: {surface_2}; }}
+.related-copy {{ display: flex; align-items: center; flex: 1; min-width: 0; cursor: pointer; }}
+.related-kind {{ flex: 0 0 auto; font-size: 9px; color: {text_dim}; background-color: {surface_hover}; border-radius: 4px; padding: 2px 5px; margin-right: 7px; }}
+.related-copy-text {{ min-width: 0; }}
+.related-name {{ color: {text}; font-size: 13px; }}
+.related-why {{ margin-top: 1px; }}
+.related-actions {{ display: flex; align-items: center; margin-left: 6px; }}
+.related-stage {{ color: {tertiary}; font-size: 12px; padding: 4px 7px; border-radius: 5px; cursor: pointer; }}
+.related-hide {{ color: {text_dim}; font-size: 14px; padding: 2px 7px; cursor: pointer; }}
+.related-stage:hover, .related-hide:hover {{ background-color: {surface_hover}; color: {text}; }}
+.viewport-medium .related-panel, .viewport-narrow .related-panel {{ width: auto; flex: 1 1 auto; margin-left: 0; margin-top: 12px; }}
 .settings-gap {{ margin-top: 16px; }}
 .t-btn:focus {{ background-color: {surface_hover}; color: {tertiary}; }}
 .side-item:focus {{ background-color: {surface}; }}

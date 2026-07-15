@@ -32,7 +32,7 @@ use woodshedding::progression::{
 };
 use woodshedding::practice::{PracticeItem, PracticeSet};
 use woodshedding::rehearsal::{
-    Card, FretWindow, LoopMode, Material, Recipe, Set, Setting, Timing, Touch,
+    Card, FretWindow, LoopMode, MarkMode, Material, Recipe, Set, Setting, Timing, Touch,
 };
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
@@ -224,6 +224,9 @@ pub struct StageState {
     pub scale_run_step: usize,
     /// The note sounding right now during a run, for the board highlight.
     pub scale_run_active: Option<(usize, u8)>,
+    /// Whether to draw the touch's path as a trail over the markers (the touch
+    /// editor: show the treatment, not just name it). Transient.
+    pub path_shown: bool,
     pub arpeggio_direction: ArpeggioDirection,
     /// Inversion: which chord tone the run starts on (0 = root),
     /// clamped to the tone count.
@@ -514,6 +517,17 @@ fn voicing_shape(count: usize, scale_like: bool) -> (f32, f32) {
     }
 }
 
+/// Pitch class (0..=11) of an equal-tempered frequency, via its nearest MIDI
+/// note. Used to fold board positions and voicing pitches onto pitch classes
+/// for the Mute mode (drop a note by its class, at any octave).
+fn pc_from_hz(hz: f32) -> u8 {
+    if hz <= 0.0 {
+        return 0;
+    }
+    let midi = (69.0 + 12.0 * (hz / 440.0).log2()).round() as i32;
+    midi.rem_euclid(12) as u8
+}
+
 impl Default for StageState {
     fn default() -> Self {
         Self::new()
@@ -542,6 +556,7 @@ impl StageState {
             scale_run_playing: false,
             scale_run_step: 0,
             scale_run_active: None,
+            path_shown: false,
             arpeggio_direction: ArpeggioDirection::default(),
             arpeggio_inversion: 0,
             progression_idx: None,
@@ -1174,6 +1189,19 @@ impl StageState {
         self.arpeggio_step_idx = self.arpeggio_step_idx.wrapping_add(1);
     }
 
+    /// Show or hide the touch's path trail on the board.
+    pub fn toggle_path(&mut self) {
+        self.path_shown = !self.path_shown;
+    }
+
+    /// The run's visit order as `(string, fret)` — the path trail the leaf draws.
+    pub fn run_positions(&self) -> Vec<(usize, u8)> {
+        self.scale_run_path()
+            .into_iter()
+            .map(|(s, f, _)| (s, f))
+            .collect()
+    }
+
     /// The scale-run path: the current board dots sorted ascending by pitch, each
     /// as `(string, fret, frequency)`. A run climbs the neck through them.
     pub fn scale_run_path(&self) -> Vec<(usize, u8, f32)> {
@@ -1361,6 +1389,63 @@ impl StageState {
         }
         let (dur, strum) = voicing_shape(pitches.len(), scale_like);
         (pitches, dur, strum)
+    }
+
+    /// The card's *effective* sound, after its mark mode is applied — the
+    /// audible half of mark + solo/mute. Off (or nothing marked) is the plain
+    /// voicing; Solo plays only the marked positions' pitches; Mute plays the
+    /// voicing minus the marked notes' pitch classes. Same shape tuple as
+    /// [`Self::card_voicing`]. This is what the "hear it" paths resolve to.
+    pub fn card_sounding_pitches(&self, card: &Card) -> (Vec<f32>, f32, f32) {
+        let marked = &card.setting.marked;
+        if marked.is_empty() || card.setting.mark_mode == MarkMode::Off {
+            return self.card_voicing(card);
+        }
+        match card.setting.mark_mode {
+            MarkMode::Off => self.card_voicing(card),
+            MarkMode::Solo => {
+                // Play only the marked positions, as their actual fretboard
+                // pitches — isolate the shape you selected.
+                let set: std::collections::HashSet<(usize, u8)> =
+                    marked.iter().copied().collect();
+                let mut hz: Vec<f32> = self
+                    .dots_for_card(card)
+                    .into_iter()
+                    .filter(|d| set.contains(&(d.string_index, d.fret)) && d.frequency > 0.0)
+                    .map(|d| d.frequency)
+                    .collect();
+                hz.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                hz.dedup();
+                if hz.is_empty() {
+                    return self.card_voicing(card);
+                }
+                let (dur, strum) = voicing_shape(hz.len(), false);
+                (hz, dur, strum)
+            }
+            MarkMode::Mute => {
+                // Drop the marked notes' pitch classes from the clean voicing,
+                // so the chord keeps voicing nicely minus the muted note(s).
+                let dots = self.dots_for_card(card);
+                let muted_pcs: std::collections::HashSet<u8> = marked
+                    .iter()
+                    .filter_map(|pos| {
+                        dots.iter()
+                            .find(|d| (d.string_index, d.fret) == *pos)
+                            .map(|d| pc_from_hz(d.frequency))
+                    })
+                    .collect();
+                let (pitches, _, _) = self.card_voicing(card);
+                let kept: Vec<f32> = pitches
+                    .into_iter()
+                    .filter(|&f| !muted_pcs.contains(&pc_from_hz(f)))
+                    .collect();
+                if kept.is_empty() {
+                    return (Vec::new(), 0.0, 0.0);
+                }
+                let (dur, strum) = voicing_shape(kept.len(), false);
+                (kept, dur, strum)
+            }
+        }
     }
 
     /// Frequency (Hz) of the arpeggio step-through's current tone — the
@@ -1649,6 +1734,41 @@ mod tests {
         s.set_lens(Lens::Exercises);
         let riff = s.card_from_lens().unwrap();
         assert!(s.card_voicing(&riff).0.is_empty());
+    }
+
+    #[test]
+    fn card_sounding_pitches_respects_mark_mode() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Chords);
+        let mut card = s.card_from_lens().unwrap();
+
+        // Off (nothing marked): the whole voicing.
+        let full = s.card_sounding_pitches(&card).0;
+        assert!(full.len() >= 3, "off plays the whole voicing");
+
+        // Mark one board position.
+        let dots = s.dots_for_card(&card);
+        let target = dots.first().expect("chord card has positions");
+        let target_pc = pc_from_hz(target.frequency);
+        card.setting.marked = vec![(target.string_index, target.fret)];
+
+        // Mute: the marked note's pitch class drops from the voicing.
+        card.setting.mark_mode = MarkMode::Mute;
+        let muted = s.card_sounding_pitches(&card).0;
+        assert!(
+            muted.iter().all(|&f| pc_from_hz(f) != target_pc),
+            "mute drops the marked note's pitch class"
+        );
+        assert!(muted.len() < full.len(), "mute removes at least one tone");
+
+        // Solo: only the marked position sounds.
+        card.setting.mark_mode = MarkMode::Solo;
+        let solo = s.card_sounding_pitches(&card).0;
+        assert_eq!(solo.len(), 1, "solo plays only the marked position");
+        assert!(
+            (solo[0] - target.frequency).abs() < 0.5,
+            "solo plays the marked pitch"
+        );
     }
 
     #[test]

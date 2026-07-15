@@ -35,10 +35,13 @@ pub struct Dot {
     pub string_index: usize,
     pub fret: u8,
     pub is_root: bool,
-    /// Deactivated by the player on the editable (Rehearsal) board: painted
-    /// dim so the note reads as "off but still here". Always false on the
-    /// read-only Stage board.
-    pub muted: bool,
+    /// Selected by the player on the editable (Rehearsal) board: drawn with an
+    /// accent ring. Neutral on its own; `excluded` is what the mode does with it.
+    pub marked: bool,
+    /// Silenced by the current mark mode (Solo hides the unmarked, Mute hides
+    /// the marked): painted dim so it reads as "off but still here". Always
+    /// false on the read-only Stage board.
+    pub excluded: bool,
 }
 
 /// How the note markers are drawn. Exposed as a setting; Sharp is the default.
@@ -98,9 +101,17 @@ const C_ROOT: ColorF = ColorF { r: 0.64, g: 0.52, b: 0.36, a: 1.0 };
 /// The note sounding right now during a run/arpeggiation: a bright warm accent
 /// so the step reads at a glance.
 const C_ACTIVE: ColorF = ColorF { r: 0.97, g: 0.80, b: 0.44, a: 1.0 };
-/// A note the player has deactivated on the editable board: faint and desaturated
-/// so it reads as present-but-off, still a click target to switch back on.
-const C_MUTED: ColorF = ColorF { r: 0.28, g: 0.30, b: 0.35, a: 0.55 };
+/// A note the current mark mode silences (Solo's unmarked, Mute's marked):
+/// faint and desaturated so it reads as present-but-off, still clickable.
+const C_EXCLUDED: ColorF = ColorF { r: 0.28, g: 0.30, b: 0.35, a: 0.55 };
+/// The selection ring around a marked note: a cool bright accent, distinct from
+/// the warm root/active tones so "selected" never reads as "sounding".
+const C_MARK: ColorF = ColorF { r: 0.42, g: 0.80, b: 0.94, a: 1.0 };
+/// The touch's path trail: a translucent warm line threaded through the markers
+/// in visit order, so the treatment (which way the run climbs) is shown, not
+/// just named. Shares the active accent's hue so the trail and the sounding step
+/// read as one gesture.
+const C_PATH: ColorF = ColorF { r: 0.93, g: 0.74, b: 0.42, a: 0.55 };
 
 /// Marker box size (device px). The CSS label overlay reuses these so each label
 /// sits exactly over its painted marker.
@@ -149,6 +160,10 @@ pub struct FretboardLeaf {
     /// active accent. Pushed live by the host each step, like the neighbourhood
     /// leaf's values.
     active: Option<(usize, u8)>,
+    /// The touch's path, as an ordered visit list of `(string, fret)`. Drawn as
+    /// a trail when `show_path` is on, so the treatment is visible.
+    path: Vec<(usize, u8)>,
+    show_path: bool,
     size: Size,
     dirty: bool,
 }
@@ -167,6 +182,8 @@ impl FretboardLeaf {
             dots,
             marker_style,
             active: None,
+            path: Vec::new(),
+            show_path: false,
             size: Size {
                 width: w as f32,
                 height: h as f32,
@@ -180,6 +197,16 @@ impl FretboardLeaf {
     pub fn set_active(&mut self, active: Option<(usize, u8)>) {
         if self.active != active {
             self.active = active;
+            self.dirty = true;
+        }
+    }
+
+    /// Set the touch's ordered path and whether to draw it. The host pushes both
+    /// when the board or the Path toggle changes.
+    pub fn set_path(&mut self, path: Vec<(usize, u8)>, show: bool) {
+        if self.show_path != show || self.path != path {
+            self.path = path;
+            self.show_path = show;
             self.dirty = true;
         }
     }
@@ -245,6 +272,24 @@ impl Leaf for FretboardLeaf {
         let nx = self.wire_x(0);
         cx.fill_rect(nx - 1.5, top, 3.0, bottom - top, C_NUT);
 
+        // Touch path trail: a translucent line threaded through the markers in
+        // visit order, under the markers so they stay legible. Shows the
+        // treatment (which way the run climbs) at a glance.
+        if self.show_path && self.path.len() >= 2 {
+            let pts: Vec<(f32, f32)> = self
+                .path
+                .iter()
+                .filter(|(s, f)| *s < self.string_count && *f <= self.fret_count)
+                .map(|&(s, f)| (self.note_x(f), self.string_y(s)))
+                .collect();
+            if pts.len() >= 2 {
+                cx.stroke_path(
+                    sprigging::Path::polyline(&pts),
+                    sprigging::round_stroke(C_PATH, 2.5),
+                );
+            }
+        }
+
         // Note markers: quiet rects, root warmer. Labels are drawn by the CSS
         // overlay that sits over this leaf at the same marker centres.
         let mw = MARKER_W;
@@ -257,8 +302,8 @@ impl Leaf for FretboardLeaf {
             let y = self.string_y(d.string_index);
             let color = if Some((d.string_index, d.fret)) == self.active {
                 C_ACTIVE
-            } else if d.muted {
-                C_MUTED
+            } else if d.excluded {
+                C_EXCLUDED
             } else if d.is_root {
                 C_ROOT
             } else {
@@ -282,6 +327,25 @@ impl Leaf for FretboardLeaf {
                         .build();
                     cx.fill_path(path, color);
                 }
+            }
+            // Selection ring for a marked note, on top of the fill and tracking
+            // the marker's silhouette so it reads as a halo, not a second marker.
+            if d.marked {
+                let ring = match self.marker_style {
+                    MarkerStyle::Circle => sprigging::Path::circle(x, y, mh * 0.56 + 3.0),
+                    MarkerStyle::Diamond => {
+                        let (dx, dy) = (mw * 0.46 + 3.0, mh * 0.66 + 3.0);
+                        sprigging::Path::new()
+                            .move_to(x, y - dy)
+                            .line_to(x + dx, y)
+                            .line_to(x, y + dy)
+                            .line_to(x - dx, y)
+                            .close()
+                            .build()
+                    }
+                    _ => rounded_rect(mx - 3.0, my - 3.0, mw + 6.0, mh + 6.0, 5.0),
+                };
+                cx.stroke_path(ring, sprigging::round_stroke(C_MARK, 2.0));
             }
         }
 

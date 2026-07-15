@@ -47,7 +47,9 @@ use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey
 use winit::window::{Window, WindowId};
 use woodshed_views::stage::{stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
 use woodshed_views::theme::slate_stage_css;
-use cambium::{GenetAppRunner, PointerClick, Propagation, clickable, el, text};
+use cambium::{
+    GenetAppRunner, HoverEvent, HoverPhase, PointerClick, Propagation, clickable, el, text,
+};
 
 type Runner = GenetAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
 
@@ -129,6 +131,10 @@ struct App {
     /// The hovered node's opaque id, for `:hover` restyles on target
     /// change (not per pixel).
     last_hover: Option<u64>,
+    /// The hovered hit node itself, for routing Cambium `on_hover` Enter/Leave
+    /// transitions (dispatch_hover). Distinct from `last_hover` (an opaque id
+    /// for CSS `:hover`).
+    last_hover_hit: Option<NodeId>,
     /// The focused node's opaque id (same discipline for `:focus`).
     last_focus: Option<u64>,
     /// The song last pushed through the backend seam (push on change).
@@ -186,83 +192,54 @@ fn edge_cursor(dir: winit::window::ResizeDirection) -> winit::window::CursorIcon
     }
 }
 
+/// The product palette for a Related node kind. Lives host-side so Cambium's
+/// graph component stays palette-neutral; the same mapping drove the old glyph.
+fn related_kind_color(kind: &str) -> sprigging::ColorF {
+    let [r, g, b] = match kind {
+        "Scale" => [0.30, 0.67, 0.76],
+        "Chord" => [0.91, 0.38, 0.25],
+        "Arpeggio" => [0.70, 0.46, 0.86],
+        "Progression" => [0.91, 0.68, 0.28],
+        "Exercise" => [0.40, 0.72, 0.42],
+        _ => [0.72, 0.74, 0.78],
+    };
+    sprigging::ColorF { r, g, b, a: 1.0 }
+}
+
 impl App {
-    fn sync_neighborhood_leaf(&mut self) {
-        let Some(runner) = self.runner.as_ref() else { return };
-        let snapshot = runner
-            .state()
-            .stage
-            .neighborhood_snapshot(
-                &runner.state().practice_history,
-                &runner.state().app_settings.stage.related,
-                8,
-            );
+    /// Paint the Related graph swatch's leaf from the shared swatch model
+    /// (built by the view layer), rebuilding only when the paint changes (node
+    /// positions/kinds, hovered emphasis, or size). The palette lives here so
+    /// product colours stay host-side; the geometry and interactivity are the
+    /// component's.
+    fn sync_related_swatch(&mut self) {
+        let swatch = {
+            let Some(runner) = self.runner.as_ref() else {
+                return;
+            };
+            woodshed_views::stage::related_swatch(runner.state())
+        };
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        for node in &snapshot.nodes {
-            node.id.hash(&mut hasher);
-            node.score.hash(&mut hasher);
+        swatch.width.hash(&mut hasher);
+        swatch.height.hash(&mut hasher);
+        for node in &swatch.graph.nodes {
+            node.position.0.to_bits().hash(&mut hasher);
+            node.position.1.to_bits().hash(&mut hasher);
+            node.kind.hash(&mut hasher);
         }
-        snapshot.edges.hash(&mut hasher);
+        let hovered_idx = swatch
+            .hovered
+            .as_ref()
+            .and_then(|h| swatch.graph.nodes.iter().position(|n| &n.id == h));
+        hovered_idx.hash(&mut hasher);
         let sig = hasher.finish();
         if sig == self.neighborhood_sig {
             return;
         }
-
-        let count = snapshot.nodes.len();
-        let nodes: Vec<sprigging::GraphGlyphNode> = snapshot
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(idx, node)| {
-                let (x, y) = if idx == 0 {
-                    (0.5, 0.5)
-                } else {
-                    let angle = (idx - 1) as f32
-                        / count.saturating_sub(1).max(1) as f32
-                        * std::f32::consts::TAU
-                        - std::f32::consts::FRAC_PI_2;
-                    (0.5 + angle.cos() * 0.40, 0.5 + angle.sin() * 0.40)
-                };
-                let [r, g, b] = match node.kind {
-                    "Scale" => [0.30, 0.67, 0.76],
-                    "Chord" => [0.91, 0.38, 0.25],
-                    "Arpeggio" => [0.70, 0.46, 0.86],
-                    "Progression" => [0.91, 0.68, 0.28],
-                    "Exercise" => [0.40, 0.72, 0.42],
-                    _ => [0.72, 0.74, 0.78],
-                };
-                let strength = 0.55 + node.score as f32 / 100.0 * 0.45;
-                sprigging::GraphGlyphNode {
-                    x,
-                    y,
-                    color: sprigging::ColorF {
-                        r: r * strength,
-                        g: g * strength,
-                        b: b * strength,
-                        a: 1.0,
-                    },
-                }
-            })
-            .collect();
-        let mut glyph = sprigging::GraphGlyph::new(
-            nodes,
-            snapshot.edges,
-            sprigging::Size {
-                width: 232.0,
-                height: 112.0,
-            },
-        );
-        glyph.node_radius = 5.0;
-        glyph.edge_width = 1.4;
-        glyph.edge_color = sprigging::ColorF {
-            r: 0.38,
-            g: 0.40,
-            b: 0.46,
-            a: 1.0,
-        };
-        self.neighborhood_leaves
-            .insert(NEIGHBORHOOD_LEAF_KEY, Box::new(glyph));
         self.neighborhood_sig = sig;
+        let leaf = swatch.paint_leaf(|kind: &&str| related_kind_color(kind));
+        self.neighborhood_leaves
+            .insert(NEIGHBORHOOD_LEAF_KEY, Box::new(leaf));
     }
 
     /// Rebuild the fretboard leaf from the current board when it changes. Mirrors
@@ -284,7 +261,8 @@ impl App {
                 string_index: d.string_index,
                 fret: d.fret,
                 is_root: d.is_root,
-                muted: false,
+                marked: false,
+                excluded: false,
             })
             .collect();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -311,14 +289,22 @@ impl App {
         self.fretboard_sig = sig;
     }
 
-    /// Push the scale run's active note into the fretboard leaf each frame so the
-    /// sounding note lights up. The leaf is otherwise only rebuilt on a board
-    /// change, and the run advances between those.
+    /// Push the run's live values into the fretboard leaf each frame: the active
+    /// (sounding) note, and the touch's path trail + whether to draw it. The leaf
+    /// is otherwise only rebuilt on a board change; the run and the Path toggle
+    /// move between those.
     fn sync_fretboard_active(&mut self) {
-        let active = self.runner.as_ref().and_then(|r| {
-            let st = &r.state().stage;
-            st.scale_run_playing.then_some(st.scale_run_active).flatten()
-        });
+        let (active, path, show_path) = self
+            .runner
+            .as_ref()
+            .map(|r| {
+                let st = &r.state().stage;
+                let active = st.scale_run_playing.then_some(st.scale_run_active).flatten();
+                let show = st.path_shown;
+                let path = if show { st.run_positions() } else { Vec::new() };
+                (active, path, show)
+            })
+            .unwrap_or((None, Vec::new(), false));
         if let Some(leaf) = self
             .neighborhood_leaves
             .get_mut_as::<woodshed_views::fretboard_leaf::FretboardLeaf>(
@@ -326,13 +312,14 @@ impl App {
             )
         {
             leaf.set_active(active);
+            leaf.set_path(path, show_path);
         }
     }
 
     /// The Rehearsal board is a second fretboard leaf, fed from the card under
-    /// the cursor (not the live Stage lens) and carrying that card's muted
-    /// positions. Only rebuilt while Rehearsal is on screen and the model
-    /// changes; the labels overlay drives click-to-toggle.
+    /// the cursor (not the live Stage lens) and carrying that card's marks and
+    /// mark mode. Only rebuilt while Rehearsal is on screen and the model
+    /// changes; the label overlay drives click-to-mark.
     fn sync_rehearsal_fretboard_leaf(&mut self) {
         let Some(runner) = self.runner.as_ref() else {
             return;
@@ -349,8 +336,8 @@ impl App {
         let string_count = st.string_count();
         let fret_count = st.fret_count;
         let marker_style = state.app_settings.fretboard.marker_style.clone();
-        let muted: std::collections::HashSet<(usize, u8)> =
-            card.setting.muted.iter().copied().collect();
+        // marked / excluded come from the same UiState helpers the view uses, so
+        // the mode logic (Off / Solo / Mute) lives in exactly one place.
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
             .dots_for_card(card)
             .into_iter()
@@ -358,7 +345,8 @@ impl App {
                 string_index: d.string_index,
                 fret: d.fret,
                 is_root: d.is_root,
-                muted: muted.contains(&(d.string_index, d.fret)),
+                marked: state.card_marked(d.string_index, d.fret),
+                excluded: state.card_excluded(d.string_index, d.fret),
             })
             .collect();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -370,7 +358,8 @@ impl App {
             d.string_index.hash(&mut hasher);
             d.fret.hash(&mut hasher);
             d.is_root.hash(&mut hasher);
-            d.muted.hash(&mut hasher);
+            d.marked.hash(&mut hasher);
+            d.excluded.hash(&mut hasher);
         }
         let sig = hasher.finish();
         if sig == self.rehearsal_fretboard_sig {
@@ -483,7 +472,7 @@ impl App {
                                         // material ("hear it as you land").
                                         let c = ui.set.cursor.min(ui.set.cards.len() - 1);
                                         let (pitches, d, strum) =
-                                            ui.stage.card_voicing(&ui.set.cards[c]);
+                                            ui.stage.card_sounding_pitches(&ui.set.cards[c]);
                                         if !pitches.is_empty() {
                                             backend.preview_pitches(&pitches, d, strum);
                                         }
@@ -578,7 +567,7 @@ impl App {
         }
         self.midi
             .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
-        self.sync_neighborhood_leaf();
+        self.sync_related_swatch();
         self.sync_fretboard_leaf();
         self.sync_fretboard_active();
         self.sync_rehearsal_fretboard_leaf();
@@ -859,6 +848,37 @@ impl App {
         }
     }
 
+    /// Route Cambium `on_hover` Enter/Leave as the hit node changes. The host
+    /// owns transition detection: Leave the old hit, Enter the new one. Move is
+    /// not routed (peeks only need enter/leave), so idle motion within a marker
+    /// stays free. Coordinates are zeroed — the peek only needs which marker.
+    fn hover_dispatch(&mut self) {
+        let (x, y) = self.cursor;
+        let hit = {
+            let (Some(runner), Some(layout)) = (self.runner.as_ref(), self.layout.as_ref()) else {
+                return;
+            };
+            let dom = runner.dom();
+            let dom_ref = dom.borrow();
+            layout.hit_test(&*dom_ref, x, y, &ScrollOffsets::default())
+        };
+        if hit == self.last_hover_hit {
+            return;
+        }
+        let old = self.last_hover_hit.take();
+        self.last_hover_hit = hit;
+        let Some(runner) = self.runner.as_mut() else {
+            return;
+        };
+        if let Some(old) = old {
+            runner.dispatch_hover(old, HoverEvent::new(HoverPhase::Leave, (0.0, 0.0), (0.0, 0.0)));
+        }
+        if let Some(new) = hit {
+            runner.dispatch_hover(new, HoverEvent::new(HoverPhase::Enter, (0.0, 0.0), (0.0, 0.0)));
+        }
+        self.after_dispatch();
+    }
+
     fn click(&mut self) {
         let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
             return;
@@ -1014,6 +1034,7 @@ impl ApplicationHandler for App {
                 self.cursor = ((position.x / scale) as f32, (position.y / scale) as f32);
                 self.update_resize_cursor();
                 self.hover();
+                self.hover_dispatch();
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -1097,6 +1118,7 @@ fn main() {
         storage: FsStorage::new(),
         theme: ThemeMode::default(),
         last_hover: None,
+        last_hover_hit: None,
         last_focus: None,
         last_song: woodshed_core::song::SongDoc::default(),
         close_requested: false,
