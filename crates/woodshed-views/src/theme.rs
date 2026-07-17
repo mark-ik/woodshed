@@ -251,6 +251,9 @@ pub fn stage_css(p: &Palette) -> String {
 /* Draw mode, lit with a ring outline to read as "you're authoring the path". */
 .run-btn.draw-on {{ background-color: {surface_hover}; color: {tertiary};
                    box-shadow: inset 0 0 0 1px {tertiary}; }}
+/* A drawn marker's step number, shown while drawing in place of its note name:
+   brighter than a name so the order pops out of the board. */
+.fret-label.step {{ color: {text_header}; font-weight: 600; }}
 /* Path-editing tools (undo / reverse / rotate / clear): quiet inline actions. */
 .draw-tools {{ display: flex; align-items: center; margin-right: 12px; }}
 .draw-tool {{ padding: 3px 8px; border-radius: 5px; color: {text_dim};

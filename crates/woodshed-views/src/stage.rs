@@ -1431,13 +1431,31 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             let (si, fret) = (d.string_index, d.fret);
             let lx = note_center_x(fret) - MARKER_W / 2.0;
             let ly = string_center_y(si) - MARKER_H / 2.0;
-            let class = if ui.is_pinned(si, fret) {
+            // While drawing, a marker on the path shows its step number instead
+            // of its note name, so the order reads without playing it. A path may
+            // revisit a note, so its indices join ("2,5").
+            let steps: Vec<String> = state
+                .authored_path
+                .iter()
+                .enumerate()
+                .filter(|(_, &p)| p == (si, fret))
+                .map(|(i, _)| (i + 1).to_string())
+                .collect();
+            let numbered = state.draw_mode && !steps.is_empty();
+            let label_text = if numbered {
+                steps.join(",")
+            } else {
+                d.label.clone()
+            };
+            let class = if numbered {
+                "fret-label step"
+            } else if ui.is_pinned(si, fret) {
                 "fret-label pinned"
             } else {
                 "fret-label"
             };
             Box::new(clickable(
-                el("div", text(d.label.clone())).attr("class", class).attr(
+                el("div", text(label_text)).attr("class", class).attr(
                     "style",
                     format!("left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"),
                 ),
@@ -1532,6 +1550,25 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                                         el("div", text("Rotate")).attr("class", "draw-tool"),
                                         |ui: &mut UiState, _| ui.stage.rotate_path(),
                                     ),
+                                    // Move the shape a whole octave, which keeps
+                                    // every note's pitch class — so it stays on
+                                    // the material's tones. The spider's move.
+                                    // Shown only when it fits: on the default
+                                    // 12-fret neck an octave rarely does, and a
+                                    // button that silently no-ops is worse than
+                                    // no button.
+                                    state.can_shift_path(-12).then(|| {
+                                        clickable(
+                                            el("div", text("8ve -")).attr("class", "draw-tool"),
+                                            |ui: &mut UiState, _| ui.stage.shift_path(-12),
+                                        )
+                                    }),
+                                    state.can_shift_path(12).then(|| {
+                                        clickable(
+                                            el("div", text("8ve +")).attr("class", "draw-tool"),
+                                            |ui: &mut UiState, _| ui.stage.shift_path(12),
+                                        )
+                                    }),
                                     clickable(
                                         el("div", text("Clear")).attr("class", "draw-tool"),
                                         |ui: &mut UiState, _| ui.stage.clear_path(),

@@ -1316,18 +1316,43 @@ impl StageState {
         if self.authored_path.is_empty() {
             return self.scale_run_path();
         }
-        let dots = self.dots();
+        // Resolve each step's pitch from the neck itself rather than looking it
+        // up among the current dots: a drawn note is a real position whatever
+        // the lens shows, and a missed lookup would silently step in silence.
+        let board = Fretboard::new(self.tuning(), self.fret_count);
+        let strings = self.string_count();
         self.authored_path
             .iter()
-            .map(|&(s, f)| {
-                let freq = dots
-                    .iter()
-                    .find(|d| d.string_index == s && d.fret == f)
-                    .map(|d| d.frequency)
-                    .unwrap_or(0.0);
-                (s, f, freq)
-            })
+            .filter(|(s, f)| *s < strings && *f <= self.fret_count)
+            .map(|&(s, f)| (s, f, board.pitch_at(s, f).frequency() as f32))
             .collect()
+    }
+
+    /// Shift the whole drawn path along the neck by `delta` frets — move the
+    /// shape, keep its intervals. A no-op if any note would leave the neck, so
+    /// the shape never distorts by clamping. An octave (±12) is the shift that
+    /// keeps every note's pitch class, so the path stays on the material's tones
+    /// and its degrees hold — which is exactly the octave spider's generator.
+    pub fn shift_path(&mut self, delta: i32) {
+        if !self.can_shift_path(delta) {
+            return;
+        }
+        for (_, f) in self.authored_path.iter_mut() {
+            *f = (*f as i32 + delta) as u8;
+        }
+        self.scale_run_step = 0;
+    }
+
+    /// Whether [`Self::shift_path`] would fit on the neck — every note lands in
+    /// `0..=fret_count`. The view gates the shift controls on this rather than
+    /// offering a button that silently does nothing: on the default 12-fret neck
+    /// an octave shift rarely fits at all.
+    pub fn can_shift_path(&self, delta: i32) -> bool {
+        !self.authored_path.is_empty()
+            && self.authored_path.iter().all(|&(_, f)| {
+                let shifted = f as i32 + delta;
+                shifted >= 0 && shifted <= self.fret_count as i32
+            })
     }
 
     /// The scale-run path: the current board dots sorted ascending by pitch, each
@@ -1926,6 +1951,48 @@ mod tests {
         assert!(
             crate::history::catalog_id_for_card(&card).is_none(),
             "a drawn path has no catalog identity"
+        );
+    }
+
+    #[test]
+    fn octave_shift_moves_the_shape_and_keeps_its_notes() {
+        let mut s = StageState::new();
+        // An octave shift needs neck to land on: on the default 12-fret board it
+        // never fits, which is why the controls are gated on can_shift_path.
+        s.fret_count = 24;
+        for &(string, fret) in &[(0usize, 5u8), (1, 7), (2, 5)] {
+            s.append_to_path(string, fret);
+        }
+        assert!(s.can_shift_path(12), "a 24-fret neck has room for the octave");
+        assert!(!s.can_shift_path(-12), "there is no room below fret 5");
+        let before = s.effective_run_path();
+        s.shift_path(12);
+        assert_eq!(
+            s.authored_path,
+            vec![(0, 17), (1, 19), (2, 17)],
+            "an octave shift moves every note 12 frets, keeping the shape"
+        );
+        // Same notes an octave up: pitch classes hold, so the shape stays on the
+        // material's tones and its degrees still read.
+        let after = s.effective_run_path();
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert_eq!(
+                pc_from_hz(b.2),
+                pc_from_hz(a.2),
+                "an octave shift preserves each step's pitch class"
+            );
+            assert!(
+                (a.2 / b.2 - 2.0).abs() < 0.01,
+                "each step lands exactly one octave up"
+            );
+        }
+        // Refuses rather than distorting when the shape would run off the neck.
+        let at_top = s.authored_path.clone();
+        assert!(!s.can_shift_path(12), "no room for a second octave");
+        s.shift_path(12);
+        assert_eq!(
+            s.authored_path, at_top,
+            "a shift that would leave the neck is a no-op, not a clamp"
         );
     }
 

@@ -185,12 +185,20 @@ sounds all of them, and it has no catalog id.
 Follow-ons, in rough order:
 
 - ~~**Naming + touch.**~~ **Landed 2026-07-16** (below).
-- **Step numbers.** Show each step's index over its marker (the CSS label
-  overlay; the leaf can't shape text yet), so order reads without playing.
-- **Snap + generics.** Constrain drawing to a scale's tones or a chord's
-  positions; draw over the degree ladder for a key-independent (transposable)
-  pattern. Plus **shift-to-generate** (the octave spider: one drawn cell shifted
-  across the neck).
+- ~~**Step numbers.**~~ **Landed 2026-07-16** (below).
+- **Snap is already the behaviour, free drawing is the gap.** The board only
+  renders click targets for the current lens's tones (`labels` come from
+  `state.dots()`), so drawing is *already* constrained to the scale/chord — there
+  is no snap to add. The missing counterpart is **free drawing** anywhere on the
+  neck, which needs click targets on empty positions (and pitch resolved from the
+  fretboard, which `effective_run_path` now does).
+- **Generics.** Draw over the degree ladder for a key-independent (transposable)
+  pattern, realized at any root.
+- **A shift that fits a 12-fret neck.** The octave shift landed but is
+  unreachable (below). A **scale-step shift** — move each note to the next scale
+  tone on its string — stays in the material *and* fits the neck, and is the
+  classic sequencing drill ("1-2-3, 2-3-4, 3-4-5"). Likely the more valuable
+  generator than the octave.
 
 ## Open questions and gaps
 
@@ -358,4 +366,27 @@ Follow-ons, in rough order:
     *content*, so the inner `input` needs its own box (`display:block` + padding,
     as `.search-wrap input` has) or it has no hit area to click into. Styling the
     wrapper alone is not enough.
-  - Not yet committed.
+  - Committed `427ee0a`.
+- **2026-07-16**: **Step numbers landed and verified; octave shift built but
+  unreachable.**
+  - **Step numbers** — while drawing, a marker on the path shows its step
+    index instead of its note name, so the order reads without playing it.
+    Revisits join ("1,5"). Undrawn markers keep their names, so you still see
+    what's available. Verified: drew A→B→C→C#→A and the A read "1,5".
+  - **`effective_run_path` now resolves each step's pitch from the neck**
+    (`Fretboard::pitch_at`) instead of looking it up among the current dots,
+    which fell back to `0.0` — a step that silently played nothing. A drawn note
+    is a real position whatever the lens shows.
+  - **Octave shift (`shift_path(±12)`)** — moves the shape while keeping every
+    note's pitch class, so it stays on the material's tones and its degrees hold:
+    the octave spider's generator. It refuses rather than clamping when the shape
+    would leave the neck, and the controls are gated on `can_shift_path` so there
+    is never a button that silently does nothing.
+  - **Honest gap:** `StageState::fret_count` is hardcoded to `12` and *nothing in
+    the UI changes it*, so an octave shift only fits a path sitting entirely at
+    fret 0 — the 8ve controls essentially never appear. The feature is correct and
+    unit-tested (`octave_shift_moves_the_shape_and_keeps_its_notes`) but is
+    groundwork, not a shipped capability, until the neck is configurable. A
+    neck-length setting was already design intent (per-instrument neck length in
+    the fretboard-settings plan); that, or the scale-step shift above, is what
+    makes shifting real.
