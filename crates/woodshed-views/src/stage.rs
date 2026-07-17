@@ -266,6 +266,14 @@ pub struct UiState {
     pub root_dd: SelectState,
     /// Corpus search field (a small always-available field in the nav row).
     pub search: TextInput,
+    /// Rename buffer for the selected card's label. A text field owns a
+    /// `TextInput`, but a card stores a plain `String`, so the buffer loads on
+    /// selection change and writes back as you type — see
+    /// [`Self::sync_card_rename`]. `card_rename_for` is the card index the
+    /// buffer currently holds, which is what makes "did the selection move?"
+    /// answerable. Transient.
+    pub card_rename: TextInput,
+    pub card_rename_for: Option<usize>,
     /// One-shot "♪ Hear" request the host consumes after dispatch: voice
     /// the current lens (or rehearsal card) through the audio backend.
     pub preview_requested: bool,
@@ -340,6 +348,8 @@ impl UiState {
             tuning_dd: SelectState::new(stage.tuning_idx),
             root_dd: SelectState::new(stage.root_idx),
             search: TextInput::new(""),
+            card_rename: TextInput::new(""),
+            card_rename_for: None,
             preview_requested: false,
             preview_note_requested: None,
             midi: MidiUiState::new(),
@@ -556,6 +566,25 @@ impl UiState {
         (!self.set.cards.is_empty()).then(|| self.set.cursor.min(self.set.cards.len() - 1))
     }
 
+    /// Keep the rename buffer and the selected card's label in step. The buffer
+    /// is authoritative while the selection holds still (so typing renames the
+    /// card); moving to another card reloads it from that card. The host calls
+    /// this each frame.
+    pub fn sync_card_rename(&mut self) {
+        let Some(cursor) = self.selected_card_index() else {
+            self.card_rename_for = None;
+            return;
+        };
+        if self.card_rename_for != Some(cursor) {
+            // Selection moved: adopt this card's label.
+            self.card_rename = TextInput::new(self.set.cards[cursor].label.clone());
+            self.card_rename_for = Some(cursor);
+        } else if self.card_rename.text() != self.set.cards[cursor].label {
+            // Typed: the buffer is the rename.
+            self.set.cards[cursor].label = self.card_rename.text().to_string();
+        }
+    }
+
     pub fn cycle_card_touch(&mut self) {
         let Some(cursor) = self.selected_card_index() else { return };
         let card = &mut self.set.cards[cursor];
@@ -575,9 +604,10 @@ impl UiState {
                         direction: D::Down,
                         inversion: *inversion,
                     },
-                    D::Down => Touch::Block,
+                    D::Down => Touch::Walk,
                 }
             }
+            Touch::Walk => Touch::Block,
         };
     }
 

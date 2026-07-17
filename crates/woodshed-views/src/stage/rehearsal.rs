@@ -128,6 +128,7 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                 woodshedding::rehearsal::Touch::Arpeggiate { direction, .. } => {
                     format!("arpeggiate {}", direction.label())
                 }
+                woodshedding::rehearsal::Touch::Walk => "walk".to_string(),
             };
             Box::new(clickable(
                 el(

@@ -1065,7 +1065,9 @@ impl StageState {
                 tuning: Some(self.tuning().name.clone()),
                 ..Setting::default()
             },
-            touch: Touch::Block,
+            // A drawn path carries its own order, so it walks — the honest touch
+            // for it, where Block would sound the notes on top of each other.
+            touch: Touch::Walk,
             timing: Timing::default(),
             from: None,
         })
@@ -1526,6 +1528,9 @@ impl StageState {
         if pitches.is_empty() {
             return (pitches, 0.0, 0.0);
         }
+        // Walk is a behaviour, not a label: it visits the notes one at a time
+        // (the cascade shape) rather than sounding them together.
+        let scale_like = scale_like || matches!(card.touch, Touch::Walk);
         let (dur, strum) = voicing_shape(pitches.len(), scale_like);
         (pitches, dur, strum)
     }
@@ -1887,6 +1892,12 @@ mod tests {
         }
         let card = s.card_from_drawn_path().expect("a drawn path makes a card");
         assert_eq!(card.material.tag(), "Path");
+        // A drawn path carries its own order, so it walks — Block would sound
+        // the notes on top of each other.
+        assert!(
+            matches!(card.touch, Touch::Walk),
+            "a drawn path's touch is walk, not block"
+        );
 
         // The saved card resolves back to exactly the drawn positions, in the
         // drawn order — the path *is* the material, not a re-derived set.

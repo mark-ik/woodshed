@@ -259,6 +259,14 @@ pub fn stage_css(p: &Palette) -> String {
 /* Save is the loop-closer, so it reads as the affirmative action. */
 .draw-tool.save {{ color: {tertiary}; }}
 .draw-tool.save:hover {{ background-color: {surface_hover}; color: {text_header}; }}
+/* Rename field for the selected card. The inner input needs its own box (like
+   .search-wrap input): a text field renders its buffer as element content, so
+   without padding/display it has no hit area to click into and never focuses. */
+.card-rename {{ width: 260px; margin-right: 12px; box-sizing: border-box; }}
+.card-rename input {{ display: block; width: 260px; box-sizing: border-box;
+                     background-color: {surface_2}; color: {text}; padding: 6px 12px;
+                     border-radius: 8px; border: 1px solid {surface_2}; font-size: 13px; }}
+.card-rename input:focus {{ border: 1px solid {tertiary}; }}
 /* Segmented mode control [Off · Solo · Mute]: a structured toggle, not a loose
    button row. The active segment is lit. */
 .mode-seg {{ display: flex; margin-right: 12px; border-radius: 6px; }}

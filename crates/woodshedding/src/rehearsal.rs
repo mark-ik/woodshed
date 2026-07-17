@@ -175,6 +175,12 @@ pub enum Touch {
         direction: ArpeggioDirection,
         inversion: u8,
     },
+    /// Visit the material's notes one at a time, in the order the *material*
+    /// carries — a drawn [`Material::Path`] walks as drawn, a scale climbs.
+    /// Block sounds the notes together; Walk follows the arrangement. Where
+    /// Arpeggiate imposes a direction on a chord's tones, Walk defers to the
+    /// material's own order, which is the point of material that has one.
+    Walk,
 }
 
 /// How long to stay on a card before moving on. (The app steps the set

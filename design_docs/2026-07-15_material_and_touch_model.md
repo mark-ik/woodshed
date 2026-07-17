@@ -184,10 +184,7 @@ sounds all of them, and it has no catalog id.
 
 Follow-ons, in rough order:
 
-- **Naming + touch.** The label is auto-generated ("<material> path — N notes")
-  and the touch is `Block` as a placeholder — a drawn path's order lives in the
-  material, so a real "walk the path" touch (with note values/tuplets) is the
-  honest home. Renaming a saved path wants a text field.
+- ~~**Naming + touch.**~~ **Landed 2026-07-16** (below).
 - **Step numbers.** Show each step's index over its marker (the CSS label
   overlay; the leaf can't shape text yet), so order reads without playing.
 - **Snap + generics.** Constrain drawing to a scale's tones or a chord's
@@ -340,4 +337,25 @@ Follow-ons, in rough order:
   rehearses as **Path · "A Major Blues path — 4 notes"** showing exactly those
   four notes (root A amber). Unit test `drawn_path_saves_as_a_playable_card`
   asserts the round-trip (drawn order preserved, real pitches, voices all, no
-  catalog id). 41 core tests green. Not yet committed.
+  catalog id). 41 core tests green. Committed `dd490eb` (with Draw mode).
+- **2026-07-16**: **Rename + the Walk touch landed and verified.**
+  - **`Touch::Walk`** — the third touch: *visit the material's notes in the order
+    the material carries* (a drawn Path walks as drawn, a scale climbs). Where
+    Arpeggiate imposes a direction on a chord's tones, Walk defers to the
+    material's own order, which is the whole point of material that has one. It
+    is a behaviour, not a label: `card_voicing` gives a Walk card the cascade
+    shape instead of a block. Drawn paths now save with `Touch::Walk` (they were
+    `Block`, which was a lie the UI printed). Cycle: block → arp up/down/updown →
+    walk → block. Verified: a freshly drawn path reads "walk" in the filmstrip
+    and the editor, while a path saved before the change still reads "block".
+  - **Rename** — a text field in the card editor renames the selected card. A
+    text field owns a `TextInput` but a card stores a `String`, so
+    `UiState::sync_card_rename` (host, per frame) two-ways them: adopt the card's
+    label when the selection moves, else commit what was typed. Verified: typing
+    renamed the card live in the field, the filmstrip, and the board caption.
+  - **Gotcha worth remembering:** the field first rendered as bare text and
+    would not focus. A Cambium text field renders its buffer as element
+    *content*, so the inner `input` needs its own box (`display:block` + padding,
+    as `.search-wrap input` has) or it has no hit area to click into. Styling the
+    wrapper alone is not enough.
+  - Not yet committed.

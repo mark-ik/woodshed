@@ -561,6 +561,9 @@ impl App {
                     }
                 }
                 ui.latency_ms = backend.latency_ms();
+                // Two-way the card-rename buffer: adopt the selected card's
+                // label when the selection moves, else commit what was typed.
+                ui.sync_card_rename();
                 clock_out_enabled = ui.midi.clock_out;
                 clock_out_playing = ui.transport.playing;
                 clock_out_bpm = ui.transport.bpm;

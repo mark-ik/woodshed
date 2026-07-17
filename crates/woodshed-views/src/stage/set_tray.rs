@@ -1,6 +1,6 @@
 use woodshedding::rehearsal::{Hold, LoopMode, Recipe, Touch};
 use woodshed_core::storage::AppSection;
-use cambium::{clickable, el, text};
+use cambium::{clickable, el, map_state, text, text_field};
 
 use super::{UiChild, UiState};
 
@@ -17,6 +17,7 @@ fn touch_label(touch: &Touch) -> String {
     match touch {
         Touch::Block => "block".into(),
         Touch::Arpeggiate { direction, .. } => format!("arp {}", direction.label()),
+        Touch::Walk => "walk".into(),
     }
 }
 
@@ -51,6 +52,15 @@ pub(super) fn card_editor(ui: &UiState) -> UiChild {
             "div",
             (
                 el("div", text("Selected Card")).attr("class", "set-editor-label"),
+                // Rename: the buffer is kept in step with this card's label by
+                // UiState::sync_card_rename, so typing here renames the card.
+                el(
+                    "div",
+                    map_state(text_field(&ui.card_rename), |ui: &mut UiState| {
+                        &mut ui.card_rename
+                    }),
+                )
+                .attr("class", "card-rename"),
                 clickable(
                     el(
                         "div",
