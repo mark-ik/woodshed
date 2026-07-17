@@ -379,3 +379,30 @@ Remaining refinements, in priority order:
     mid-reconcile, so the `woodshed-core` test binary won't link. The
     `woodshedding` suite (160, incl. Phase B) is green and the app verifies the
     feature end-to-end; re-run the core test once the sibling settles.
+- **2026-07-16**: **chartulary reconciled; the blocked core test is green.**
+  chartulary's attributed-edits change (an `Author` on every mutation) had left
+  `woodshed-graph` calling the old signatures; `build_catalog_graph` now stamps
+  `Author::new("catalog")`. `woodshed-core` links again: 43 tests, including the
+  neck-window test — which promptly caught a real gap (the storage round-trip
+  test's `FretboardSettings` literal was missing the new fields). Commit
+  `ec01964`.
+- **2026-07-16**: **Fretboard orientation — string order flipped, plus a vertical
+  option.**
+  - **Flip (`f96de76`):** the board drew the low string on top (string index 0,
+    since tunings read low-to-high). Tab and chord diagrams put the high strings
+    up top, so `string_center_y` now inverts the row — high E on top, low E at the
+    bottom. The taper follows (low E stays the thick string). Verified on A Major
+    Blues.
+  - **Vertical option:** the scattered geometry free functions became one
+    orientation-aware `BoardGeom` (the single source for the leaf paint *and* the
+    CSS overlay, so a single flag transposes both). The neck runs along one axis
+    and the strings across the other; `to_xy` is the only place orientation
+    decides which screen axis each maps to. Vertical stands the neck up: nut at
+    the top, frets running down, low E on the left, high E on the right, the board
+    left-aligned; markers swap extents so they fit the now-vertical cells; inlays
+    stay at their absolute frets. A **Settings → Fretboard → Orientation** toggle
+    (Horizontal / Vertical). Verified in the app in both orientations across neck
+    windows. 43 core tests still green.
+  - **Follow-on (shared with the neck feature):** a long neck stands tall in
+    vertical and runs past the pane — the neck window is the fix, but a
+    scroll/fit for the full neck (either orientation) is still wanted.

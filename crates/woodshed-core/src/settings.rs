@@ -103,6 +103,13 @@ pub struct FretboardSettings {
     /// (0-12, 8-16, 2-22).
     #[serde(default)]
     pub neck_end: Option<u8>,
+    /// How the neck is laid out: "Horizontal" (default) or "Vertical".
+    #[serde(default = "default_orientation")]
+    pub orientation: String,
+}
+
+fn default_orientation() -> String {
+    "Horizontal".into()
 }
 
 impl Default for FretboardSettings {
@@ -113,6 +120,7 @@ impl Default for FretboardSettings {
             neck_start: 0,
             // The instrument's own full neck, until a player picks a range.
             neck_end: None,
+            orientation: default_orientation(),
         }
     }
 }

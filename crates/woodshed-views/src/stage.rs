@@ -23,9 +23,7 @@ use cambium::{
     SelectState, TextInput,
 };
 
-use crate::fretboard_leaf::{
-    fretboard_px_size, note_center_x, string_center_y, FRETBOARD_LEAF_KEY, MARKER_H, MARKER_W,
-};
+use crate::fretboard_leaf::{BoardGeom, Orientation, FRETBOARD_LEAF_KEY};
 
 use crate::theme::ThemeMode;
 
@@ -1391,18 +1389,18 @@ const CARD_H: f32 = 112.0;
 /// A pinned marker's detail card, placed just above or below its marker (top-half
 /// markers get the card below, bottom-half above, to keep it inside the board).
 /// Shows note + octave, scale degree + interval, and the string/fret.
-fn note_card(d: &woodshed_core::FretDot, string_count: usize, fret_start: u8) -> UiChild {
-    let cx = note_center_x(fret_start, d.fret);
-    let cy = string_center_y(d.string_index, string_count);
+fn note_card(d: &woodshed_core::FretDot, geom: &BoardGeom, string_count: usize) -> UiChild {
+    let (cx, cy) = geom.note_pos(d.string_index, d.fret);
+    let (_mw, mh) = geom.marker_size();
+    let (_bw, bh) = geom.size();
     // Place the card below markers in the upper half of the board, above those
-    // in the lower half, so it stays on-screen. Uses the visual row (the strings
-    // are flipped: low string at the bottom), not the raw string index.
-    let row_from_top = string_count.saturating_sub(1).saturating_sub(d.string_index);
-    let below = row_from_top < string_count / 2;
+    // in the lower half, so it stays on-screen — by screen position, so it holds
+    // for either orientation.
+    let below = cy < bh / 2.0;
     let top = if below {
-        cy + MARKER_H / 2.0 + 6.0
+        cy + mh / 2.0 + 6.0
     } else {
-        cy - MARKER_H / 2.0 - 6.0 - CARD_H
+        cy - mh / 2.0 - 6.0 - CARD_H
     };
     let left = (cx - CARD_W / 2.0).max(2.0);
     let title = format!("{}{}", d.label, d.octave);
@@ -1450,13 +1448,21 @@ pub(super) fn board(ui: &UiState) -> UiChild {
     // click target that pins its detail card — multi-pin, so clicking toggles)
     // and the pinned cards. Positions come from the leaf's own marker geometry so
     // overlay and paint align.
-    let (w, h) = fretboard_px_size(string_count, state.fret_start, state.fret_count);
+    let geom = BoardGeom {
+        string_count,
+        fret_start: state.fret_start,
+        fret_count: state.fret_count,
+        orientation: Orientation::from_name(&ui.app_settings.fretboard.orientation),
+    };
+    let (w, h) = geom.size_u32();
+    let (mw, mh) = geom.marker_size();
     let labels: Vec<UiChild> = dot_list
         .iter()
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
-            let lx = note_center_x(state.fret_start, fret) - MARKER_W / 2.0;
-            let ly = string_center_y(si, string_count) - MARKER_H / 2.0;
+            let (px, py) = geom.note_pos(si, fret);
+            let lx = px - mw / 2.0;
+            let ly = py - mh / 2.0;
             // While drawing, a marker on the path shows its step number instead
             // of its note name, so the order reads without playing it. A path may
             // revisit a note, so its indices join ("2,5").
@@ -1483,7 +1489,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             Box::new(clickable(
                 el("div", text(label_text)).attr("class", class).attr(
                     "style",
-                    format!("left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"),
+                    format!("left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"),
                 ),
                 move |ui: &mut UiState, _| ui.board_marker_click(si, fret),
             )) as UiChild
@@ -1496,7 +1502,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| note_card(d, string_count, state.fret_start))
+                .map(|d| note_card(d, &geom, string_count))
         })
         .collect();
     Box::new(

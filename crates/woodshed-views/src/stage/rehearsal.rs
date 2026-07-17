@@ -3,10 +3,7 @@ use woodshedding::rehearsal::{LoopMode, MarkMode, Recipe};
 use cambium::{clickable, custom_leaf, el, on_hover, text, HoverEvent, HoverPhase};
 
 use super::{UiChild, UiState};
-use crate::fretboard_leaf::{
-    fretboard_px_size, note_center_x, string_center_y, MARKER_H, MARKER_W,
-    REHEARSAL_FRETBOARD_LEAF_KEY,
-};
+use crate::fretboard_leaf::{BoardGeom, Orientation, REHEARSAL_FRETBOARD_LEAF_KEY};
 
 fn recipe_line(recipe: &Recipe) -> String {
     match recipe {
@@ -160,13 +157,21 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
     let card = &ui.set.cards[cursor];
     let dot_list = ui.stage.dots_for_card(card);
     let string_count = ui.stage.string_count();
-    let (w, h) = fretboard_px_size(string_count, ui.stage.fret_start, ui.stage.fret_count);
+    let geom = BoardGeom {
+        string_count,
+        fret_start: ui.stage.fret_start,
+        fret_count: ui.stage.fret_count,
+        orientation: Orientation::from_name(&ui.app_settings.fretboard.orientation),
+    };
+    let (w, h) = geom.size_u32();
+    let (mw, mh) = geom.marker_size();
     let labels: Vec<UiChild> = dot_list
         .iter()
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
-            let lx = note_center_x(ui.stage.fret_start, fret) - MARKER_W / 2.0;
-            let ly = string_center_y(si, string_count) - MARKER_H / 2.0;
+            let (px, py) = geom.note_pos(si, fret);
+            let lx = px - mw / 2.0;
+            let ly = py - mh / 2.0;
             let mut class = String::from("fret-label");
             if ui.card_marked(si, fret) {
                 class.push_str(" marked");
@@ -181,7 +186,7 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                     el("div", text(d.label.clone())).attr("class", class).attr(
                         "style",
                         format!(
-                            "left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"
+                            "left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"
                         ),
                     ),
                     move |ui: &mut UiState, _| ui.toggle_card_mark(si, fret),
@@ -204,7 +209,7 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| super::note_card(d, string_count, ui.stage.fret_start))
+                .map(|d| super::note_card(d, &geom, string_count))
         })
         .into_iter()
         .collect();

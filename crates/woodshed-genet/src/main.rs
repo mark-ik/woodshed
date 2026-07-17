@@ -255,6 +255,9 @@ impl App {
         let fret_start = st.fret_start;
         let fret_count = st.fret_count;
         let marker_style = state.app_settings.fretboard.marker_style.clone();
+        let orientation = woodshed_views::fretboard_leaf::Orientation::from_name(
+            &state.app_settings.fretboard.orientation,
+        );
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
             .dots()
             .into_iter()
@@ -271,6 +274,8 @@ impl App {
         fret_start.hash(&mut hasher);
         fret_count.hash(&mut hasher);
         marker_style.hash(&mut hasher);
+        matches!(orientation, woodshed_views::fretboard_leaf::Orientation::Vertical)
+            .hash(&mut hasher);
         for d in &dots {
             d.string_index.hash(&mut hasher);
             d.fret.hash(&mut hasher);
@@ -284,6 +289,7 @@ impl App {
             string_count,
             fret_start,
             fret_count,
+            orientation,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
         );
@@ -341,6 +347,9 @@ impl App {
         let fret_start = st.fret_start;
         let fret_count = st.fret_count;
         let marker_style = state.app_settings.fretboard.marker_style.clone();
+        let orientation = woodshed_views::fretboard_leaf::Orientation::from_name(
+            &state.app_settings.fretboard.orientation,
+        );
         // marked / excluded come from the same UiState helpers the view uses, so
         // the mode logic (Off / Solo / Mute) lives in exactly one place.
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
@@ -360,6 +369,8 @@ impl App {
         fret_start.hash(&mut hasher);
         fret_count.hash(&mut hasher);
         marker_style.hash(&mut hasher);
+        matches!(orientation, woodshed_views::fretboard_leaf::Orientation::Vertical)
+            .hash(&mut hasher);
         for d in &dots {
             d.string_index.hash(&mut hasher);
             d.fret.hash(&mut hasher);
@@ -375,6 +386,7 @@ impl App {
             string_count,
             fret_start,
             fret_count,
+            orientation,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
         );

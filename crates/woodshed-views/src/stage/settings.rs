@@ -366,6 +366,21 @@ fn fretboard_page(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
+    // Orientation: lay the neck out horizontally (frets left-to-right) or stand
+    // it up vertically (nut at the top, low E on the left) like a chord diagram.
+    let orient_chips: Vec<UiChild> = ["Horizontal", "Vertical"]
+        .iter()
+        .map(|&name| {
+            let active = ui.app_settings.fretboard.orientation.as_str() == name;
+            let class = if active { "side-item side-active" } else { "side-item" };
+            Box::new(clickable(
+                el("div", text(name)).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.app_settings.fretboard.orientation = name.to_string();
+                },
+            )) as UiChild
+        })
+        .collect();
     Box::new(
         el(
             "div",
@@ -374,6 +389,8 @@ fn fretboard_page(ui: &UiState) -> UiChild {
                 el("div", layouts).attr("class", "settings-options"),
                 el("div", text("Markers")).attr("class", "settings-heading settings-gap"),
                 el("div", markers).attr("class", "settings-options"),
+                el("div", text("Orientation")).attr("class", "settings-heading settings-gap"),
+                el("div", orient_chips).attr("class", "settings-options"),
                 el("div", text("Neck (frets)")).attr("class", "settings-heading settings-gap"),
                 el("div", neck_chips).attr("class", "settings-options"),
             ),
