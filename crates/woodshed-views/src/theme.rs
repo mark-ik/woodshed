@@ -248,6 +248,17 @@ pub fn stage_css(p: &Palette) -> String {
 .run-btn:hover {{ background-color: {surface_hover}; color: {text_header}; }}
 /* The Path toggle, lit when the touch's trail is shown. */
 .run-btn.path-on {{ background-color: {surface_hover}; color: {tertiary}; }}
+/* Draw mode, lit with a ring outline to read as "you're authoring the path". */
+.run-btn.draw-on {{ background-color: {surface_hover}; color: {tertiary};
+                   box-shadow: inset 0 0 0 1px {tertiary}; }}
+/* Path-editing tools (undo / reverse / rotate / clear): quiet inline actions. */
+.draw-tools {{ display: flex; align-items: center; margin-right: 12px; }}
+.draw-tool {{ padding: 3px 8px; border-radius: 5px; color: {text_dim};
+             font-size: 12px; cursor: pointer; }}
+.draw-tool:hover {{ background-color: {surface_2}; color: {text}; }}
+/* Save is the loop-closer, so it reads as the affirmative action. */
+.draw-tool.save {{ color: {tertiary}; }}
+.draw-tool.save:hover {{ background-color: {surface_hover}; color: {text_header}; }}
 /* Segmented mode control [Off · Solo · Mute]: a structured toggle, not a loose
    button row. The active segment is lit. */
 .mode-seg {{ display: flex; margin-right: 12px; border-radius: 6px; }}

@@ -300,7 +300,8 @@ impl App {
             .map(|r| {
                 let st = &r.state().stage;
                 let active = st.scale_run_playing.then_some(st.scale_run_active).flatten();
-                let show = st.path_shown;
+                // Draw mode always shows the trail (you're editing it).
+                let show = st.path_shown || st.draw_mode;
                 let path = if show { st.run_positions() } else { Vec::new() };
                 (active, path, show)
             })

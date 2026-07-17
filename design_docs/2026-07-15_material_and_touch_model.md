@@ -110,6 +110,91 @@ Create material splits cleanly: author a note-set (a material) or author a path
 (a touch, i.e. an exercise). Most specialty cases are one or the other. The
 octave spider is the second.
 
+### Drawing the path is authoring (2026-07-15 idea)
+
+The Path trail (Phase 4) is read-only today — a view of a derived order. Make it
+*drawable* and it stops being a view: **a drawn path is the arrangement.** A
+path's vertices are the notes, its segments the relationships (each step is an
+interval + a hand move), so drawing a path authors both the *what* (which notes)
+and the *how* (what order) in one gesture. Material and touch, which this model
+splits, collapse at this end — the path is both.
+
+That makes one spectrum out of the lenses:
+
+- **Preset end:** a lens hands you a note-set (scale/chord from theory); you draw
+  a path *over* it (run, arpeggiate). Notes given, traversal authored.
+- **Free end:** no given set; you draw from scratch and the vertices *are* the
+  material — a lick, an exercise, the spider.
+- **Middle:** draw constrained — snap to a scale's tones (a melodic pattern in a
+  key) or a chord's positions (a specific arpeggio fingering).
+
+The operations (the verbs a player reaches for):
+
+- **Join notes (draw):** click markers in sequence; the trail becomes the
+  authored path, numbered. Snap: free / to-scale / to-chord.
+- **Determine treatment:** the path is the order; hang the rest of touch on it
+  (note values, tuplets, direction: as-drawn / reverse / palindrome / loop).
+  Playing walks the drawn order — the stepping run already does this.
+- **Shift ordering:** two moves — reorder steps (drag a vertex, insert/delete),
+  *and* shift the whole shape (transpose up a string/fret or by an interval).
+  The second **is** the octave spider: draw one cell, shift it across the neck →
+  a generated drill. A path + a shift rule = an exercise.
+
+It ladders into generics: a path over concrete positions is a specific lick; a
+path over the degree ladder (1, b3, 5…) is a key-independent pattern, transposable
+anywhere — a portable exercise. And **save closes the loop**: a drawn path (+
+treatment + shift) is a new Riff/exercise material that stages, rehearses, and
+joins a set. Draw → save → practice.
+
+**First slice (landed 2026-07-16, Stage board).** A **Draw** toggle in the board
+caption: while lit, clicking a marker appends it to `StageState::authored_path`
+instead of pinning its detail card, so you draw the touch's path by hand. The
+existing trail renders it in click order and the stepping Run walks it (the
+`effective_run_path` seam: a hand-drawn path overrides the derived pitch-order).
+Editing tools — Undo / Reverse (retrograde) / Rotate (shift the start) / Clear —
+sit beside it. Reuses the Path trail, the marker click-surface, and the keystone;
+no new leaf work. Verified: drew a 6-step path, the Run stepped along the drawn
+order (not the pitch order).
+
+**Save as material (landed 2026-07-16) — the loop closes.** A **Save** in the
+draw tools turns the drawn path into a card. This needed a new material kind:
+every other `Material` *names* a catalog formula (`Scale`/`Chord` by name+root,
+`Riff` by exercise name), but a drawn path has no catalog entry — it *is* its
+content. Hence `Material::Path { positions, root }`, carrying the ordered
+positions inline plus the root they were drawn over so degrees still resolve.
+Consequences, each of which fell out cleanly:
+
+- `dots_for_card` resolves a Path via `Fretboard::pitch_at`, naming each note and
+  its degree from the stored root (positions off a narrower neck are dropped, not
+  panicked on).
+- `card_voicing` sounds a Path as a cascade **in drawn order** (its order is the
+  material), not a block.
+- `catalog_id_for_card` became `Option<String>`: a drawn path is not a catalog
+  subject, so it stays out of practice history and the Related graph. Honest —
+  it has no graph identity to record.
+- Mark + solo/mute compose with Path cards for free (they filter dots/pitch
+  classes, which a Path now supplies).
+
+Verified end-to-end: drew A→B→C→C# over A Major Blues, Save → "3 cards", and the
+card lands in the set as **Path · "A Major Blues path — 4 notes"**; rehearsing it
+shows exactly those four notes (root A amber) instead of the 40-position scale.
+Unit-tested (`drawn_path_saves_as_a_playable_card`): the card round-trips to the
+drawn positions *in drawn order*, every note carries a real pitch, the voicing
+sounds all of them, and it has no catalog id.
+
+Follow-ons, in rough order:
+
+- **Naming + touch.** The label is auto-generated ("<material> path — N notes")
+  and the touch is `Block` as a placeholder — a drawn path's order lives in the
+  material, so a real "walk the path" touch (with note values/tuplets) is the
+  honest home. Renaming a saved path wants a text field.
+- **Step numbers.** Show each step's index over its marker (the CSS label
+  overlay; the leaf can't shape text yet), so order reads without playing.
+- **Snap + generics.** Constrain drawing to a scale's tones or a chord's
+  positions; draw over the degree ladder for a key-independent (transposable)
+  pattern. Plus **shift-to-generate** (the octave spider: one drawn cell shifted
+  across the neck).
+
 ## Open questions and gaps
 
 - **Subdivision clock:** tie path steps to the metronome's beats and a tuplet
@@ -228,3 +313,31 @@ octave spider is the second.
   host-side). Verified on Aadd11: hover the A → "A2 · 1 · Root · string 6 · fret
   5" card peeked; move away → gone; no panics through the dispatch→rebuild path.
   Not yet committed.
+- **2026-07-16**: The four entries above (mark + solo/mute, touch path, hover-peek,
+  graph-canvas swatch) **landed in commit `5d4d752`** — the "Not yet committed"
+  notes on them are historical.
+- **2026-07-16**: **Draw mode landed and verified** (Stage board) — drawing the
+  path is authoring, first slice. A "Draw" toggle beside Run/Path; while lit,
+  clicking a marker appends it to `StageState::authored_path` (else it pins the
+  detail card, via `board_marker_click`). The trail renders the drawn order and
+  the Run walks it — the `effective_run_path` seam: a non-empty `authored_path`
+  overrides the derived pitch-order for both the trail (`run_positions`) and the
+  step (`scale_run_tick`). Tools: Undo / Reverse / Rotate / Clear. Wiring:
+  `StageState::{draw_mode, authored_path, toggle_draw_mode, append_to_path,
+  undo_path, clear_path, reverse_path, rotate_path, effective_run_path}`; host
+  `sync_fretboard_active` shows the trail when `draw_mode`. Verified: drew a
+  6-step path (A→C#→D→E→A→D), the Run stepped along the drawn order, not the
+  pitch order. Transient (save-as-material is the next leg). Not yet committed.
+- **2026-07-16**: **Save as material landed and verified — draw → save → practice
+  closes.** A drawn path saves as a card via the new `Material::Path { positions,
+  root }`: the first material that *carries* its content instead of naming a
+  catalog formula. `dots_for_card` resolves it through `Fretboard::pitch_at`
+  (degrees from the stored root); `card_voicing` cascades it in drawn order;
+  `catalog_id_for_card` became `Option<String>` so a drawn path stays out of
+  practice history / the Related graph (it has no catalog identity). Wiring:
+  `StageState::card_from_drawn_path`, `UiState::save_drawn_path`, a Save tool.
+  Verified: drew A→B→C→C# over A Major Blues → Save → "3 cards" → the card
+  rehearses as **Path · "A Major Blues path — 4 notes"** showing exactly those
+  four notes (root A amber). Unit test `drawn_path_saves_as_a_playable_card`
+  asserts the round-trip (drawn order preserved, real pitches, voices all, no
+  catalog id). 41 core tests green. Not yet committed.

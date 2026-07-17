@@ -531,6 +531,17 @@ impl UiState {
         }
     }
 
+    /// What a Stage-board marker click does: in draw mode it appends the marker
+    /// to the hand-drawn path; otherwise it pins the detail card (the prior
+    /// behaviour). Resolved at click time so toggling Draw needs no rebuild.
+    pub fn board_marker_click(&mut self, string_index: usize, fret: u8) {
+        if self.stage.draw_mode {
+            self.stage.append_to_path(string_index, fret);
+        } else {
+            self.toggle_pin(string_index, fret);
+        }
+    }
+
     pub fn nudge_bpm(&mut self, delta: f32) {
         self.transport.nudge_bpm(delta);
         self.app_settings.metronome.bpm = self.transport.bpm;
@@ -641,7 +652,7 @@ impl UiState {
     pub fn request_preview(&mut self) {
         let subject_id = if self.section == AppSection::Rehearsal && !self.set.cards.is_empty() {
             let cursor = self.set.cursor.min(self.set.cards.len() - 1);
-            Some(catalog_id_for_card(&self.set.cards[cursor]))
+            catalog_id_for_card(&self.set.cards[cursor])
         } else {
             self.stage.catalog_id()
         };
@@ -663,16 +674,24 @@ impl UiState {
         }
     }
 
+    /// Save the hand-drawn path as a card in the set — draw → save → practice.
+    /// The drawing is kept, so you can refine and save a variant. No history
+    /// record: a drawn path is not a catalog subject.
+    pub fn save_drawn_path(&mut self) {
+        if let Some(card) = self.stage.card_from_drawn_path() {
+            self.set.push(card);
+        }
+    }
+
     pub fn record_rehearsal_cursor(&mut self) {
         if self.set.cards.is_empty() {
             return;
         }
         let cursor = self.set.cursor.min(self.set.cards.len() - 1);
-        self.practice_history.record(
-            catalog_id_for_card(&self.set.cards[cursor]),
-            EngagementKind::Rehearsed,
-            None,
-        );
+        if let Some(id) = catalog_id_for_card(&self.set.cards[cursor]) {
+            self.practice_history
+                .record(id, EngagementKind::Rehearsed, None);
+        }
     }
 
     pub fn complete_rehearsal_cursor(&mut self) {
@@ -680,11 +699,10 @@ impl UiState {
             return;
         }
         let cursor = self.set.cursor.min(self.set.cards.len() - 1);
-        self.practice_history.record(
-            catalog_id_for_card(&self.set.cards[cursor]),
-            EngagementKind::Completed,
-            None,
-        );
+        if let Some(id) = catalog_id_for_card(&self.set.cards[cursor]) {
+            self.practice_history
+                .record(id, EngagementKind::Completed, None);
+        }
     }
 
     /// Snapshot the persistable subset (the W0.2 seam's payload).
@@ -1393,7 +1411,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                     "style",
                     format!("left:{lx:.1}px; top:{ly:.1}px; width:{MARKER_W:.1}px; height:{MARKER_H:.1}px"),
                 ),
-                move |ui: &mut UiState, _| ui.toggle_pin(si, fret),
+                move |ui: &mut UiState, _| ui.board_marker_click(si, fret),
             )) as UiChild
         })
         .collect();
@@ -1447,6 +1465,57 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                             ),
                             |ui: &mut UiState, _| ui.stage.toggle_path(),
                         ),
+                        clickable(
+                            el(
+                                "div",
+                                text(if state.draw_mode {
+                                    format!("Draw ({})", state.authored_path.len())
+                                } else {
+                                    "Draw".to_string()
+                                }),
+                            )
+                            .attr(
+                                "class",
+                                if state.draw_mode {
+                                    "run-btn draw-on"
+                                } else {
+                                    "run-btn"
+                                },
+                            ),
+                            |ui: &mut UiState, _| ui.stage.toggle_draw_mode(),
+                        ),
+                        // Path-editing tools: appear once you're drawing or have
+                        // a drawn path. Retrograde, rotate the start, undo, clear.
+                        (state.draw_mode || !state.authored_path.is_empty()).then(|| {
+                            el(
+                                "div",
+                                (
+                                    clickable(
+                                        el("div", text("Undo")).attr("class", "draw-tool"),
+                                        |ui: &mut UiState, _| ui.stage.undo_path(),
+                                    ),
+                                    clickable(
+                                        el("div", text("Reverse")).attr("class", "draw-tool"),
+                                        |ui: &mut UiState, _| ui.stage.reverse_path(),
+                                    ),
+                                    clickable(
+                                        el("div", text("Rotate")).attr("class", "draw-tool"),
+                                        |ui: &mut UiState, _| ui.stage.rotate_path(),
+                                    ),
+                                    clickable(
+                                        el("div", text("Clear")).attr("class", "draw-tool"),
+                                        |ui: &mut UiState, _| ui.stage.clear_path(),
+                                    ),
+                                    // Save closes the loop: the drawn path
+                                    // becomes a card you can rehearse.
+                                    clickable(
+                                        el("div", text("Save")).attr("class", "draw-tool save"),
+                                        |ui: &mut UiState, _| ui.save_drawn_path(),
+                                    ),
+                                ),
+                            )
+                            .attr("class", "draw-tools")
+                        }),
                         el(
                             "div",
                             text(format!(

@@ -84,15 +84,19 @@ impl PracticeHistory {
     }
 }
 
-pub fn catalog_id_for_card(card: &Card) -> String {
-    match &card.material {
+/// The catalog subject a card practises, for practice history and the Related
+/// graph. `None` when the card has no catalog identity — a hand-drawn path is
+/// its own content, not a catalog entry, so it stays out of both.
+pub fn catalog_id_for_card(card: &Card) -> Option<String> {
+    Some(match &card.material {
         Material::Scale { name, .. } => woodshed_graph::scale_id(name),
         Material::Chord { name, .. } if matches!(card.touch, Touch::Arpeggiate { .. }) => {
             woodshed_graph::arpeggio_id(name)
         }
         Material::Chord { name, .. } => woodshed_graph::chord_id(name),
         Material::Riff { name } => woodshed_graph::exercise_id(name),
-    }
+        Material::Path { .. } => return None,
+    })
 }
 
 #[cfg(test)]

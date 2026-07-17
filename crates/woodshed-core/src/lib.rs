@@ -227,6 +227,16 @@ pub struct StageState {
     /// Whether to draw the touch's path as a trail over the markers (the touch
     /// editor: show the treatment, not just name it). Transient.
     pub path_shown: bool,
+    /// Draw mode: clicking a marker appends it to `authored_path` instead of
+    /// pinning its detail card, so the player draws the touch's path by hand.
+    /// Transient.
+    pub draw_mode: bool,
+    /// The hand-drawn path, an ordered visit list of `(string, fret)`. When
+    /// non-empty it *is* the run's path (the trail and the stepping run follow
+    /// it), overriding the derived pitch-order. Transient (persisting it as a
+    /// saved exercise is the next step). Duplicates allowed — a path may revisit
+    /// a note.
+    pub authored_path: Vec<(usize, u8)>,
     pub arpeggio_direction: ArpeggioDirection,
     /// Inversion: which chord tone the run starts on (0 = root),
     /// clamped to the tone count.
@@ -557,6 +567,8 @@ impl StageState {
             scale_run_step: 0,
             scale_run_active: None,
             path_shown: false,
+            draw_mode: false,
+            authored_path: Vec::new(),
             arpeggio_direction: ArpeggioDirection::default(),
             arpeggio_inversion: 0,
             progression_idx: None,
@@ -1029,6 +1041,36 @@ impl StageState {
         Some(card)
     }
 
+    /// The hand-drawn path as a rehearsal [`Card`] — Draw mode's Save. Unlike
+    /// every other card, it names no catalog formula: the positions ride inline
+    /// in a [`Material::Path`], with the root they were drawn over so degrees
+    /// still resolve. This is the draw → save → practice loop's last leg.
+    /// `None` when nothing is drawn.
+    pub fn card_from_drawn_path(&self) -> Option<Card> {
+        if self.authored_path.is_empty() {
+            return None;
+        }
+        Some(Card {
+            label: format!(
+                "{} path — {} notes",
+                self.material_name(),
+                self.authored_path.len()
+            ),
+            material: Material::Path {
+                positions: self.authored_path.clone(),
+                root: PitchClass::new(9 + self.root_idx as u8), // A = pc 9
+            },
+            setting: Setting {
+                instrument: String::new(),
+                tuning: Some(self.tuning().name.clone()),
+                ..Setting::default()
+            },
+            touch: Touch::Block,
+            timing: Timing::default(),
+            from: None,
+        })
+    }
+
     /// Resolve a card's material to fretboard dots against the current
     /// tuning. (Setting fidelity — capo, pinned windows, per-card tuning —
     /// arrives with the card editor; tracked in the plan.)
@@ -1072,6 +1114,32 @@ impl StageState {
                             .collect()
                     })
                     .unwrap_or_default();
+            }
+            Material::Path { positions, root } => {
+                // A drawn path carries its own notes: resolve each position
+                // against the current tuning and name its degree from the root
+                // it was drawn over. Positions off the neck (a saved path opened
+                // under a narrower tuning) are dropped rather than panicking.
+                let strings = self.string_count();
+                let root_pc = root.value() as i32;
+                return positions
+                    .iter()
+                    .filter(|(s, f)| *s < strings && *f <= self.fret_count)
+                    .map(|&(s, f)| {
+                        let pitch = board.pitch_at(s, f);
+                        let semis = (pitch.pitch_class() as i32 - root_pc).rem_euclid(12);
+                        FretDot {
+                            string_index: s,
+                            fret: f,
+                            is_root: semis == 0,
+                            label: format!("{}{}", pitch.name, pitch.accidental),
+                            octave: pitch.octave,
+                            degree: degree_label(semis).to_string(),
+                            interval_name: interval_name(semis).to_string(),
+                            frequency: pitch.frequency() as f32,
+                        }
+                    })
+                    .collect();
             }
         };
         // Setting fidelity: a pinned fret window filters the positions to
@@ -1194,11 +1262,69 @@ impl StageState {
         self.path_shown = !self.path_shown;
     }
 
+    /// Enter or leave draw mode (clicking markers draws the path by hand). The
+    /// drawn path is kept when leaving, so the run keeps following it.
+    pub fn toggle_draw_mode(&mut self) {
+        self.draw_mode = !self.draw_mode;
+    }
+
+    /// Append a marker to the drawn path (the next step). Duplicates are allowed
+    /// so a path can revisit a note.
+    pub fn append_to_path(&mut self, string_index: usize, fret: u8) {
+        self.authored_path.push((string_index, fret));
+    }
+
+    /// Undo the last drawn step.
+    pub fn undo_path(&mut self) {
+        self.authored_path.pop();
+    }
+
+    /// Clear the drawn path (the run reverts to the derived pitch-order).
+    pub fn clear_path(&mut self) {
+        self.authored_path.clear();
+        self.scale_run_step = 0;
+    }
+
+    /// Reverse the drawn path (retrograde).
+    pub fn reverse_path(&mut self) {
+        self.authored_path.reverse();
+        self.scale_run_step = 0;
+    }
+
+    /// Rotate the drawn path's start forward by one step.
+    pub fn rotate_path(&mut self) {
+        if !self.authored_path.is_empty() {
+            self.authored_path.rotate_left(1);
+            self.scale_run_step = 0;
+        }
+    }
+
     /// The run's visit order as `(string, fret)` — the path trail the leaf draws.
     pub fn run_positions(&self) -> Vec<(usize, u8)> {
-        self.scale_run_path()
+        self.effective_run_path()
             .into_iter()
             .map(|(s, f, _)| (s, f))
+            .collect()
+    }
+
+    /// The path the run actually walks: the hand-drawn `authored_path` when one
+    /// exists (frequencies looked up from the current board), else the derived
+    /// scale-run order. This is the seam where a drawn touch overrides the preset.
+    pub fn effective_run_path(&self) -> Vec<(usize, u8, f32)> {
+        if self.authored_path.is_empty() {
+            return self.scale_run_path();
+        }
+        let dots = self.dots();
+        self.authored_path
+            .iter()
+            .map(|&(s, f)| {
+                let freq = dots
+                    .iter()
+                    .find(|d| d.string_index == s && d.fret == f)
+                    .map(|d| d.frequency)
+                    .unwrap_or(0.0);
+                (s, f, freq)
+            })
             .collect()
     }
 
@@ -1217,7 +1343,7 @@ impl StageState {
     /// Advance the run one step: mark the note now sounding (for the board
     /// highlight), return its frequency to play, and move the cursor on. Wraps.
     pub fn scale_run_tick(&mut self) -> Option<f32> {
-        let path = self.scale_run_path();
+        let path = self.effective_run_path();
         if path.is_empty() {
             self.scale_run_active = None;
             return None;
@@ -1383,6 +1509,19 @@ impl StageState {
                 false,
             ),
             Material::Riff { .. } => (Vec::new(), false),
+            Material::Path { positions, .. } => {
+                // A drawn path is inherently sequential: sound it as an
+                // ascending-style cascade *in drawn order* (its order is the
+                // material), not as a block.
+                let board = Fretboard::new(self.tuning(), self.fret_count);
+                let strings = self.string_count();
+                let hz: Vec<f32> = positions
+                    .iter()
+                    .filter(|(s, f)| *s < strings && *f <= self.fret_count)
+                    .map(|&(s, f)| board.pitch_at(s, f).frequency() as f32)
+                    .collect();
+                (hz, true)
+            }
         };
         if pitches.is_empty() {
             return (pitches, 0.0, 0.0);
@@ -1734,6 +1873,49 @@ mod tests {
         s.set_lens(Lens::Exercises);
         let riff = s.card_from_lens().unwrap();
         assert!(s.card_voicing(&riff).0.is_empty());
+    }
+
+    #[test]
+    fn drawn_path_saves_as_a_playable_card() {
+        let mut s = StageState::new();
+        assert!(
+            s.card_from_drawn_path().is_none(),
+            "nothing drawn, nothing to save"
+        );
+        for &(string, fret) in &[(0u8, 5u8), (1, 7), (2, 5)] {
+            s.append_to_path(string as usize, fret);
+        }
+        let card = s.card_from_drawn_path().expect("a drawn path makes a card");
+        assert_eq!(card.material.tag(), "Path");
+
+        // The saved card resolves back to exactly the drawn positions, in the
+        // drawn order — the path *is* the material, not a re-derived set.
+        let dots = s.dots_for_card(&card);
+        assert_eq!(
+            dots.iter()
+                .map(|d| (d.string_index, d.fret))
+                .collect::<Vec<_>>(),
+            vec![(0, 5), (1, 7), (2, 5)],
+            "path card resolves to the drawn positions in drawn order"
+        );
+        // Unlike riff steps, a drawn path's notes carry real pitch, so the
+        // detail card and the run's audio have something to say.
+        assert!(
+            dots.iter()
+                .all(|d| !d.label.is_empty() && d.frequency > 0.0),
+            "every drawn note resolves to a named, sounding pitch"
+        );
+        // And it sounds every drawn note (a riff card voices nothing).
+        assert_eq!(
+            s.card_voicing(&card).0.len(),
+            3,
+            "the voicing sounds every drawn note"
+        );
+        // A hand-drawn path is its own content, not a catalog subject.
+        assert!(
+            crate::history::catalog_id_for_card(&card).is_none(),
+            "a drawn path has no catalog identity"
+        );
     }
 
     #[test]

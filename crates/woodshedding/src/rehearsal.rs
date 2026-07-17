@@ -55,6 +55,15 @@ pub enum Material {
     /// A fixed playable sequence; a user/catalog exercise's steps live
     /// here, referenced by name.
     Riff { name: String },
+    /// A hand-drawn path: arranged notes carried *inline* as an ordered visit
+    /// list of `(string_index, fret)`, plus the root they were drawn over so
+    /// their degrees still name themselves. Every other material names a
+    /// catalog formula; this one carries its own content — "content is arranged
+    /// notes and relationships", literally. What Draw mode saves.
+    Path {
+        positions: Vec<(usize, u8)>,
+        root: PitchClass,
+    },
 }
 
 impl Material {
@@ -64,6 +73,7 @@ impl Material {
             Self::Scale { .. } => "Scale",
             Self::Chord { .. } => "Chord",
             Self::Riff { .. } => "Riff",
+            Self::Path { .. } => "Path",
         }
     }
 }
