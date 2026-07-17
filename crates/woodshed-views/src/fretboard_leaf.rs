@@ -138,9 +138,13 @@ const C_PATH: ColorF = ColorF { r: 0.93, g: 0.74, b: 0.42, a: 0.55 };
 pub const MARKER_W: f32 = FRET_W * 0.7;
 pub const MARKER_H: f32 = STRING_SP * 0.62;
 
-/// y of string `i`'s centre. Shared by the leaf's paint and the label overlay.
-pub fn string_center_y(i: usize) -> f32 {
-    PAD + STRING_SP / 2.0 + i as f32 * STRING_SP
+/// y of string `i`'s centre. Tunings read low-to-high (`i == 0` is the lowest
+/// string), but the board shows the high strings up top the way tab and chord
+/// diagrams do, so the low string sits at the *bottom*. Shared by the leaf's
+/// paint and the label overlay, so both agree on the flip.
+pub fn string_center_y(i: usize, string_count: usize) -> f32 {
+    let row_from_top = string_count.saturating_sub(1).saturating_sub(i);
+    PAD + STRING_SP / 2.0 + row_from_top as f32 * STRING_SP
 }
 
 /// x of fret wire `fret` (its right edge). Fret 0 is the nut at the open
@@ -239,7 +243,7 @@ impl FretboardLeaf {
     }
 
     fn string_y(&self, i: usize) -> f32 {
-        string_center_y(i)
+        string_center_y(i, self.string_count)
     }
 
     fn wire_x(&self, fret: u8) -> f32 {

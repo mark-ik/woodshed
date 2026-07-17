@@ -1393,8 +1393,12 @@ const CARD_H: f32 = 112.0;
 /// Shows note + octave, scale degree + interval, and the string/fret.
 fn note_card(d: &woodshed_core::FretDot, string_count: usize, fret_start: u8) -> UiChild {
     let cx = note_center_x(fret_start, d.fret);
-    let cy = string_center_y(d.string_index);
-    let below = d.string_index < string_count / 2;
+    let cy = string_center_y(d.string_index, string_count);
+    // Place the card below markers in the upper half of the board, above those
+    // in the lower half, so it stays on-screen. Uses the visual row (the strings
+    // are flipped: low string at the bottom), not the raw string index.
+    let row_from_top = string_count.saturating_sub(1).saturating_sub(d.string_index);
+    let below = row_from_top < string_count / 2;
     let top = if below {
         cy + MARKER_H / 2.0 + 6.0
     } else {
@@ -1452,7 +1456,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
             let lx = note_center_x(state.fret_start, fret) - MARKER_W / 2.0;
-            let ly = string_center_y(si) - MARKER_H / 2.0;
+            let ly = string_center_y(si, string_count) - MARKER_H / 2.0;
             // While drawing, a marker on the path shows its step number instead
             // of its note name, so the order reads without playing it. A path may
             // revisit a note, so its indices join ("2,5").

@@ -166,7 +166,7 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
             let lx = note_center_x(ui.stage.fret_start, fret) - MARKER_W / 2.0;
-            let ly = string_center_y(si) - MARKER_H / 2.0;
+            let ly = string_center_y(si, string_count) - MARKER_H / 2.0;
             let mut class = String::from("fret-label");
             if ui.card_marked(si, fret) {
                 class.push_str(" marked");
