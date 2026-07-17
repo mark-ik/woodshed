@@ -345,3 +345,37 @@ Remaining refinements, in priority order:
   [2026-05-20_theme_system_design.md](2026-05-20_theme_system_design.md), built
   on the `tinct` OKLCH derivation), and a look at whether the
   Stage-to-Set-to-Rehearsal flow reads as intuitively as intended.
+- **2026-07-16**: **Phase B (per-instrument neck) + windowed Extent landed and
+  verified — the old fret-range capability restored.** `fret_count` had been
+  hardcoded to 12; even "full neck" was wrong (a guitar is 22). Now:
+  - `Instrument::standard_fret_count()` gives each of the 15 instruments its own
+    full neck (guitar 22, bass 24, ukulele 15, the bowed family 24 semitone
+    positions, dulcimer 14, …). Tested (`every_instrument_has_a_sane_standard_neck`).
+  - `FretboardSettings` gained `neck_start` + `neck_end` (`None` = the
+    instrument's full neck). `StageState::apply_neck` resolves them into
+    `fret_start..=fret_count`; `UiState::sync_neck` pushes them each frame so the
+    extent tracks the settings and the current instrument with no special-casing.
+    `dots()` / `dots_for_card` window to the range.
+  - The paint leaf's geometry honours the window: the open-string column and the
+    thick nut exist only when `fret_start == 0`; a mid-neck window is bounded by a
+    plain wire, and inlays stay at their **absolute** frets (5/7/12) so they still
+    orient you when no open string is in view. New `cells_left` / `first_cell_fret`
+    helpers; `fretboard_px_size` / `note_center_x` / `wire_center_x` /
+    `FretboardLeaf::new` all take `fret_start`.
+  - A **Neck (frets)** control on the Fretboard settings page: Full, 0-5, 0-12,
+    5-9, 8-16, 2-22.
+  - Verified in the app: **Full** = the 22-fret guitar neck (70 positions);
+    **0-12** = nut + open column (40); **5-9** = a mid-neck window, no nut, plain
+    left boundary, inlays at absolute 5/7/9 (17). Screenshots `neck-full`,
+    `neck-0-12`, `neck-5-9`.
+  - **Follow-ons:** the Full 22-fret board is wider than a narrow pane and clips
+    at the right — the window *is* the intended fix (the plan's "Windowed span,
+    good for small screens"), but a wide board also wants horizontal scroll, and
+    Schematic spacing would compress it. Arbitrary numeric From/To entry (beyond
+    the presets) is the other obvious extension.
+  - **Test note:** the `woodshed-core` unit test (`neck_window_bounds_the_board_
+    and_the_dots`) is written but could not be *run* this session — a concurrent
+    `chartulary` API refactor left the unrelated `woodshed-graph` sibling
+    mid-reconcile, so the `woodshed-core` test binary won't link. The
+    `woodshedding` suite (160, incl. Phase B) is green and the app verifies the
+    feature end-to-end; re-run the core test once the sibling settles.

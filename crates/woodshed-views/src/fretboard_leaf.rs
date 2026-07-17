@@ -82,10 +82,30 @@ fn rounded_rect(x: f32, y: f32, w: f32, h: f32, radius: f32) -> sprigging::PathD
         .build()
 }
 
-/// The box size (device px) for a board of this shape. The view passes this to
-/// `custom_leaf`; the host builds the leaf at the same size, so they align.
-pub fn fretboard_px_size(string_count: usize, fret_count: u8) -> (u32, u32) {
-    let w = PAD * 2.0 + OPEN_W + fret_count as f32 * FRET_W;
+/// x of the first fretted cell's left edge: past the open-string column when the
+/// window is anchored at the nut, else the board's left pad (a mid-neck window
+/// has no open column).
+fn cells_left(fret_start: u8) -> f32 {
+    if fret_start == 0 {
+        PAD + OPEN_W
+    } else {
+        PAD
+    }
+}
+
+/// The lowest fret drawn as a *cell*. Fret 0 is the open-string column, not a
+/// cell, so a nut-anchored window's first cell is fret 1.
+fn first_cell_fret(fret_start: u8) -> u8 {
+    fret_start.max(1)
+}
+
+/// The box size (device px) for a board showing frets `fret_start..=fret_count`.
+/// The view passes this to `custom_leaf`; the host builds the leaf at the same
+/// size, so they align.
+pub fn fretboard_px_size(string_count: usize, fret_start: u8, fret_count: u8) -> (u32, u32) {
+    let cells = fret_count.saturating_sub(first_cell_fret(fret_start)) as f32 + 1.0;
+    let open = if fret_start == 0 { OPEN_W } else { 0.0 };
+    let w = PAD * 2.0 + open + cells * FRET_W;
     let h = PAD * 2.0 + string_count as f32 * STRING_SP;
     (w.ceil() as u32, h.ceil() as u32)
 }
@@ -123,18 +143,21 @@ pub fn string_center_y(i: usize) -> f32 {
     PAD + STRING_SP / 2.0 + i as f32 * STRING_SP
 }
 
-/// x of fret wire `fret` (fret 0 is the nut, at the open column's edge).
-pub fn wire_center_x(fret: u8) -> f32 {
-    PAD + OPEN_W + fret as f32 * FRET_W
+/// x of fret wire `fret` (its right edge). Fret 0 is the nut at the open
+/// column's edge; a windowed board offsets everything by its start fret.
+pub fn wire_center_x(fret_start: u8, fret: u8) -> f32 {
+    let first = first_cell_fret(fret_start) as f32;
+    cells_left(fret_start) + (fret as f32 - first + 1.0) * FRET_W
 }
 
-/// x of a note at `fret`: centred in the open column (fret 0) or in the fret
-/// space between wire fret-1 and wire fret.
-pub fn note_center_x(fret: u8) -> f32 {
-    if fret == 0 {
+/// x of a note at `fret`: centred in the open column (fret 0 of a nut-anchored
+/// window) or in its fret cell, offset by the window's start.
+pub fn note_center_x(fret_start: u8, fret: u8) -> f32 {
+    if fret == 0 && fret_start == 0 {
         PAD + OPEN_W / 2.0
     } else {
-        PAD + OPEN_W + (fret as f32 - 0.5) * FRET_W
+        let first = first_cell_fret(fret_start) as f32;
+        cells_left(fret_start) + (fret as f32 - first + 0.5) * FRET_W
     }
 }
 
@@ -153,6 +176,8 @@ fn string_thickness(i: usize, n: usize) -> f32 {
 
 pub struct FretboardLeaf {
     string_count: usize,
+    /// The neck window: the board draws frets `fret_start..=fret_count`.
+    fret_start: u8,
     fret_count: u8,
     dots: Vec<Dot>,
     marker_style: MarkerStyle,
@@ -171,13 +196,15 @@ pub struct FretboardLeaf {
 impl FretboardLeaf {
     pub fn new(
         string_count: usize,
+        fret_start: u8,
         fret_count: u8,
         dots: Vec<Dot>,
         marker_style: MarkerStyle,
     ) -> Self {
-        let (w, h) = fretboard_px_size(string_count, fret_count);
+        let (w, h) = fretboard_px_size(string_count, fret_start, fret_count);
         Self {
             string_count,
+            fret_start,
             fret_count,
             dots,
             marker_style,
@@ -216,11 +243,16 @@ impl FretboardLeaf {
     }
 
     fn wire_x(&self, fret: u8) -> f32 {
-        wire_center_x(fret)
+        wire_center_x(self.fret_start, fret)
     }
 
     fn note_x(&self, fret: u8) -> f32 {
-        note_center_x(fret)
+        note_center_x(self.fret_start, fret)
+    }
+
+    /// Whether a fret falls inside the drawn window.
+    fn in_window(&self, fret: u8) -> bool {
+        fret >= self.fret_start && fret <= self.fret_count
     }
 }
 
@@ -239,15 +271,17 @@ impl Leaf for FretboardLeaf {
         let mid_y = (top + bottom) / 2.0;
 
         // Inlays: faint marks centred on the neck (single) or paired (octaves).
+        // Absolute fret numbers, so a windowed board still anchors to the real
+        // 5/7/12 dots — the orientation cue when there is no open string in view.
         let ir = 2.5;
         for &f in INLAY_FRETS.iter() {
-            if f <= self.fret_count {
+            if self.in_window(f) {
                 let x = self.note_x(f);
                 cx.fill_rect(x - ir, mid_y - ir, ir * 2.0, ir * 2.0, C_INLAY);
             }
         }
         for &f in OCTAVE_FRETS.iter() {
-            if f <= self.fret_count {
+            if self.in_window(f) {
                 let x = self.note_x(f);
                 let dy = STRING_SP;
                 cx.fill_rect(x - ir, mid_y - dy - ir, ir * 2.0, ir * 2.0, C_INLAY);
@@ -264,13 +298,19 @@ impl Leaf for FretboardLeaf {
             cx.fill_rect(x0, y - th / 2.0, x1 - x0, th, C_STRING);
         }
 
-        // Fret wires: thin verticals; the nut (fret 0) is thicker and brighter.
-        for f in 1..=self.fret_count {
+        // Fret wires: thin verticals at each drawn cell's right edge.
+        for f in first_cell_fret(self.fret_start)..=self.fret_count {
             let x = self.wire_x(f);
             cx.fill_rect(x - 0.5, top, 1.0, bottom - top, C_WIRE);
         }
-        let nx = self.wire_x(0);
-        cx.fill_rect(nx - 1.5, top, 3.0, bottom - top, C_NUT);
+        // The window's left edge: a thick bright nut when it starts at the open
+        // strings, else a plain wire marking a mid-neck window's boundary.
+        let left_x = cells_left(self.fret_start);
+        if self.fret_start == 0 {
+            cx.fill_rect(left_x - 1.5, top, 3.0, bottom - top, C_NUT);
+        } else {
+            cx.fill_rect(left_x - 0.5, top, 1.0, bottom - top, C_WIRE);
+        }
 
         // Touch path trail: a translucent line threaded through the markers in
         // visit order, under the markers so they stay legible. Shows the
@@ -279,7 +319,7 @@ impl Leaf for FretboardLeaf {
             let pts: Vec<(f32, f32)> = self
                 .path
                 .iter()
-                .filter(|(s, f)| *s < self.string_count && *f <= self.fret_count)
+                .filter(|(s, f)| *s < self.string_count && self.in_window(*f))
                 .map(|&(s, f)| (self.note_x(f), self.string_y(s)))
                 .collect();
             if pts.len() >= 2 {
@@ -295,7 +335,7 @@ impl Leaf for FretboardLeaf {
         let mw = MARKER_W;
         let mh = MARKER_H;
         for d in &self.dots {
-            if d.string_index >= self.string_count || d.fret > self.fret_count {
+            if d.string_index >= self.string_count || !self.in_window(d.fret) {
                 continue;
             }
             let x = self.note_x(d.fret);

@@ -341,6 +341,31 @@ fn fretboard_page(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
+    // Neck window: a preset range of frets. "Full" is the instrument's whole
+    // standard neck; the rest are windows (a mid-neck span or a short reach).
+    // Restores an old woodshed capability (pick the fret range).
+    let necks: [(&str, u8, Option<u8>); 6] = [
+        ("Full", 0, None),
+        ("0-5", 0, Some(5)),
+        ("0-12", 0, Some(12)),
+        ("5-9", 5, Some(9)),
+        ("8-16", 8, Some(16)),
+        ("2-22", 2, Some(22)),
+    ];
+    let neck_chips: Vec<UiChild> = necks
+        .iter()
+        .map(|&(label, start, end)| {
+            let class = if ui.neck_is(start, end) {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
+            Box::new(clickable(
+                el("div", text(label)).attr("class", class),
+                move |ui: &mut UiState, _| ui.set_neck(start, end),
+            )) as UiChild
+        })
+        .collect();
     Box::new(
         el(
             "div",
@@ -349,6 +374,8 @@ fn fretboard_page(ui: &UiState) -> UiChild {
                 el("div", layouts).attr("class", "settings-options"),
                 el("div", text("Markers")).attr("class", "settings-heading settings-gap"),
                 el("div", markers).attr("class", "settings-options"),
+                el("div", text("Neck (frets)")).attr("class", "settings-heading settings-gap"),
+                el("div", neck_chips).attr("class", "settings-options"),
             ),
         )
         .attr("class", "board settings-page"),

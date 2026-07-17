@@ -160,12 +160,12 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
     let card = &ui.set.cards[cursor];
     let dot_list = ui.stage.dots_for_card(card);
     let string_count = ui.stage.string_count();
-    let (w, h) = fretboard_px_size(string_count, ui.stage.fret_count);
+    let (w, h) = fretboard_px_size(string_count, ui.stage.fret_start, ui.stage.fret_count);
     let labels: Vec<UiChild> = dot_list
         .iter()
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
-            let lx = note_center_x(fret) - MARKER_W / 2.0;
+            let lx = note_center_x(ui.stage.fret_start, fret) - MARKER_W / 2.0;
             let ly = string_center_y(si) - MARKER_H / 2.0;
             let mut class = String::from("fret-label");
             if ui.card_marked(si, fret) {
@@ -204,7 +204,7 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| super::note_card(d, string_count))
+                .map(|d| super::note_card(d, string_count, ui.stage.fret_start))
         })
         .into_iter()
         .collect();

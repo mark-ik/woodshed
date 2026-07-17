@@ -206,7 +206,12 @@ pub struct StageState {
     /// voicing browser migrates in S4).
     pub chord_idx: usize,
     /// Highest fret shown (inclusive, from the nut at 0).
+    /// The neck window's last fret. The board shows `fret_start ..= fret_count`;
+    /// [`Self::apply_neck`] sets both from the settings and the instrument.
     pub fret_count: u8,
+    /// The neck window's first fret. 0 includes the open strings and the nut;
+    /// a higher start is a window onto the middle of the neck (8-16, 2-22).
+    pub fret_start: u8,
 
     // === Arpeggio lens (S4 slice 1) ===
     /// Index into the *chord* catalog — the arpeggio's quality.
@@ -558,7 +563,10 @@ impl StageState {
             root_idx: 0,
             scale_idx,
             chord_idx: 0,
-            fret_count: 12,
+            // Overwritten by apply_neck from the settings + instrument; the
+            // literal only covers a StageState built before that runs.
+            fret_count: 22,
+            fret_start: 0,
             arpeggio_idx: 0,
             arpeggio_position_idx: 0,
             arpeggio_step_idx: 0,
@@ -833,6 +841,24 @@ impl StageState {
         if idx < tunings().len() {
             self.tuning_idx = idx;
         }
+    }
+
+    /// Set the neck window shown on the board from the settings. `end` of `None`
+    /// means the current instrument's full standard neck. The window is
+    /// `fret_start ..= fret_count` (inclusive); a start of 0 includes the open
+    /// strings. Restores an old woodshed capability: pick the fret range
+    /// (0-12, 8-16, 2-22). Callers re-apply this on a tuning change too, so the
+    /// full-neck default tracks the instrument.
+    pub fn apply_neck(&mut self, start: u8, end: Option<u8>) {
+        let specs = tunings();
+        let standard = specs[self.tuning_idx.min(specs.len() - 1)]
+            .instrument
+            .standard_fret_count();
+        // Cap generously (24-fret basses, 24-position bowed necks) but bound the
+        // painted board.
+        let end = end.unwrap_or(standard).clamp(1, 30);
+        self.fret_start = start.min(end);
+        self.fret_count = end;
     }
 
     pub fn set_root(&mut self, idx: usize) {
@@ -1126,7 +1152,9 @@ impl StageState {
                 let root_pc = root.value() as i32;
                 return positions
                     .iter()
-                    .filter(|(s, f)| *s < strings && *f <= self.fret_count)
+                    .filter(|(s, f)| {
+                        *s < strings && *f >= self.fret_start && *f <= self.fret_count
+                    })
                     .map(|&(s, f)| {
                         let pitch = board.pitch_at(s, f);
                         let semis = (pitch.pitch_class() as i32 - root_pc).rem_euclid(12);
@@ -1145,10 +1173,14 @@ impl StageState {
             }
         };
         // Setting fidelity: a pinned fret window filters the positions to
-        // the hand position (capo + per-card tuning still deferred).
+        // the hand position (capo + per-card tuning still deferred). The board's
+        // neck window (fret_start..) applies on top, since the board is drawn to
+        // that extent.
         let window = card.setting.fret_window;
+        let neck_start = self.fret_start;
         let in_window = |fret: u8| {
-            window.is_none_or(|w| fret >= w.start && fret <= w.start.saturating_add(w.span))
+            fret >= neck_start
+                && window.is_none_or(|w| fret >= w.start && fret <= w.start.saturating_add(w.span))
         };
         positions
             .map(|ps| {
@@ -1454,8 +1486,14 @@ impl StageState {
             Lens::Chords => board.positions_for_chord(self.chord(), self.root()),
             _ => return Vec::new(),
         };
+        let start = self.fret_start;
         positions
-            .map(|ps| ps.into_iter().map(FretDot::from_position).collect())
+            .map(|ps| {
+                ps.into_iter()
+                    .filter(|p| p.fret >= start)
+                    .map(FretDot::from_position)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -1952,6 +1990,35 @@ mod tests {
             crate::history::catalog_id_for_card(&card).is_none(),
             "a drawn path has no catalog identity"
         );
+    }
+
+    #[test]
+    fn neck_window_bounds_the_board_and_the_dots() {
+        let mut s = StageState::new();
+        s.set_lens(Lens::Scales);
+
+        // Full neck: the instrument's standard count, open strings included.
+        s.apply_neck(0, None);
+        assert_eq!(s.fret_start, 0);
+        assert!(s.fret_count >= 22, "a guitar's full neck reaches fret 22+");
+        assert!(
+            s.dots().iter().any(|d| d.fret == 0),
+            "a nut-anchored window shows open strings"
+        );
+
+        // A mid-neck window (8-16): every dot lands inside it, none below.
+        s.apply_neck(8, Some(16));
+        assert_eq!((s.fret_start, s.fret_count), (8, 16));
+        let dots = s.dots();
+        assert!(!dots.is_empty(), "the window still has notes");
+        assert!(
+            dots.iter().all(|d| d.fret >= 8 && d.fret <= 16),
+            "no dot falls outside the neck window"
+        );
+
+        // A start past the end is clamped to the end, not left inverted.
+        s.apply_neck(30, Some(12));
+        assert!(s.fret_start <= s.fret_count);
     }
 
     #[test]

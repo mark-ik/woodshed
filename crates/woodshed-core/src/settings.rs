@@ -93,6 +93,16 @@ pub struct FretboardSettings {
     pub board_layout: String,
     /// How the painted board draws its note markers: "Sharp" or "Rounded".
     pub marker_style: String,
+    /// The neck window's first fret — the board shows `neck_start ..= neck_end`.
+    /// 0 includes the open strings and the nut.
+    #[serde(default)]
+    pub neck_start: u8,
+    /// The neck window's last fret, or `None` for the instrument's full standard
+    /// neck ([`woodshedding::tuning::Instrument::standard_fret_count`]). A
+    /// per-instrument default that a player can override with any range
+    /// (0-12, 8-16, 2-22).
+    #[serde(default)]
+    pub neck_end: Option<u8>,
 }
 
 impl Default for FretboardSettings {
@@ -100,6 +110,9 @@ impl Default for FretboardSettings {
         Self {
             board_layout: "Two pane".into(),
             marker_style: "Sharp".into(),
+            neck_start: 0,
+            // The instrument's own full neck, until a player picks a range.
+            neck_end: None,
         }
     }
 }

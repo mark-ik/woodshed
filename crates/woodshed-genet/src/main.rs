@@ -252,6 +252,7 @@ impl App {
         let state = runner.state();
         let st = &state.stage;
         let string_count = st.string_count();
+        let fret_start = st.fret_start;
         let fret_count = st.fret_count;
         let marker_style = state.app_settings.fretboard.marker_style.clone();
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
@@ -267,6 +268,7 @@ impl App {
             .collect();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         string_count.hash(&mut hasher);
+        fret_start.hash(&mut hasher);
         fret_count.hash(&mut hasher);
         marker_style.hash(&mut hasher);
         for d in &dots {
@@ -280,6 +282,7 @@ impl App {
         }
         let leaf = woodshed_views::fretboard_leaf::FretboardLeaf::new(
             string_count,
+            fret_start,
             fret_count,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
@@ -335,6 +338,7 @@ impl App {
         let card = &state.set.cards[cursor];
         let st = &state.stage;
         let string_count = st.string_count();
+        let fret_start = st.fret_start;
         let fret_count = st.fret_count;
         let marker_style = state.app_settings.fretboard.marker_style.clone();
         // marked / excluded come from the same UiState helpers the view uses, so
@@ -353,6 +357,7 @@ impl App {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         cursor.hash(&mut hasher);
         string_count.hash(&mut hasher);
+        fret_start.hash(&mut hasher);
         fret_count.hash(&mut hasher);
         marker_style.hash(&mut hasher);
         for d in &dots {
@@ -368,6 +373,7 @@ impl App {
         }
         let leaf = woodshed_views::fretboard_leaf::FretboardLeaf::new(
             string_count,
+            fret_start,
             fret_count,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
@@ -561,6 +567,9 @@ impl App {
                     }
                 }
                 ui.latency_ms = backend.latency_ms();
+                // Track the neck-window settings + instrument into the stage
+                // before the leaf/dots read fret_start/fret_count this frame.
+                ui.sync_neck();
                 // Two-way the card-rename buffer: adopt the selected card's
                 // label when the selection moves, else commit what was typed.
                 ui.sync_card_rename();

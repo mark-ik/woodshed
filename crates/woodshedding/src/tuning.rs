@@ -57,6 +57,35 @@ impl Instrument {
         Self::MountainDulcimer,
         Self::Other,
     ];
+
+    /// The instrument's standard playable extent, in semitone positions above
+    /// the open string — the "full neck" a board shows by default. A player
+    /// overrides it with a window (a range setting); this only picks the default.
+    ///
+    /// For the fretted instruments this is the usual fret count. The bowed
+    /// family has no frets at all, so the number is how far up the string a
+    /// board is worth drawing (two octaves of first-to-high position), not a
+    /// count of anything physical.
+    pub fn standard_fret_count(self) -> u8 {
+        match self {
+            Self::Guitar => 22,
+            Self::Bass => 24,
+            Self::Ukulele => 15,
+            Self::Banjo => 22,
+            Self::Mandolin => 20,
+            // Fretless: semitone positions worth drawing, not real frets.
+            Self::Violin | Self::Viola => 24,
+            Self::Cello | Self::DoubleBass => 24,
+            Self::Bouzouki => 24,
+            Self::Charango => 18,
+            Self::Cavaquinho => 17,
+            Self::Balalaika => 19,
+            // Diatonically fretted, so its numbers do not mean semitones the way
+            // the others' do; 14 is the usual extent.
+            Self::MountainDulcimer => 14,
+            Self::Other => 22,
+        }
+    }
 }
 
 impl fmt::Display for Instrument {
@@ -2049,5 +2078,21 @@ mod tests {
         assert!(catalog_for(Instrument::Cavaquinho).count() >= 1);
         assert!(catalog_for(Instrument::Balalaika).count() >= 1);
         assert!(catalog_for(Instrument::MountainDulcimer).count() >= 1);
+    }
+
+    #[test]
+    fn every_instrument_has_a_sane_standard_neck() {
+        for inst in Instrument::ALL {
+            let n = inst.standard_fret_count();
+            assert!(
+                (12..=24).contains(&n),
+                "{inst:?} standard neck {n} is out of the plausible 12..=24 range"
+            );
+        }
+        // The reference: a guitar is 22, a bass longer.
+        assert_eq!(Instrument::Guitar.standard_fret_count(), 22);
+        assert!(
+            Instrument::Bass.standard_fret_count() >= Instrument::Guitar.standard_fret_count()
+        );
     }
 }

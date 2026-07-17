@@ -449,6 +449,18 @@ impl UiState {
         self.app_settings.fretboard.board_layout = layout.label().to_string();
     }
 
+    /// Set the neck window shown on the board. `end` of `None` is the current
+    /// instrument's full standard neck; `sync_neck` applies it each frame.
+    pub fn set_neck(&mut self, start: u8, end: Option<u8>) {
+        self.app_settings.fretboard.neck_start = start;
+        self.app_settings.fretboard.neck_end = end;
+    }
+
+    pub fn neck_is(&self, start: u8, end: Option<u8>) -> bool {
+        self.app_settings.fretboard.neck_start == start
+            && self.app_settings.fretboard.neck_end == end
+    }
+
     /// Pin or unpin a marker's detail card (multi-pin, so clicking toggles).
     pub fn toggle_pin(&mut self, string_index: usize, fret: u8) {
         let key = (string_index, fret);
@@ -564,6 +576,16 @@ impl UiState {
 
     fn selected_card_index(&self) -> Option<usize> {
         (!self.set.cards.is_empty()).then(|| self.set.cursor.min(self.set.cards.len() - 1))
+    }
+
+    /// Push the neck-window settings (start + end, or the instrument default)
+    /// into the stage each frame, so the board's extent tracks the settings and
+    /// the current instrument with no special-casing of tuning/settings changes.
+    pub fn sync_neck(&mut self) {
+        self.stage.apply_neck(
+            self.app_settings.fretboard.neck_start,
+            self.app_settings.fretboard.neck_end,
+        );
     }
 
     /// Keep the rename buffer and the selected card's label in step. The buffer
@@ -1369,8 +1391,8 @@ const CARD_H: f32 = 112.0;
 /// A pinned marker's detail card, placed just above or below its marker (top-half
 /// markers get the card below, bottom-half above, to keep it inside the board).
 /// Shows note + octave, scale degree + interval, and the string/fret.
-fn note_card(d: &woodshed_core::FretDot, string_count: usize) -> UiChild {
-    let cx = note_center_x(d.fret);
+fn note_card(d: &woodshed_core::FretDot, string_count: usize, fret_start: u8) -> UiChild {
+    let cx = note_center_x(fret_start, d.fret);
     let cy = string_center_y(d.string_index);
     let below = d.string_index < string_count / 2;
     let top = if below {
@@ -1424,12 +1446,12 @@ pub(super) fn board(ui: &UiState) -> UiChild {
     // click target that pins its detail card — multi-pin, so clicking toggles)
     // and the pinned cards. Positions come from the leaf's own marker geometry so
     // overlay and paint align.
-    let (w, h) = fretboard_px_size(string_count, state.fret_count);
+    let (w, h) = fretboard_px_size(string_count, state.fret_start, state.fret_count);
     let labels: Vec<UiChild> = dot_list
         .iter()
         .map(|d| {
             let (si, fret) = (d.string_index, d.fret);
-            let lx = note_center_x(fret) - MARKER_W / 2.0;
+            let lx = note_center_x(state.fret_start, fret) - MARKER_W / 2.0;
             let ly = string_center_y(si) - MARKER_H / 2.0;
             // While drawing, a marker on the path shows its step number instead
             // of its note name, so the order reads without playing it. A path may
@@ -1470,7 +1492,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| note_card(d, string_count))
+                .map(|d| note_card(d, string_count, state.fret_start))
         })
         .collect();
     Box::new(
