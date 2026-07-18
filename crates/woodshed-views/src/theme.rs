@@ -149,18 +149,10 @@ pub fn stage_css(p: &Palette) -> String {
     let text = color_to_hex(p.text);
     let text_dim = color_to_hex(p.text_dim);
     let text_disabled = color_to_hex(p.text_disabled);
-    let primary = color_to_hex(p.primary);
     let on_primary = color_to_hex(p.on_primary);
     let secondary = color_to_hex(p.secondary);
-    let on_secondary = color_to_hex(p.on_secondary);
     let tertiary = color_to_hex(p.tertiary);
-    let on_tertiary = color_to_hex(p.on_tertiary);
     let danger = color_to_hex(p.danger);
-    // Fretboard ink, derived from the same palette so every theme gets a board:
-    // the fret wires, the strings running through the note centres, and the nut.
-    let fret_wire = &surface_2;
-    let string_line = &text_disabled;
-    let nut = &text_dim;
     format!(
         r#"
 .root {{ width: 100%; height: 100%; box-sizing: border-box;
@@ -295,50 +287,6 @@ pub fn stage_css(p: &Palette) -> String {
        background-color: {surface_2}; }}
 .seg:hover {{ color: {text}; }}
 .seg.active {{ background-color: {surface_hover}; color: {text_header}; }}
-/* The board is a grid of fret cells. Each cell paints its own fret wire (the
-   right border) and the segment of string running through it (a 2px band at the
-   cell's vertical centre, via a background-image), so the rows must sit flush:
-   any gap between strings would break the wires into dashes. Cells are
-   border-box, which keeps the thicker nut from widening its column and pushing
-   the fret-number ruler out of alignment. */
-/* Each string is a thin band at its cell's vertical centre, drawn on the cell.
-   The row carries a thickness tier (.string-1 thick .. .string-6 thin): lower
-   strings (smaller index, as tunings read low to high) are thicker, like a wound
-   bass string next to a plain treble string. genet renders these gradient bands
-   softly, so they read as soft hairlines; crisp lines want a Sprigging paint
-   leaf (plan Phase C). 28px cell, centred on 14px. */
-.string {{ display: flex; }}
-.string-1 .fret {{ background-image: linear-gradient(to bottom, transparent 12.7px, {string_line} 12.7px, {string_line} 15.3px, transparent 15.3px); }}
-.string-2 .fret {{ background-image: linear-gradient(to bottom, transparent 13.0px, {string_line} 13.0px, {string_line} 15.0px, transparent 15.0px); }}
-.string-3 .fret {{ background-image: linear-gradient(to bottom, transparent 13.2px, {string_line} 13.2px, {string_line} 14.8px, transparent 14.8px); }}
-.string-4 .fret {{ background-image: linear-gradient(to bottom, transparent 13.4px, {string_line} 13.4px, {string_line} 14.6px, transparent 14.6px); }}
-.string-5 .fret {{ background-image: linear-gradient(to bottom, transparent 13.5px, {string_line} 13.5px, {string_line} 14.5px, transparent 14.5px); }}
-.string-6 .fret {{ background-image: linear-gradient(to bottom, transparent 13.6px, {string_line} 13.6px, {string_line} 14.4px, transparent 14.4px); }}
-.fret {{ width: 46px; height: 28px; box-sizing: border-box;
-        display: flex; align-items: center; justify-content: center;
-        border-right: 1px solid {fret_wire}; }}
-.nut-gap {{ border-right: 3px solid {nut}; }}
-/* Note markers are rounded rects centred in the fret space (between two wires),
-   coloured like the notes they mark, with the label centred via flex. The
-   dot-versus-rect choice will become a setting; this is the rect form. */
-.dot {{ width: 38px; height: 22px; border-radius: 5px; background-color: {primary};
-       color: {on_primary}; font-size: 11px;
-       display: flex; align-items: center; justify-content: center; }}
-.fret-nums {{ display: flex; margin-top: 5px; }}
-.fret-num {{ width: 46px; box-sizing: border-box; text-align: center;
-            color: {text_disabled}; font-size: 10px; }}
-.fret-num-marker {{ color: {text_dim}; }}
-.layout-canvas .fret {{ width: 64px; height: 42px; }}
-/* Canvas cells are taller (42px), so the string band re-centres on 21px. */
-.layout-canvas .string-1 .fret {{ background-image: linear-gradient(to bottom, transparent 19.7px, {string_line} 19.7px, {string_line} 22.3px, transparent 22.3px); }}
-.layout-canvas .string-2 .fret {{ background-image: linear-gradient(to bottom, transparent 20.0px, {string_line} 20.0px, {string_line} 22.0px, transparent 22.0px); }}
-.layout-canvas .string-3 .fret {{ background-image: linear-gradient(to bottom, transparent 20.2px, {string_line} 20.2px, {string_line} 21.8px, transparent 21.8px); }}
-.layout-canvas .string-4 .fret {{ background-image: linear-gradient(to bottom, transparent 20.4px, {string_line} 20.4px, {string_line} 21.6px, transparent 21.6px); }}
-.layout-canvas .string-5 .fret {{ background-image: linear-gradient(to bottom, transparent 20.5px, {string_line} 20.5px, {string_line} 21.5px, transparent 21.5px); }}
-.layout-canvas .string-6 .fret {{ background-image: linear-gradient(to bottom, transparent 20.6px, {string_line} 20.6px, {string_line} 21.4px, transparent 21.4px); }}
-.layout-canvas .fret-num {{ width: 64px; }}
-.layout-canvas .dot {{ width: 56px; height: 32px; border-radius: 6px;
-                      font-size: 14px; }}
 .side-strip {{ margin-top: 12px; }}
 .side-strip .side {{ width: 100%; display: flex; flex-wrap: wrap; margin-right: 0; }}
 .side-strip .side-item {{ margin-right: 6px; margin-bottom: 6px; }}
@@ -402,9 +350,6 @@ pub fn stage_css(p: &Palette) -> String {
 .side-item:focus {{ background-color: {surface}; }}
 .lens:focus {{ color: {text}; }}
 .pill:focus {{ color: {text}; }}
-.root-dot {{ background-color: {tertiary}; color: {on_tertiary}; }}
-.step-dot {{ background-color: {secondary}; color: {on_secondary}; }}
-.trail-dot {{ background-color: {surface_hover}; color: {text_dim}; }}
 .prog-cards {{ display: flex; margin-bottom: 12px; }}
 .prog-card {{ background-color: {surface_2}; border-radius: 8px; padding: 6px 14px;
              margin-right: 8px; }}

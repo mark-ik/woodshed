@@ -7,7 +7,6 @@
 //! view-layer dropdown state; hosts call [`UiState::sync`] after any
 //! dispatch so dropdown picks land in the core state.
 
-use std::collections::HashMap;
 
 use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
@@ -1059,53 +1058,80 @@ fn sidebar(ui: &UiState) -> UiChild {
     Box::new(el("div", items).attr("class", "side"))
 }
 
-/// The class for one fret cell. Fret 0 is the open-string column and carries the
-/// nut. Inlay position markers are shown by the fret-number ruler (bolded at the
-/// marker frets); proper on-board inlays wait for the board-layer rendering pass.
-fn fret_cell_class(fret: u8) -> &'static str {
-    if fret == 0 {
-        "fret nut-gap"
-    } else {
-        "fret"
-    }
-}
 
-/// The fret-number ruler under a board. One cell per fret column, sharing the
-/// `.fret` grid metrics so each number sits under its own fret.
-fn fret_number_row(fret_count: u8) -> UiChild {
-    let cells: Vec<UiChild> = (0..=fret_count)
-        .map(|fret| {
-            let class = if matches!(fret, 3 | 5 | 7 | 9 | 12 | 15 | 17 | 19 | 21 | 24) {
-                "fret-num fret-num-marker"
-            } else {
-                "fret-num"
-            };
-            Box::new(el("div", text(fret.to_string())).attr("class", class)) as UiChild
+/// Render a transport lens's board (Arpeggio / Exercise / Progression) on the
+/// painted leaf, so it shares the crisp neck, orientation, marker style, and
+/// scroll viewport that Scale / Chord use. `controls` sits above the neck (a
+/// transport deck or the progression's chord cards); `caption` reads below. The
+/// leaf itself is fed by the host from `lens_markers`; here we place it and draw
+/// the label overlay from the same markers, so paint and labels agree. The
+/// transport's current step is drawn bright by the leaf (its `active`) and its
+/// label is brightened to match.
+fn leaf_section_board(
+    ui: &UiState,
+    markers: &[woodshed_core::LensMarker],
+    controls: UiChild,
+    caption: String,
+    aria: String,
+) -> UiChild {
+    let string_count = ui.stage.string_count();
+    let geom = BoardGeom {
+        string_count,
+        fret_start: ui.stage.fret_start,
+        fret_count: ui.stage.fret_count,
+        orientation: Orientation::from_name(&ui.app_settings.fretboard.orientation),
+    };
+    let (w, h) = geom.size_u32();
+    let (mw, mh) = geom.marker_size();
+    let labels: Vec<UiChild> = markers
+        .iter()
+        .filter(|m| geom.in_window(m.fret) && m.string_index < string_count)
+        .map(|m| {
+            let (px, py) = geom.note_pos(m.string_index, m.fret);
+            let (lx, ly) = (px - mw / 2.0, py - mh / 2.0);
+            let class = if m.is_current { "fret-label step" } else { "fret-label" };
+            // A spoken marker: its note, then where it sits (guitar-numbered
+            // strings, 1 = highest). The painted neck is invisible to the DOM, so
+            // this is how the notes reach assistive tech and a semantic driver.
+            let a11y = format!(
+                "{}, string {}, fret {}",
+                m.label,
+                string_count - m.string_index,
+                m.fret
+            );
+            Box::new(
+                el("div", text(m.label.clone()))
+                    .attr("class", class)
+                    .attr("aria-label", a11y)
+                    .attr(
+                        "style",
+                        format!("left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"),
+                    ),
+            ) as UiChild
         })
         .collect();
-    Box::new(el("div", cells).attr("class", "fret-nums")) as UiChild
-}
-
-/// A board's string rows with the fret-number ruler appended beneath them. Every
-/// board view builds its rows the same way, so they all get a numbered board.
-fn fretboard(mut rows: Vec<UiChild>, fret_count: u8) -> Vec<UiChild> {
-    rows.push(fret_number_row(fret_count));
-    rows
-}
-
-/// Wrap a string's fret cells in its row, tagging the row with a thickness tier
-/// (`string-1` thick .. `string-6` thin). Lower strings (smaller index, since
-/// tunings read low to high) render thicker. The thickness itself is CSS, so the
-/// tier just selects it.
-fn string_row(cells: Vec<UiChild>, string_index: usize, string_count: usize) -> UiChild {
-    let tier = if string_count > 1 {
-        // 0.0 at the lowest string, 1.0 at the highest, mapped onto tiers 1..=6.
-        let t = string_index as f32 / (string_count - 1) as f32;
-        1 + (t * 5.0).round() as u32
-    } else {
-        3
-    };
-    Box::new(el("div", cells).attr("class", format!("string string-{tier}"))) as UiChild
+    Box::new(
+        el(
+            "div",
+            (
+                controls,
+                el(
+                    "div",
+                    (
+                        custom_leaf::<UiState, ()>(FRETBOARD_LEAF_KEY, w, h),
+                        el("div", labels)
+                            .attr("class", "label-layer")
+                            .attr("style", format!("width:{w}px; height:{h}px")),
+                    ),
+                )
+                .attr("class", board_viewport_class(geom.orientation))
+                .attr("aria-label", aria)
+                .attr("style", board_viewport_style(geom.orientation, w, h)),
+                el("div", text(caption)).attr("class", "scale-name"),
+            ),
+        )
+        .attr("class", "board"),
+    ) as UiChild
 }
 
 fn exercise_board_view(ui: &UiState) -> UiChild {
@@ -1143,59 +1169,15 @@ fn exercise_board_view(ui: &UiState) -> UiChild {
         )
         .attr("class", "transport"),
     );
-    let dots: HashMap<(usize, u8), (usize, String)> = board
-        .dots
-        .iter()
-        .map(|d| ((d.string_index, d.fret), (d.recency, d.label.clone())))
-        .collect();
-    let rows: Vec<UiChild> = (0..state.string_count())
-        .map(|string_index| {
-            let cells: Vec<UiChild> = (0..=state.fret_count)
-                .map(|fret| {
-                    let cell_class = fret_cell_class(fret);
-                    match dots.get(&(string_index, fret)) {
-                        Some((recency, label)) => {
-                            let dot_class = if *recency == 0 {
-                                "dot step-dot"
-                            } else {
-                                "dot trail-dot"
-                            };
-                            Box::new(
-                                el(
-                                    "div",
-                                    (el("div", text(label.clone())).attr("class", dot_class),),
-                                )
-                                .attr("class", cell_class),
-                            ) as UiChild
-                        }
-                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
-                    }
-                })
-                .collect();
-            string_row(cells, string_index, state.string_count())
-        })
-        .collect();
-    Box::new(
-        el(
-            "div",
-            (
-                deck,
-                el("div", fretboard(rows, ui.stage.fret_count)),
-                el(
-                    "div",
-                    text(format!(
-                        "{} — step {}/{} · {}",
-                        board.name,
-                        board.step + 1,
-                        board.total,
-                        board.description,
-                    )),
-                )
-                .attr("class", "scale-name"),
-            ),
-        )
-        .attr("class", "board"),
-    )
+    let caption = format!(
+        "{} — step {}/{} · {}",
+        board.name,
+        board.step + 1,
+        board.total,
+        board.description,
+    );
+    let aria = format!("{} exercise, {} notes", board.name, board.dots.len());
+    leaf_section_board(ui, &ui.stage.lens_markers().0, deck, caption, aria)
 }
 
 fn progression_board_view(ui: &UiState) -> UiChild {
@@ -1233,55 +1215,19 @@ fn progression_board_view(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
-    let dots: HashMap<(usize, u8), (bool, String)> = board
-        .dots
-        .iter()
-        .map(|d| ((d.string_index, d.fret), (d.is_root, d.label.clone())))
-        .collect();
-    let state = &ui.stage;
-    let rows: Vec<UiChild> = (0..state.string_count())
-        .map(|string_index| {
-            let cells: Vec<UiChild> = (0..=state.fret_count)
-                .map(|fret| {
-                    let cell_class = fret_cell_class(fret);
-                    match dots.get(&(string_index, fret)) {
-                        Some((is_root, label)) => {
-                            let dot_class = if *is_root { "dot root-dot" } else { "dot" };
-                            Box::new(
-                                el(
-                                    "div",
-                                    (el("div", text(label.clone())).attr("class", dot_class),),
-                                )
-                                .attr("class", cell_class),
-                            ) as UiChild
-                        }
-                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
-                    }
-                })
-                .collect();
-            string_row(cells, string_index, state.string_count())
-        })
-        .collect();
-    Box::new(
-        el(
-            "div",
-            (
-                el("div", cards).attr("class", "prog-cards"),
-                el("div", fretboard(rows, ui.stage.fret_count)),
-                el(
-                    "div",
-                    text(format!(
-                        "{} — {} · showing {}",
-                        state.material_name(),
-                        board.description,
-                        board.expanded_label,
-                    )),
-                )
-                .attr("class", "scale-name"),
-            ),
-        )
-        .attr("class", "board"),
-    )
+    let controls: UiChild = Box::new(el("div", cards).attr("class", "prog-cards"));
+    let caption = format!(
+        "{} — {} · showing {}",
+        ui.stage.material_name(),
+        board.description,
+        board.expanded_label,
+    );
+    let aria = format!(
+        "{} progression, {} chord tones",
+        ui.stage.material_name(),
+        board.dots.len()
+    );
+    leaf_section_board(ui, &ui.stage.lens_markers().0, controls, caption, aria)
 }
 
 fn arpeggio_board_view(ui: &UiState) -> UiChild {
@@ -1349,67 +1295,16 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
         )
         .attr("class", "transport"),
     );
-    let dots: HashMap<(usize, u8), (bool, bool, String)> = board
-        .dots
-        .iter()
-        .map(|d| {
-            (
-                (d.string_index, d.fret),
-                (d.is_root, d.is_current, d.label.clone()),
-            )
-        })
-        .collect();
-    let rows: Vec<UiChild> = (0..state.string_count())
-        .map(|string_index| {
-            let cells: Vec<UiChild> = (0..=state.fret_count)
-                .map(|fret| {
-                    let cell_class = fret_cell_class(fret);
-                    match dots.get(&(string_index, fret)) {
-                        Some((is_root, is_current, label)) => {
-                            let dot_class = if *is_current {
-                                "dot step-dot"
-                            } else if *is_root {
-                                "dot root-dot"
-                            } else {
-                                "dot"
-                            };
-                            Box::new(
-                                el(
-                                    "div",
-                                    (el("div", text(label.clone())).attr("class", dot_class),),
-                                )
-                                .attr("class", cell_class),
-                            ) as UiChild
-                        }
-                        None => Box::new(el("div", ()).attr("class", cell_class)) as UiChild,
-                    }
-                })
-                .collect();
-            string_row(cells, string_index, state.string_count())
-        })
-        .collect();
-    Box::new(
-        el(
-            "div",
-            (
-                deck,
-                el("div", fretboard(rows, ui.stage.fret_count)),
-                el(
-                    "div",
-                    text(format!(
-                        "{} — frets {}-{}, step {}/{}",
-                        state.material_name(),
-                        board.start_fret,
-                        board.start_fret + woodshed_core::arpeggio::ARP_SHAPE_SPAN,
-                        board.step + 1,
-                        board.walk_len,
-                    )),
-                )
-                .attr("class", "scale-name"),
-            ),
-        )
-        .attr("class", "board"),
-    )
+    let caption = format!(
+        "{} — frets {}-{}, step {}/{}",
+        state.material_name(),
+        board.start_fret,
+        board.start_fret + woodshed_core::arpeggio::ARP_SHAPE_SPAN,
+        board.step + 1,
+        board.walk_len,
+    );
+    let aria = format!("{} arpeggio, {} notes", state.material_name(), board.dots.len());
+    leaf_section_board(ui, &ui.stage.lens_markers().0, deck, caption, aria)
 }
 
 const CARD_W: f32 = 132.0;

@@ -425,3 +425,39 @@ Remaining refinements, in priority order:
     reverted; the adjustable range shipped. This is the concrete shape of the
     "proper scroll and fit" follow-on, and it's gated on leaf-level rendering, not
     layout tweaks.
+- **2026-07-18**: **Scroll/fit lands, and the painted board reaches every lens.**
+  - **The earlier "CSS overflow can't clip the leaf" finding was a misdiagnosis.**
+    genet *does* clip a `custom_leaf` when the leaf is an in-flow child of an
+    overflow container: the leaf's commands are spliced during its own paint walk,
+    inside the container's `PushClip` and under its scroll transform. The earlier
+    wrapper failed for two other reasons — the absolute label overlay escaped
+    (an abs box is clipped by an overflow ancestor only when that ancestor is its
+    containing block), and the auto-sized overlay layer sat fully inside the clip,
+    so genet dropped the clip for that lifted layer and its markers escaped.
+  - **The board owns a scroll viewport.** `.board-viewport` wraps the leaf and its
+    overlay: it is `position: relative` (so it is the overlay's containing block)
+    and an overflow container, so the leaf paint and the label/card layers clip
+    and scroll as one. The overlay layers are sized to the whole board (`w × h`),
+    not their auto content box, so they spill the clip and keep it. A horizontal
+    neck runs along x — the flex column bounds its width, so `overflow-x: auto`
+    scrolls the excess frets and the short height is pinned exactly; an arbitrary
+    fret range now fits the pane and wheel-scrolls within it while the page stays
+    put. A vertical neck runs along y with no natural height bound, so it keeps its
+    natural height and scrolls with the page (it is narrow, never widening the
+    layout). Verified in the app: at a narrow window the neck clips at the pane
+    edge and scrolls internally, labels riding the leaf. **Follow-on:** an
+    internal y-scroll cap for a very tall vertical neck needs the engine to clip a
+    taller-than-box replaced leaf, which it does not yet honor (an explicit
+    `height`/`max-height` on the viewport is grown to the leaf's intrinsic height).
+  - **Arpeggio / Exercise / Progression now render on the painted leaf**, not the
+    old CSS grid — same crisp neck, orientation, marker style, and scroll
+    viewport as Scale / Chord. A uniform `StageState::lens_markers` returns the
+    current transport lens's markers plus its current step; the host feeds the one
+    leaf from it (branching Scale/Chord → `dots`, else → `lens_markers`) and the
+    view draws the overlay from the same list, so paint and labels agree. The
+    transport's current step rides the leaf's `active` (bright), read each frame
+    so it advances live. The dead CSS-grid helpers (`fretboard` / `string_row` /
+    `fret_cell_class` / `fret_number_row`) and their CSS (`.fret` / `.string*` /
+    `.dot` / `.fret-num*` / `.*-dot`) were removed. Verified each lens in the app;
+    Scale/Chord unchanged; 44 core + 2 view tests green. **Follow-on:** the
+    Exercise trail (recency > 0) draws as plain markers now, not a dimmed trail.

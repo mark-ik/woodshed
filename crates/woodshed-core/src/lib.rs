@@ -344,6 +344,19 @@ pub struct ProgressionBoard {
     pub expanded_label: String,
 }
 
+/// A painted-leaf marker for a transport lens's board (Arpeggio / Exercise /
+/// Progression), uniform so the host feeds one leaf and the view draws one
+/// overlay from the same list — the way Scale / Chord already share
+/// [`StageState::dots`]. `is_current` is the transport's highlighted step.
+#[derive(Clone, Debug)]
+pub struct LensMarker {
+    pub string_index: usize,
+    pub fret: u8,
+    pub is_root: bool,
+    pub is_current: bool,
+    pub label: String,
+}
+
 /// One arpeggio-board dot: a shape position with the transport highlight.
 #[derive(Clone, Debug)]
 pub struct ArpDot {
@@ -1527,6 +1540,78 @@ impl StageState {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// The current transport lens's board as uniform painted-leaf markers plus
+    /// the transport's current position (the leaf's bright "active" step). The
+    /// host feeds the leaf from these and the view draws the overlay from them, so
+    /// Arpeggio / Exercise / Progression render on the same painted neck (with
+    /// orientation and the scroll viewport) as Scale / Chord. Scale / Chord return
+    /// empty here and keep their richer [`Self::dots`] path (pins, draw, cards).
+    pub fn lens_markers(&self) -> (Vec<LensMarker>, Option<(usize, u8)>) {
+        match self.lens {
+            Lens::Arpeggios => {
+                let b = self.arpeggio_board();
+                let active = b
+                    .dots
+                    .iter()
+                    .find(|d| d.is_current)
+                    .map(|d| (d.string_index, d.fret));
+                let markers = b
+                    .dots
+                    .iter()
+                    .map(|d| LensMarker {
+                        string_index: d.string_index,
+                        fret: d.fret,
+                        is_root: d.is_root,
+                        is_current: d.is_current,
+                        label: d.label.clone(),
+                    })
+                    .collect();
+                (markers, active)
+            }
+            Lens::Exercises => {
+                let b = self.exercise_board();
+                // recency 0 is the current step; the trail (recency > 0) is not
+                // yet drawn on the leaf (a later step).
+                let active = b
+                    .dots
+                    .iter()
+                    .find(|d| d.recency == 0)
+                    .map(|d| (d.string_index, d.fret));
+                let markers = b
+                    .dots
+                    .iter()
+                    .map(|d| LensMarker {
+                        string_index: d.string_index,
+                        fret: d.fret,
+                        is_root: false,
+                        is_current: d.recency == 0,
+                        label: d.label.clone(),
+                    })
+                    .collect();
+                (markers, active)
+            }
+            Lens::Progressions => {
+                let markers = self
+                    .progression_board()
+                    .map(|b| {
+                        b.dots
+                            .iter()
+                            .map(|d| LensMarker {
+                                string_index: d.string_index,
+                                fret: d.fret,
+                                is_root: d.is_root,
+                                is_current: false,
+                                label: d.label.clone(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                (markers, None)
+            }
+            Lens::Scales | Lens::Chords => (Vec::new(), None),
+        }
     }
 
     // === Voicing (S4 slice 12: "hear the theory") ===

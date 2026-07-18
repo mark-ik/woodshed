@@ -272,18 +272,37 @@ impl App {
             &state.app_settings.fretboard.orientation,
         );
         let distinguish_root = state.app_settings.accessibility.distinguish_root;
-        let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
-            .dots()
-            .into_iter()
-            .map(|d| woodshed_views::fretboard_leaf::Dot {
-                string_index: d.string_index,
-                fret: d.fret,
-                is_root: d.is_root,
-                marked: false,
-                excluded: false,
-            })
-            .collect();
+        // Scale / Chord carry their richer FretDots (pins, detail cards); the
+        // transport lenses (Arpeggio / Exercise / Progression) feed uniform
+        // LensMarkers. Either way the leaf needs only the position and whether it
+        // is the root — the sounding step rides `set_active` in sync_fretboard_active.
+        let dots: Vec<woodshed_views::fretboard_leaf::Dot> = match st.lens {
+            woodshed_core::Lens::Scales | woodshed_core::Lens::Chords => st
+                .dots()
+                .into_iter()
+                .map(|d| woodshed_views::fretboard_leaf::Dot {
+                    string_index: d.string_index,
+                    fret: d.fret,
+                    is_root: d.is_root,
+                    marked: false,
+                    excluded: false,
+                })
+                .collect(),
+            _ => st
+                .lens_markers()
+                .0
+                .into_iter()
+                .map(|m| woodshed_views::fretboard_leaf::Dot {
+                    string_index: m.string_index,
+                    fret: m.fret,
+                    is_root: m.is_root,
+                    marked: false,
+                    excluded: false,
+                })
+                .collect(),
+        };
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (st.lens as usize).hash(&mut hasher);
         string_count.hash(&mut hasher);
         fret_start.hash(&mut hasher);
         fret_count.hash(&mut hasher);
@@ -324,7 +343,16 @@ impl App {
             .as_ref()
             .map(|r| {
                 let st = &r.state().stage;
-                let active = st.scale_run_playing.then_some(st.scale_run_active).flatten();
+                // Scale / Chord: the running step. Transport lenses (Arpeggio /
+                // Exercise): the board's current position, which advances live as
+                // the transport steps, so it is read here each frame rather than
+                // baked into the rebuilt-on-change leaf.
+                let active = match st.lens {
+                    woodshed_core::Lens::Scales | woodshed_core::Lens::Chords => {
+                        st.scale_run_playing.then_some(st.scale_run_active).flatten()
+                    }
+                    _ => st.lens_markers().1,
+                };
                 // Draw mode always shows the trail (you're editing it).
                 let show = st.path_shown || st.draw_mode;
                 let path = if show { st.run_positions() } else { Vec::new() };
