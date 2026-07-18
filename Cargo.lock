@@ -821,7 +821,13 @@ dependencies = [
 name = "cambium-winit"
 version = "0.2.0"
 dependencies = [
+ "accesskit",
  "cambium",
+ "genet-layout",
+ "genet-scripted-dom",
+ "genet-winit-host",
+ "layout-dom-api",
+ "sprigging",
  "winit",
 ]
 
@@ -6674,7 +6680,6 @@ dependencies = [
 name = "woodshed-genet"
 version = "0.1.0"
 dependencies = [
- "accesskit",
  "cambium",
  "cambium-winit",
  "directories",

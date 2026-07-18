@@ -32,17 +32,15 @@ use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::storage::Storage as _;
 use woodshed_views::theme::ThemeMode;
 
-use layout_dom_api::{DomMutation, LayoutDom as _, LayoutDomMut as _};
+use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
 use genet_layout::{
-    Applied, IncrementalLayout, InteractionState, LeafA11ySource, LeafPaintSource, ScrollOffsets,
-    SourceNodeId, project,
+    Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, SourceNodeId,
 };
-use accesskit::{Action as A11yAction, NodeId as A11yNodeId, Tree, TreeId, TreeUpdate};
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use cambium_winit::{key_event_from_winit, modifiers_from_winit};
-use genet_winit_host::{AccessKitBridge, SurfaceHost};
+use cambium_winit::{key_event_from_winit, modifiers_from_winit, A11yHost};
+use genet_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -61,20 +59,6 @@ struct SpriggingSource<'a>(&'a sprigging::RenderedLeaves);
 impl LeafPaintSource for SpriggingSource<'_> {
     fn leaf_commands(&self, key: u64) -> Option<&[paint_list_api::PaintCmd]> {
         self.0.get(key)
-    }
-}
-
-/// Bridges genet-layout's a11y walk to Sprigging: when the walk reaches a
-/// `<custom-leaf>`, it hands the leaf its own AccessKit node, which the
-/// registered leaf fills (the fretboard announces itself, a knob as a slider).
-/// Mirrors [`SpriggingSource`] for paint, but for semantics.
-struct SpriggingA11y<'a>(&'a mut sprigging::LeafRegistry<u64>);
-
-impl LeafA11ySource for SpriggingA11y<'_> {
-    fn describe_leaf(&mut self, key: u64, node: &mut accesskit::Node) {
-        if let Some(leaf) = self.0.get_mut(&key) {
-            leaf.accessibility(node);
-        }
     }
 }
 
@@ -163,16 +147,10 @@ struct App {
     /// Monotonic base for the CSS-transition animation clock (seconds
     /// since app start).
     anim_base: std::time::Instant,
-    /// The OS AccessKit adapter (Tier 0). `None` until `resumed` creates it; the
-    /// tree is installed on the first frame (before the window is revealed, as
-    /// the Windows adapter requires) and updated every frame after.
-    a11y: Option<AccessKitBridge>,
-    /// Whether the initial tree has been installed (and the window revealed).
-    a11y_installed: bool,
-    /// Maps an AccessKit node id back to its DOM node, so a screen-reader action
-    /// routes through the same `dispatch_click` a mouse click does. Rebuilt each
-    /// frame with the tree.
-    a11y_action_map: HashMap<A11yNodeId, NodeId>,
+    /// The shared accessibility host (Tier 0, `cambium-winit`). `None` until
+    /// `resumed` creates it; it owns the OS adapter, the per-frame tree, and the
+    /// install-before-show lifecycle.
+    a11y: Option<A11yHost>,
     /// Set by the adapter's wake callback when a screen reader acts while the app
     /// is otherwise idle; `about_to_wait` turns it into a redraw so the queued
     /// action gets drained.
@@ -729,90 +707,45 @@ impl App {
     /// Sync dropdown state into the core, push the audio state through the
     /// backend seam, persist the session, re-skin on a theme change, and
     /// repaint — the tail of every input dispatch.
-    /// Project the current layout into an AccessKit tree (with each leaf's own
-    /// semantics), install it on the first frame — before the window is revealed,
-    /// as the Windows adapter requires — and push updates after; drain a screen
-    /// reader's actions and route them through the same `dispatch_click` a mouse
-    /// uses. Called after `redraw`, once the layout for this frame exists.
+    /// Hand this frame to the shared accessibility host: it builds the tree (with
+    /// each leaf's semantics), installs it the first frame (revealing the window)
+    /// and updates it after, and returns the DOM nodes a screen reader asked to
+    /// activate, which we route through the same click path a mouse uses. Called
+    /// after `redraw`, once the layout for this frame exists.
     fn sync_a11y(&mut self) {
-        // Phase 1: project into owned values so the DOM / layout / leaf borrows
-        // are released before the bridge is touched.
-        let built = {
-            let (Some(layout), Some(runner)) = (self.layout.as_ref(), self.runner.as_ref()) else {
-                return;
+        let nodes = {
+            // Take the DOM handle (an owned Rc) so `self.runner` is free again for
+            // the dispatch below.
+            let dom = match self.runner.as_ref() {
+                Some(runner) => runner.dom(),
+                None => return,
             };
-            let dom = runner.dom();
             let dom_ref = dom.borrow();
-            let root = dom_ref.document();
-            let id_of = |d: &ScriptedDom, n: NodeId| A11yNodeId(d.opaque_id(n));
-            let skip = |_: &ScriptedDom, _: NodeId| false;
-            let mut source = SpriggingA11y(&mut self.neighborhood_leaves);
-            let projection = project(&*dom_ref, layout.fragments(), root, &id_of, &skip, &mut source, true);
-            let mut nodes = Vec::with_capacity(projection.nodes.len());
-            let mut map: HashMap<A11yNodeId, NodeId> = HashMap::with_capacity(projection.nodes.len());
-            for p in projection.nodes {
-                map.insert(p.id, p.dom);
-                nodes.push((p.id, p.node));
-            }
-            // Follow the app's keyboard focus, but only if that node is really in
-            // the tree, so a stale id never points the reader at nothing.
-            let focus = self
-                .last_focus
-                .map(A11yNodeId)
-                .filter(|id| map.contains_key(id))
-                .unwrap_or(projection.root);
-            let tree = TreeUpdate {
-                nodes,
-                tree: Some(Tree::new(projection.root)),
-                tree_id: TreeId::ROOT,
-                focus,
-            };
-            (tree, map)
-        };
-        let (tree, map) = built;
-        self.a11y_action_map = map;
-
-        // Phase 2: hand the tree to the adapter; reveal the window once installed.
-        let node_count = tree.nodes.len();
-        let actions = {
-            let (Some(bridge), Some(window)) = (self.a11y.as_mut(), self.window.as_ref()) else {
+            let (Some(a11y), Some(window), Some(layout)) =
+                (self.a11y.as_mut(), self.window.as_ref(), self.layout.as_ref())
+            else {
                 return;
             };
-            if !self.a11y_installed {
-                match bridge.install(window, tree) {
-                    Ok(()) => eprintln!(
-                        "[woodshed-genet] accessibility {:?}, {node_count} nodes projected",
-                        bridge.status()
-                    ),
-                    Err(e) => eprintln!("[woodshed-genet] accessibility install failed: {e}"),
-                }
-                self.a11y_installed = true;
-                window.set_visible(true);
-                Vec::new()
-            } else {
-                bridge.update(tree);
-                bridge.drain_actions()
-            }
+            a11y.sync(
+                window,
+                &dom_ref,
+                layout,
+                &mut self.neighborhood_leaves,
+                self.last_focus,
+            )
         };
-
-        // Phase 3: route a screen reader's Click/Focus through the click path.
-        if actions.is_empty() {
+        if nodes.is_empty() {
             return;
         }
-        for request in actions {
-            let Some(node) = self.a11y_action_map.get(&request.target_node).copied() else {
-                continue;
-            };
-            if matches!(request.action, A11yAction::Click | A11yAction::Focus) {
-                if let Some(runner) = self.runner.as_mut() {
-                    runner.dispatch_click(
-                        node,
-                        PointerClick {
-                            local: (0.0, 0.0),
-                            prop: Propagation::new(),
-                        },
-                    );
-                }
+        for node in nodes {
+            if let Some(runner) = self.runner.as_mut() {
+                runner.dispatch_click(
+                    node,
+                    PointerClick {
+                        local: (0.0, 0.0),
+                        prop: Propagation::new(),
+                    },
+                );
             }
         }
         self.after_dispatch();
@@ -1151,11 +1084,11 @@ impl ApplicationHandler for App {
         ui.midi.output_ports = self.midi.output_ports();
         let dom = Rc::new(RefCell::new(ScriptedDom::new()));
         let runner = Runner::new(dom, desktop_root as fn(&UiState) -> UiChild, ui);
-        // Create the AccessKit adapter now (install happens on the first frame,
-        // once there is a laid-out tree, and before the window is revealed). The
-        // wake callback nudges the loop to drain a screen reader's action.
+        // Create the shared accessibility host now (it installs the tree on the
+        // first frame, once laid out, before the window is revealed). The wake
+        // callback nudges the loop to drain a screen reader's action.
         let wake = self.a11y_wake.clone();
-        self.a11y = Some(AccessKitBridge::new(move || {
+        self.a11y = Some(A11yHost::new(move || {
             wake.store(true, Ordering::Relaxed);
         }));
         self.window = Some(window);
@@ -1302,8 +1235,6 @@ fn main() {
         resize_hint: None,
         anim_base: std::time::Instant::now(),
         a11y: None,
-        a11y_installed: false,
-        a11y_action_map: HashMap::new(),
         a11y_wake: Arc::new(AtomicBool::new(false)),
     };
     event_loop.run_app(&mut app).expect("run app");

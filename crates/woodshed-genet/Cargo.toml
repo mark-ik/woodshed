@@ -23,8 +23,5 @@ paint_list_api = { workspace = true }
 paint_list_render = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
-# AccessKit tree types for the host a11y bridge (Tier 0), the same accesskit the
-# leaf trait and genet-layout speak (unified in this build).
-accesskit = "0.24"
 directories = "5"
 serde_json = { workspace = true }
