@@ -119,6 +119,9 @@ const C_EXCLUDED: ColorF = ColorF { r: 0.28, g: 0.30, b: 0.35, a: 0.55 };
 /// The selection ring around a marked note: a cool bright accent, distinct from
 /// the warm root/active tones so "selected" never reads as "sounding".
 const C_MARK: ColorF = ColorF { r: 0.42, g: 0.80, b: 0.94, a: 1.0 };
+/// The colorblind root outline: a bright warm-neutral that reads as "this is the
+/// root" by shape, independent of hue.
+const C_ROOT_RING: ColorF = ColorF { r: 0.95, g: 0.93, b: 0.86, a: 1.0 };
 /// The touch's path trail: a translucent warm line threaded through the markers
 /// in visit order, so the treatment (which way the run climbs) is shown, not
 /// just named. Shares the active accent's hue so the trail and the sounding step
@@ -253,6 +256,8 @@ pub struct FretboardLeaf {
     fret_start: u8,
     fret_count: u8,
     orientation: Orientation,
+    /// Colorblind aid: outline the root note so it reads by shape, not color.
+    distinguish_root: bool,
     dots: Vec<Dot>,
     marker_style: MarkerStyle,
     /// The (string, fret) sounding right now during a run, painted with the
@@ -273,6 +278,7 @@ impl FretboardLeaf {
         fret_start: u8,
         fret_count: u8,
         orientation: Orientation,
+        distinguish_root: bool,
         dots: Vec<Dot>,
         marker_style: MarkerStyle,
     ) -> Self {
@@ -288,6 +294,7 @@ impl FretboardLeaf {
             fret_start,
             fret_count,
             orientation,
+            distinguish_root,
             dots,
             marker_style,
             active: None,
@@ -467,24 +474,37 @@ impl Leaf for FretboardLeaf {
                     cx.fill_path(path, color);
                 }
             }
-            // Selection ring for a marked note, on top of the fill and tracking
-            // the marker's silhouette so it reads as a halo, not a second marker.
+            // An outline ring tracking the marker's silhouette (a halo, not a
+            // second marker), inflated by `inflate`.
+            let ring_at = |inflate: f32| match self.marker_style {
+                MarkerStyle::Circle => sprigging::Path::circle(x, y, radius + inflate),
+                MarkerStyle::Diamond => {
+                    let (dx, dy) = (mw * 0.46 + inflate, mh * 0.66 + inflate);
+                    sprigging::Path::new()
+                        .move_to(x, y - dy)
+                        .line_to(x + dx, y)
+                        .line_to(x, y + dy)
+                        .line_to(x - dx, y)
+                        .close()
+                        .build()
+                }
+                _ => rounded_rect(
+                    mx - inflate,
+                    my - inflate,
+                    mw + inflate * 2.0,
+                    mh + inflate * 2.0,
+                    5.0,
+                ),
+            };
+            // Colorblind aid: a neutral outline on the root, so it is identifiable
+            // by shape, not by its warm colour alone. The mark ring takes over
+            // when a note is also marked.
+            if self.distinguish_root && d.is_root && !d.marked {
+                cx.stroke_path(ring_at(2.0), sprigging::round_stroke(C_ROOT_RING, 2.0));
+            }
+            // Selection ring for a marked note.
             if d.marked {
-                let ring = match self.marker_style {
-                    MarkerStyle::Circle => sprigging::Path::circle(x, y, radius + 3.0),
-                    MarkerStyle::Diamond => {
-                        let (dx, dy) = (mw * 0.46 + 3.0, mh * 0.66 + 3.0);
-                        sprigging::Path::new()
-                            .move_to(x, y - dy)
-                            .line_to(x + dx, y)
-                            .line_to(x, y + dy)
-                            .line_to(x - dx, y)
-                            .close()
-                            .build()
-                    }
-                    _ => rounded_rect(mx - 3.0, my - 3.0, mw + 6.0, mh + 6.0, 5.0),
-                };
-                cx.stroke_path(ring, sprigging::round_stroke(C_MARK, 2.0));
+                cx.stroke_path(ring_at(3.0), sprigging::round_stroke(C_MARK, 2.0));
             }
         }
 

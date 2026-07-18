@@ -112,16 +112,31 @@ centre, title for suggestions).
     nodes projected`; a probe of the tree read back a real marker,
     `"E2, Perfect 5th, string 6, open"` — the neck's markers reach the OS with
     their spoken labels. Not verified here: an actual screen reader voicing and
-    navigating it (needs a manual NVDA / VoiceOver pass). It lives in
-    `woodshed-genet`, not `cambium-winit`, so lifting it to the shared host for
-    every cambium app is a follow-on.
+    navigating it (needs a manual NVDA / VoiceOver pass).
+  - **Lifted to `cambium-winit` 2026-07-18.** `A11yHost` (install / update /
+    drain, install-before-show) and `SpriggingA11y` now live in
+    `cambium-winit::a11y`, so every cambium app gets the bridge as shared code.
+    Woodshed's `sync_a11y` delegates to `A11yHost::sync`. Verified: cambium-winit
+    compiles clean and woodshed still logs `303 nodes projected`.
 - **Tier 1 — the neck's meaning.** Landed above for the fretboard. Extend to the
   arpeggio / exercise / progression boards (still CSS-grid) and add `role` to the
   hand-rolled controls.
-- **Tier 2 — preferences (make that settings page real).** Reduced motion (gate
-  the transitions and the stepping animation), larger-text and higher-contrast
-  options, and colorblind redundancy so root-vs-note is not carried by color
-  alone (the marker-shape setting can encode it).
+- **Tier 2 — preferences (make that settings page real). LANDED 2026-07-18.** The
+  Accessibility settings page is real: three toggle rows writing to
+  `AccessibilitySettings` (`reduce_motion`, `distinguish_root`, `text_scale`).
+  - **Reduce motion** appends a `transition: none` rule for the interactive
+    classes (`theme::apply_accessibility`), so the hover/active fades stop while
+    functional feedback like the stepping run stays.
+  - **Text size** (Normal / Large / Larger) scales every `font-size: Npx` in the
+    sheet by 1.0 / 1.15 / 1.3 (`theme::scale_font_sizes`); the UI reflows.
+  - **Distinguish root** draws a light outline ring on root markers in the
+    fretboard leaf (`C_ROOT_RING` via the `ring_at` closure), so root-vs-note is
+    not carried by color alone. The host reads the flag, hashes it into the leaf
+    sig, and passes it at both board sync sites.
+  - Both preferences re-skin live: `accessible_sheet()` wraps `theme.css()` and
+    the re-skin condition in `after_dispatch` now fires on a11y changes too, not
+    just theme changes. Verified in-app: the board's root markers gained their
+    ring, the whole UI enlarged at Larger, all three toggles registered.
 - **Tier 3 — keyboard the board.** Arrow between markers, mark / draw / play by
   key, so the practice loop is operable without a mouse. Serves motor-impaired
   players who cannot hit small targets.

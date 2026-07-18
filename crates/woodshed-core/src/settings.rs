@@ -147,8 +147,35 @@ pub struct RehearsalSettings {}
 pub struct LooperSettings {}
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AudioMidiSettings {}
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AccessibilitySettings {}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessibilitySettings {
+    /// Suppress non-essential motion (the CSS hover/active fades). Functional
+    /// feedback like the stepping run stays.
+    #[serde(default)]
+    pub reduce_motion: bool,
+    /// Distinguish the root note by an outline, not color alone, for colorblind
+    /// players.
+    #[serde(default)]
+    pub distinguish_root: bool,
+    /// UI text size: "Normal", "Large", or "Larger".
+    #[serde(default = "default_text_scale")]
+    pub text_scale: String,
+}
+
+fn default_text_scale() -> String {
+    "Normal".into()
+}
+
+impl Default for AccessibilitySettings {
+    fn default() -> Self {
+        Self {
+            reduce_motion: false,
+            distinguish_root: false,
+            text_scale: default_text_scale(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

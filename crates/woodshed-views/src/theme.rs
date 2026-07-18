@@ -492,3 +492,55 @@ pub fn stage_css(p: &Palette) -> String {
 pub fn slate_stage_css() -> String {
     stage_css(&derive_palette(&slate_seeds()))
 }
+
+/// The UI text-scale factor for a named setting ("Large" / "Larger", else 1.0).
+pub fn text_scale_factor(name: &str) -> f32 {
+    match name {
+        "Large" => 1.15,
+        "Larger" => 1.3,
+        _ => 1.0,
+    }
+}
+
+/// Apply the accessibility preferences to a generated sheet, as a post-process
+/// so the base theme stays untouched. Reduced motion drops the non-essential
+/// hover/active fades; a text scale multiplies every `font-size`.
+pub fn apply_accessibility(mut css: String, reduce_motion: bool, text_scale: f32) -> String {
+    if (text_scale - 1.0).abs() > 0.001 {
+        css = scale_font_sizes(&css, text_scale);
+    }
+    if reduce_motion {
+        // Later rules win at equal specificity, so override the four transition
+        // rules (theme.rs) to none.
+        css.push_str(
+            "\n.search-item, .prog-card, .pill, .lens, .film-card, .recipe-tile, \
+             .bar-chip, .search-wrap input { transition: none; }\n",
+        );
+    }
+    css
+}
+
+/// Scale every `font-size: Npx` in a sheet by `scale`, leaving all else intact.
+fn scale_font_sizes(css: &str, scale: f32) -> String {
+    const NEEDLE: &str = "font-size: ";
+    let mut out = String::with_capacity(css.len() + 32);
+    let mut rest = css;
+    while let Some(pos) = rest.find(NEEDLE) {
+        out.push_str(&rest[..pos + NEEDLE.len()]);
+        rest = &rest[pos + NEEDLE.len()..];
+        match rest.find("px") {
+            Some(px) => match rest[..px].trim().parse::<f32>() {
+                Ok(n) => {
+                    out.push_str(&((n * scale).round() as i32).to_string());
+                    out.push_str("px");
+                    rest = &rest[px + 2..];
+                }
+                // Not a plain "Npx" — leave the declaration as written.
+                Err(_) => {}
+            },
+            None => {}
+        }
+    }
+    out.push_str(rest);
+    out
+}

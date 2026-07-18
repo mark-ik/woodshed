@@ -531,17 +531,58 @@ fn audio_midi_page(ui: &UiState) -> UiChild {
     )
 }
 
-fn accessibility_page(_ui: &UiState) -> UiChild {
+fn accessibility_page(ui: &UiState) -> UiChild {
+    // Two-way toggle rendered as a pair of chips, so the active choice is always
+    // visible rather than inferred from a checkbox state.
+    fn toggle(on_now: bool, set_on: fn(&mut UiState, bool)) -> Vec<UiChild> {
+        [("Off", false), ("On", true)]
+            .into_iter()
+            .map(|(label, val)| {
+                let active = on_now == val;
+                let class = if active { "side-item side-active" } else { "side-item" };
+                Box::new(clickable(
+                    el("div", text(label)).attr("class", class),
+                    move |ui: &mut UiState, _| set_on(ui, val),
+                )) as UiChild
+            })
+            .collect()
+    }
+    let motion = toggle(ui.app_settings.accessibility.reduce_motion, |ui, v| {
+        ui.app_settings.accessibility.reduce_motion = v;
+    });
+    let root = toggle(ui.app_settings.accessibility.distinguish_root, |ui, v| {
+        ui.app_settings.accessibility.distinguish_root = v;
+    });
+    let sizes: Vec<UiChild> = ["Normal", "Large", "Larger"]
+        .iter()
+        .map(|&name| {
+            let active = ui.app_settings.accessibility.text_scale.as_str() == name;
+            let class = if active { "side-item side-active" } else { "side-item" };
+            Box::new(clickable(
+                el("div", text(name)).attr("class", class),
+                move |ui: &mut UiState, _| {
+                    ui.app_settings.accessibility.text_scale = name.to_string();
+                },
+            )) as UiChild
+        })
+        .collect();
     Box::new(
         el(
             "div",
             (
                 el("div", text("Accessibility")).attr("class", "settings-heading"),
+                el("div", text("Reduce motion")).attr("class", "settings-heading settings-gap"),
+                el("div", motion).attr("class", "settings-options"),
+                el("div", text("Distinguish root by outline"))
+                    .attr("class", "settings-heading settings-gap"),
+                el("div", root).attr("class", "settings-options"),
+                el("div", text("Text size")).attr("class", "settings-heading settings-gap"),
+                el("div", sizes).attr("class", "settings-options"),
                 el(
                     "div",
-                    text("Keyboard focus is visible. Reduced-motion and screen-reader preferences still need host wiring."),
+                    text("Keyboard focus is visible, and the fretboard is announced to screen readers with each marker's note, interval, string, and fret."),
                 )
-                .attr("class", "settings-line"),
+                .attr("class", "settings-line settings-gap"),
             ),
         )
         .attr("class", "board settings-page"),

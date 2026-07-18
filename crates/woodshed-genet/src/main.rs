@@ -155,6 +155,10 @@ struct App {
     /// is otherwise idle; `about_to_wait` turns it into a redraw so the queued
     /// action gets drained.
     a11y_wake: Arc<AtomicBool>,
+    /// The accessibility skin the current sheet was generated with; a change
+    /// re-skins, alongside the theme.
+    reduce_motion: bool,
+    text_scale: String,
 }
 
 /// Resolve a MIDI port dropdown selection to a connect target: index 0
@@ -267,6 +271,7 @@ impl App {
         let orientation = woodshed_views::fretboard_leaf::Orientation::from_name(
             &state.app_settings.fretboard.orientation,
         );
+        let distinguish_root = state.app_settings.accessibility.distinguish_root;
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
             .dots()
             .into_iter()
@@ -285,6 +290,7 @@ impl App {
         marker_style.hash(&mut hasher);
         matches!(orientation, woodshed_views::fretboard_leaf::Orientation::Vertical)
             .hash(&mut hasher);
+        distinguish_root.hash(&mut hasher);
         for d in &dots {
             d.string_index.hash(&mut hasher);
             d.fret.hash(&mut hasher);
@@ -299,6 +305,7 @@ impl App {
             fret_start,
             fret_count,
             orientation,
+            distinguish_root,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
         );
@@ -359,6 +366,7 @@ impl App {
         let orientation = woodshed_views::fretboard_leaf::Orientation::from_name(
             &state.app_settings.fretboard.orientation,
         );
+        let distinguish_root = state.app_settings.accessibility.distinguish_root;
         // marked / excluded come from the same UiState helpers the view uses, so
         // the mode logic (Off / Solo / Mute) lives in exactly one place.
         let dots: Vec<woodshed_views::fretboard_leaf::Dot> = st
@@ -380,6 +388,7 @@ impl App {
         marker_style.hash(&mut hasher);
         matches!(orientation, woodshed_views::fretboard_leaf::Orientation::Vertical)
             .hash(&mut hasher);
+        distinguish_root.hash(&mut hasher);
         for d in &dots {
             d.string_index.hash(&mut hasher);
             d.fret.hash(&mut hasher);
@@ -396,6 +405,7 @@ impl App {
             fret_start,
             fret_count,
             orientation,
+            distinguish_root,
             dots,
             woodshed_views::fretboard_leaf::MarkerStyle::from_name(&marker_style),
         );
@@ -751,8 +761,20 @@ impl App {
         self.after_dispatch();
     }
 
+    /// The current theme's sheet with the accessibility preferences applied
+    /// (reduced motion, text scale). Regenerated on a theme or preference change.
+    fn accessible_sheet(&self) -> String {
+        woodshed_views::theme::apply_accessibility(
+            self.theme.css(),
+            self.reduce_motion,
+            woodshed_views::theme::text_scale_factor(&self.text_scale),
+        )
+    }
+
     fn after_dispatch(&mut self) {
         let mut theme = self.theme;
+        let mut a11y_reduce = self.reduce_motion;
+        let mut a11y_scale = self.text_scale.clone();
         let mut persisted: Option<String> = None;
         if let Some(runner) = self.runner.as_mut() {
             let backend = self.backend.as_mut();
@@ -821,6 +843,8 @@ impl App {
                     ui.song_loop_bars = backend.song_loop_bars();
                 }
                 theme = ui.theme();
+                a11y_reduce = ui.app_settings.accessibility.reduce_motion;
+                a11y_scale = ui.app_settings.accessibility.text_scale.clone();
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();
             });
         }
@@ -872,9 +896,14 @@ impl App {
                 ui.midi.connected_out = midi.connected_output().map(str::to_string);
             });
         }
-        if theme != self.theme {
+        if theme != self.theme
+            || a11y_reduce != self.reduce_motion
+            || a11y_scale != self.text_scale
+        {
             self.theme = theme;
-            self.sheet = theme.css();
+            self.reduce_motion = a11y_reduce;
+            self.text_scale = a11y_scale;
+            self.sheet = self.accessible_sheet();
             // Force a full relayout under the new sheet.
             self.layout = None;
             self.layout_size = (0.0, 0.0);
@@ -1078,7 +1107,9 @@ impl ApplicationHandler for App {
             }
         }
         self.theme = ui.theme();
-        self.sheet = ui.theme().css();
+        self.reduce_motion = ui.app_settings.accessibility.reduce_motion;
+        self.text_scale = ui.app_settings.accessibility.text_scale.clone();
+        self.sheet = self.accessible_sheet();
         // Populate the MIDI port pickers with what's plugged in now.
         ui.midi.input_ports = self.midi.input_ports();
         ui.midi.output_ports = self.midi.output_ports();
@@ -1236,6 +1267,8 @@ fn main() {
         anim_base: std::time::Instant::now(),
         a11y: None,
         a11y_wake: Arc::new(AtomicBool::new(false)),
+        reduce_motion: false,
+        text_scale: "Normal".into(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }
