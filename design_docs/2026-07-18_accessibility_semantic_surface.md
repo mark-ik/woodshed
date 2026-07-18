@@ -91,10 +91,30 @@ centre, title for suggestions).
 
 ## The tiered plan
 
-- **Tier 0 — flip the switch (host).** Install the AccessKit bridge in the host,
-  feed it genet-layout's projected tree each frame, route actions back to
-  activation. Lights up everything the DOM carries, including the fretboard
-  surface above. Biggest payoff; a shared `cambium-winit` improvement.
+- **Tier 0 — flip the switch (host). LANDED 2026-07-18.** The switch is on: a
+  screen reader now sees Woodshed. In `woodshed-genet`:
+  - `SpriggingA11y` bridges genet-layout's `LeafA11ySource` to the Sprigging
+    `LeafRegistry`, so each `<custom-leaf>`'s `accessibility()` fills its node
+    (the mirror of `SpriggingSource` for paint). The fretboard announces itself.
+  - `sync_a11y` (after every `redraw`) `project()`s the retained layout into an
+    AccessKit `TreeUpdate` with those leaf semantics, installs it the first frame
+    and updates it after, follows the app's keyboard focus, and drains a screen
+    reader's actions, routing `Click` / `Focus` through the same `dispatch_click`
+    a mouse uses (via an AccessKit-id -> DOM-node map rebuilt each frame).
+  - The Windows adapter must attach before the window is shown, so the window is
+    created hidden and revealed by `sync_a11y` after the first install. The
+    hidden window will not receive a deferred redraw (the adapter's own caveat),
+    so the first frame is driven synchronously in `resumed`, not awaited.
+  - A wake `AtomicBool` (set by the adapter, honored in `about_to_wait` ->
+    `request_redraw`) drains actions that arrive while the app is idle, without
+    changing the event-loop type.
+  - Verified: launches and renders normally; logs `accessibility Installed, 303
+    nodes projected`; a probe of the tree read back a real marker,
+    `"E2, Perfect 5th, string 6, open"` — the neck's markers reach the OS with
+    their spoken labels. Not verified here: an actual screen reader voicing and
+    navigating it (needs a manual NVDA / VoiceOver pass). It lives in
+    `woodshed-genet`, not `cambium-winit`, so lifting it to the shared host for
+    every cambium app is a follow-on.
 - **Tier 1 — the neck's meaning.** Landed above for the fretboard. Extend to the
   arpeggio / exercise / progression boards (still CSS-grid) and add `role` to the
   hand-rolled controls.

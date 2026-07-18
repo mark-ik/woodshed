@@ -6674,6 +6674,7 @@ dependencies = [
 name = "woodshed-genet"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "cambium",
  "cambium-winit",
  "directories",
