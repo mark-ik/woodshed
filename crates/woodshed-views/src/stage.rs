@@ -255,6 +255,10 @@ pub struct UiState {
     pub tool_page: ToolPage,
     /// Host-observed width band. This is transient rather than a user setting.
     pub viewport: ViewportClass,
+    /// Host-observed window height in logical px, transient. Bounds a vertical
+    /// fretboard so a tall neck scrolls inside its viewport instead of running off
+    /// the page; 0 until the host reports it (treated as "unbounded").
+    pub viewport_h: f32,
     /// Window-chrome requests the host consumes after dispatch (CSD).
     pub chrome_minimize: bool,
     pub chrome_maximize: bool,
@@ -340,6 +344,7 @@ impl UiState {
             stage_page: StagePage::default(),
             tool_page: ToolPage::default(),
             viewport: ViewportClass::default(),
+            viewport_h: 0.0,
             chrome_minimize: false,
             chrome_maximize: false,
             chrome_close: false,
@@ -713,6 +718,18 @@ impl UiState {
         } else {
             self.viewport = next;
             true
+        }
+    }
+
+    /// Record the host's window height (logical px), which bounds a vertical
+    /// board's scroll viewport. Rebuild only on a meaningful change, so a resize
+    /// drag does not rebuild every pixel.
+    pub fn set_viewport_height(&mut self, height: f32) -> bool {
+        if (self.viewport_h - height).abs() >= 16.0 {
+            self.viewport_h = height;
+            true
+        } else {
+            false
         }
     }
 
@@ -1133,7 +1150,7 @@ fn leaf_section_board(
                 )
                 .attr("class", board_viewport_class(geom.orientation))
                 .attr("aria-label", aria)
-                .attr("style", board_viewport_style(geom.orientation, w, h)),
+                .attr("style", board_viewport_style(geom.orientation, w, h, ui.viewport_h)),
                 el("div", text(caption)).attr("class", "scale-name"),
             ),
         )
@@ -1329,17 +1346,25 @@ fn board_viewport_class(_orientation: Orientation) -> &'static str {
 /// x: the flex column bounds its width, so `overflow-x:auto` scrolls the excess
 /// frets while its short height is pinned exactly — a wide range fits the pane and
 /// scrolls instead of pushing the layout. A vertical neck runs along y, where the
-/// row gives no natural height bound; it keeps its natural height and scrolls with
-/// the page (it is narrow, so it never widens the layout). Capping a vertical
-/// neck to an internal y-scroll needs the engine to clip a taller-than-box
-/// replaced leaf, which it does not yet honor — a follow-on.
-fn board_viewport_style(orientation: Orientation, w: u32, h: u32) -> String {
+/// row gives no natural height bound, so the host-reported window height bounds
+/// it: a tall neck is capped and `overflow-y:auto` scrolls it internally, while a
+/// neck shorter than the cap keeps its own height. `avail_h` is the window's
+/// logical height (0 = not yet reported → the board keeps its natural height).
+fn board_viewport_style(orientation: Orientation, w: u32, h: u32, avail_h: f32) -> String {
     match orientation {
         Orientation::Horizontal => {
             format!("height:{h}px; overflow-x:auto; overflow-y:hidden;")
         }
         Orientation::Vertical => {
-            format!("width:{w}px;")
+            // The board's share of the window, leaving room for the header, lens
+            // strip, deck, and caption. Below the cap the neck uses its own height,
+            // so a short neck shows no needless scrollbar.
+            let cap = (avail_h * 0.60).round() as u32;
+            if avail_h > 0.0 && cap > 0 && h > cap {
+                format!("width:{w}px; height:{cap}px; overflow-y:auto; overflow-x:hidden;")
+            } else {
+                format!("width:{w}px;")
+            }
         }
     }
 }
@@ -1511,7 +1536,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                         state.fret_count
                     ),
                 )
-                .attr("style", board_viewport_style(geom.orientation, w, h)),
+                .attr("style", board_viewport_style(geom.orientation, w, h, ui.viewport_h)),
                 el(
                     "div",
                     (

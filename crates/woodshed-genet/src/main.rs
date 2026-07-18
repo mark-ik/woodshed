@@ -452,10 +452,17 @@ impl App {
         let Some(window) = self.window.as_ref() else {
             return;
         };
-        let width = window.inner_size().width as f32 / window.scale_factor() as f32;
+        let scale = window.scale_factor() as f32;
+        let size = window.inner_size();
+        let width = size.width as f32 / scale;
+        let height = size.height as f32 / scale;
         let mut changed = false;
         if let Some(runner) = self.runner.as_mut() {
-            runner.update(|ui| changed = ui.set_viewport_width(width));
+            runner.update(|ui| {
+                // `|` not `||`: both must run, and either change needs a rebuild
+                // (the height bounds a vertical board's scroll viewport).
+                changed = ui.set_viewport_width(width) | ui.set_viewport_height(height);
+            });
         }
         if changed {
             window.request_redraw();
@@ -1127,7 +1134,9 @@ impl ApplicationHandler for App {
         .expect("boot genet host");
         let backend = CpalBackend::new();
         let mut ui = UiState::new();
-        ui.set_viewport_width(size.width as f32 / window.scale_factor() as f32);
+        let boot_scale = window.scale_factor() as f32;
+        ui.set_viewport_width(size.width as f32 / boot_scale);
+        ui.set_viewport_height(size.height as f32 / boot_scale);
         ui.audio_error = backend.error().map(String::from);
         // Restore the previous session (W0.2): selections, tempo, theme, tab.
         if let Some(json) = self.storage.load() {

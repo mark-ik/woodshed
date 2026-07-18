@@ -445,10 +445,9 @@ Remaining refinements, in priority order:
     put. A vertical neck runs along y with no natural height bound, so it keeps its
     natural height and scrolls with the page (it is narrow, never widening the
     layout). Verified in the app: at a narrow window the neck clips at the pane
-    edge and scrolls internally, labels riding the leaf. **Follow-on:** an
-    internal y-scroll cap for a very tall vertical neck needs the engine to clip a
-    taller-than-box replaced leaf, which it does not yet honor (an explicit
-    `height`/`max-height` on the viewport is grown to the leaf's intrinsic height).
+    edge and scrolls internally, labels riding the leaf. **Follow-on (resolved
+    2026-07-18, below):** a vertical neck kept its natural height and page-scrolled;
+    an internal y-scroll cap was thought to be engine-blocked.
   - **Arpeggio / Exercise / Progression now render on the painted leaf**, not the
     old CSS grid — same crisp neck, orientation, marker style, and scroll
     viewport as Scale / Chord. A uniform `StageState::lens_markers` returns the
@@ -461,3 +460,20 @@ Remaining refinements, in priority order:
     `.dot` / `.fret-num*` / `.*-dot`) were removed. Verified each lens in the app;
     Scale/Chord unchanged; 44 core + 2 view tests green. **Follow-on:** the
     Exercise trail (recency > 0) draws as plain markers now, not a dimmed trail.
+- **2026-07-18**: **Vertical neck scrolls inside a window-bounded viewport (and
+  the "engine can't cap" finding was wrong).** The earlier read that genet won't
+  cap a taller-than-box replaced leaf was a measurement error: it conflated CSS px
+  with the 2x device px in the screenshots, and it had used `max-height` (which
+  the container does grow past) rather than `height`. A genet-layout unit test
+  (`an_overflow_container_caps_a_taller_replaced_child`) and a decisive in-app test
+  (a background-coloured viewport) both confirm genet honors an explicit `height`
+  on an `overflow` container over a taller replaced leaf, clipping and scrolling it
+  — no engine change needed. So the vertical board now takes the same treatment as
+  the horizontal one: the host reports the window's logical height
+  (`set_viewport_height`, mirroring `set_viewport_width`), and a vertical viewport
+  caps at ~60% of it (`height: cap; overflow-y: auto`) when the neck is taller,
+  else keeps its own height (no needless scrollbar). Verified: a wide vertical neck
+  clips to the window-relative cap and wheel-scrolls internally (higher frets
+  revealed, page unmoved, deck/caption fixed below); a short neck fits with no
+  scrollbar; the cap re-fits on resize. The overlay still rides the leaf (it spills
+  the clip, so it keeps it).
