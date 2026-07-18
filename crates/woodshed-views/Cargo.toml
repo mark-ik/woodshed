@@ -13,3 +13,6 @@ woodshedding = { workspace = true }
 cambium = { workspace = true }
 sprigging = { workspace = true }
 tinct = { workspace = true }
+# For the fretboard leaf's accessibility() hook — the same accesskit sprigging's
+# Leaf trait speaks, so the neck can announce itself to assistive tech.
+accesskit = "0.24"

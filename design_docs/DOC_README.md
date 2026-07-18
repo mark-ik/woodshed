@@ -13,6 +13,14 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-07-18_accessibility_semantic_surface.md](2026-07-18_accessibility_semantic_surface.md)
+  — **One semantic surface, three readers.** The ARIA-attributed cambium DOM
+  serves a screen reader (AccessKit), a driver/test (genet-probe), and an agent
+  alike, so accessibility is the same investment as automatability. Records the
+  stack's a11y groundwork, the gaps (host bridge unwired in cambium-winit,
+  hand-rolled controls lack roles), the single-node leaf finding that keeps the
+  fretboard markers in the DOM (and locks scroll/fit), the first build (marker
+  aria-labels + named neck + leaf `accessibility()`), and the Tier 0-3 plan.
 - [2026-07-15_material_and_touch_model.md](2026-07-15_material_and_touch_model.md)
   — **The unifying model.** Content is arranged notes and relationships; the five
   lenses are treatments, not content types. Two axes: Material (with an

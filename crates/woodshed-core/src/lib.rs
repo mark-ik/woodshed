@@ -193,6 +193,38 @@ impl FretDot {
     }
 }
 
+/// A spoken label for a fretboard marker, for assistive tech (and rich enough
+/// for a semantic driver to resolve): the note with its octave, its role in the
+/// material, and where it sits. E.g. "A2, root, string 6, fret 5" or
+/// "C#3, Major 3rd, string 2, open". The marker overlay carries this as an
+/// `aria-label`, so the neck is navigable note-by-note even though the strings
+/// and frets themselves are painted (and thus invisible to the DOM).
+pub fn marker_a11y_label(dot: &FretDot, string_count: usize) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    // A resolved pitch carries an octave; an exercise finger (no pitch) does not.
+    let note = if dot.frequency > 0.0 {
+        format!("{}{}", dot.label, dot.octave)
+    } else {
+        dot.label.clone()
+    };
+    if !note.is_empty() {
+        parts.push(note);
+    }
+    if dot.is_root {
+        parts.push("root".to_string());
+    } else if !dot.interval_name.is_empty() {
+        parts.push(dot.interval_name.clone());
+    }
+    // Guitar-style numbering: string 1 is the highest (largest index).
+    let string_no = string_count.saturating_sub(dot.string_index);
+    parts.push(if dot.fret == 0 {
+        format!("string {string_no}, open")
+    } else {
+        format!("string {string_no}, fret {}", dot.fret)
+    });
+    parts.join(", ")
+}
+
 /// The Stage state: what the fretboard is showing right now.
 pub struct StageState {
     pub lens: Lens,
@@ -2019,6 +2051,34 @@ mod tests {
         // A start past the end is clamped to the end, not left inverted.
         s.apply_neck(30, Some(12));
         assert!(s.fret_start <= s.fret_count);
+    }
+
+    #[test]
+    fn marker_a11y_label_speaks_note_role_and_place() {
+        let s = StageState::new(); // A Minor Pentatonic, root A, by default.
+        let dots = s.dots();
+        let strings = s.string_count();
+
+        let root = dots.iter().find(|d| d.is_root).expect("a root on the board");
+        let label = marker_a11y_label(root, strings);
+        assert!(label.starts_with('A'), "names the note: {label}");
+        assert!(label.contains("root"), "names its role: {label}");
+        assert!(label.contains("string "), "gives the string: {label}");
+
+        // An open-string marker says "open", never "fret 0".
+        if let Some(open) = dots.iter().find(|d| d.fret == 0) {
+            let l = marker_a11y_label(open, strings);
+            assert!(l.contains("open") && !l.contains("fret 0"), "open string: {l}");
+        }
+        // A non-root tone names its interval, not "root".
+        if let Some(other) = dots
+            .iter()
+            .find(|d| !d.is_root && !d.interval_name.is_empty())
+        {
+            let l = marker_a11y_label(other, strings);
+            assert!(!l.contains("root"), "non-root omits root: {l}");
+            assert!(l.contains(&other.interval_name), "names the interval: {l}");
+        }
     }
 
     #[test]

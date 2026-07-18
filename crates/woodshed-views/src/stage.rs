@@ -58,6 +58,9 @@ pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, 
             kind: ui.stage.lens.label(),
             position: (0.5, 0.5),
             label: title,
+            // Stable selector key (catalog id) for a driver/test, distinct from
+            // the displayed label.
+            key: Some(id),
         });
     }
     let suggestions =
@@ -66,11 +69,13 @@ pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, 
     let n = suggestions.len();
     for (i, s) in suggestions.into_iter().enumerate() {
         let angle = i as f32 / n.max(1) as f32 * TAU - FRAC_PI_2;
+        let key = s.title.clone();
         nodes.push(GraphCanvasNode {
             id: Some(s.target),
             kind: s.kind,
             position: (0.5 + angle.cos() * 0.40, 0.5 + angle.sin() * 0.40),
             label: s.title,
+            key: Some(key),
         });
         if has_center {
             edges.push(GraphCanvasEdge {
@@ -1511,11 +1516,19 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             } else {
                 "fret-label"
             };
+            // A marker is a real, named button in the accessibility tree: the
+            // paint gives no semantics, so the spoken note/role/place rides here
+            // as an aria-label (also what a semantic driver resolves it by).
+            let a11y = woodshed_core::marker_a11y_label(d, string_count);
             Box::new(clickable(
-                el("div", text(label_text)).attr("class", class).attr(
-                    "style",
-                    format!("left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"),
-                ),
+                el("div", text(label_text))
+                    .attr("class", class)
+                    .attr("role", "button")
+                    .attr("aria-label", a11y)
+                    .attr(
+                        "style",
+                        format!("left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"),
+                    ),
                 move |ui: &mut UiState, _| ui.board_marker_click(si, fret),
             )) as UiChild
         })
@@ -1543,6 +1556,18 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                     ),
                 )
                 .attr("class", "fretboard-stack")
+                // Names the neck as a region so assistive tech announces which
+                // board this is before the player steps through its notes.
+                .attr(
+                    "aria-label",
+                    format!(
+                        "{} fretboard, {} notes, frets {}\u{2013}{}",
+                        state.material_name(),
+                        dot_list.len(),
+                        state.fret_start,
+                        state.fret_count
+                    ),
+                )
                 .attr("style", format!("width:{w}px; height:{h}px")),
                 el(
                     "div",

@@ -179,16 +179,29 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             if ui.card_excluded(si, fret) {
                 class.push_str(" excluded");
             }
+            // The spoken note/role/place plus the mark state, so a screen-reader
+            // user knows what a marker is and what marking did to it.
+            let mut a11y = woodshed_core::marker_a11y_label(d, string_count);
+            if ui.card_marked(si, fret) {
+                a11y.push_str(", marked");
+            }
+            if ui.card_excluded(si, fret) {
+                a11y.push_str(", muted");
+            }
             // click marks the note; hover peeks its detail card (the resolved
             // "click marks, hover shows").
             Box::new(on_hover(
                 clickable(
-                    el("div", text(d.label.clone())).attr("class", class).attr(
-                        "style",
-                        format!(
-                            "left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"
+                    el("div", text(d.label.clone()))
+                        .attr("class", class)
+                        .attr("role", "button")
+                        .attr("aria-label", a11y)
+                        .attr(
+                            "style",
+                            format!(
+                                "left:{lx:.1}px; top:{ly:.1}px; width:{mw:.1}px; height:{mh:.1}px"
+                            ),
                         ),
-                    ),
                     move |ui: &mut UiState, _| ui.toggle_card_mark(si, fret),
                 ),
                 move |ui: &mut UiState, ev: HoverEvent| match ev.phase {
@@ -242,6 +255,10 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                         ),
                     )
                     .attr("class", "fretboard-stack")
+                    .attr(
+                        "aria-label",
+                        format!("{} fretboard, {} notes", card.label, dot_list.len()),
+                    )
                     .attr("style", format!("width:{w}px; height:{h}px")),
                     el(
                         "div",

@@ -494,4 +494,63 @@ impl Leaf for FretboardLeaf {
     fn paint_dirty(&self) -> bool {
         self.dirty
     }
+
+    /// The painted neck is an opaque graphic to the DOM, so it speaks for itself:
+    /// it announces as a graphics object with a structural summary. The specific
+    /// board's identity (material, note count) rides as the author's `aria-label`
+    /// on the enclosing region and outranks this fallback; the markers over the
+    /// leaf are their own named buttons, so a screen reader navigates the notes
+    /// while this describes the surface they sit on.
+    fn accessibility(&mut self, node: &mut accesskit::Node) {
+        node.set_role(accesskit::Role::GraphicsObject);
+        if node.label().is_none() {
+            let orientation = match self.orientation {
+                Orientation::Horizontal => "horizontal",
+                Orientation::Vertical => "vertical",
+            };
+            node.set_label(format!(
+                "{orientation} fretboard, {} strings, frets {}\u{2013}{}, {} notes",
+                self.string_count,
+                self.fret_start,
+                self.fret_count,
+                self.dots.len(),
+            ));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leaf() -> FretboardLeaf {
+        let dots = vec![
+            Dot { string_index: 0, fret: 5, is_root: true, marked: false, excluded: false },
+            Dot { string_index: 1, fret: 7, is_root: false, marked: false, excluded: false },
+        ];
+        FretboardLeaf::new(6, 0, 12, Orientation::Horizontal, dots, MarkerStyle::Sharp)
+    }
+
+    #[test]
+    fn leaf_announces_itself_as_a_described_graphic() {
+        let mut l = leaf();
+        let mut node = accesskit::Node::new(accesskit::Role::GenericContainer);
+        l.accessibility(&mut node);
+        assert_eq!(node.role(), accesskit::Role::GraphicsObject);
+        let label = node.label().expect("a fallback summary");
+        assert!(label.contains("fretboard"), "names what it is: {label}");
+        assert!(label.contains("2 notes"), "counts its notes: {label}");
+    }
+
+    #[test]
+    fn an_authored_name_outranks_the_leaf_fallback() {
+        let mut l = leaf();
+        let mut node = accesskit::Node::new(accesskit::Role::GenericContainer);
+        node.set_label("A Minor Pentatonic fretboard");
+        l.accessibility(&mut node);
+        // The author named the board; the leaf must not overwrite it.
+        assert_eq!(node.label(), Some("A Minor Pentatonic fretboard"));
+        // But role is the leaf's to state.
+        assert_eq!(node.role(), accesskit::Role::GraphicsObject);
+    }
 }
