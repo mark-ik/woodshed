@@ -894,6 +894,7 @@ dependencies = [
  "petgraph",
  "rkyv",
  "serde",
+ "serde_json",
  "slotmap",
 ]
 

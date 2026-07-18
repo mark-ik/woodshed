@@ -297,7 +297,9 @@ impl App {
                     fret: m.fret,
                     is_root: m.is_root,
                     marked: false,
-                    excluded: false,
+                    // The Exercise's fading trail rides the leaf's faint
+                    // "excluded" paint, so the eye stays on the bright current step.
+                    excluded: m.is_trail,
                 })
                 .collect(),
         };

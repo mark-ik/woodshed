@@ -1089,7 +1089,14 @@ fn leaf_section_board(
         .map(|m| {
             let (px, py) = geom.note_pos(m.string_index, m.fret);
             let (lx, ly) = (px - mw / 2.0, py - mh / 2.0);
-            let class = if m.is_current { "fret-label step" } else { "fret-label" };
+            let class = if m.is_current {
+                "fret-label step"
+            } else if m.is_trail {
+                // The Exercise's fading trail: dimmed to match its faint marker.
+                "fret-label excluded"
+            } else {
+                "fret-label"
+            };
             // A spoken marker: its note, then where it sits (guitar-numbered
             // strings, 1 = highest). The painted neck is invisible to the DOM, so
             // this is how the notes reach assistive tech and a semantic driver.

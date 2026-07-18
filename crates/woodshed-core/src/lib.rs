@@ -354,6 +354,9 @@ pub struct LensMarker {
     pub fret: u8,
     pub is_root: bool,
     pub is_current: bool,
+    /// A note just behind the current step (the Exercise's fading trail): drawn
+    /// faint so the eye stays on the current step. Never set with `is_current`.
+    pub is_trail: bool,
     pub label: String,
 }
 
@@ -1565,6 +1568,7 @@ impl StageState {
                         fret: d.fret,
                         is_root: d.is_root,
                         is_current: d.is_current,
+                        is_trail: false,
                         label: d.label.clone(),
                     })
                     .collect();
@@ -1587,6 +1591,7 @@ impl StageState {
                         fret: d.fret,
                         is_root: false,
                         is_current: d.recency == 0,
+                        is_trail: d.recency > 0,
                         label: d.label.clone(),
                     })
                     .collect();
@@ -1603,6 +1608,7 @@ impl StageState {
                                 fret: d.fret,
                                 is_root: d.is_root,
                                 is_current: false,
+                                is_trail: false,
                                 label: d.label.clone(),
                             })
                             .collect()
