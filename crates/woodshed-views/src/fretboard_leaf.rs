@@ -548,7 +548,7 @@ mod tests {
             Dot { string_index: 0, fret: 5, is_root: true, marked: false, excluded: false },
             Dot { string_index: 1, fret: 7, is_root: false, marked: false, excluded: false },
         ];
-        FretboardLeaf::new(6, 0, 12, Orientation::Horizontal, dots, MarkerStyle::Sharp)
+        FretboardLeaf::new(6, 0, 12, Orientation::Horizontal, false, dots, MarkerStyle::Sharp)
     }
 
     #[test]

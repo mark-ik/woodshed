@@ -217,6 +217,11 @@ pub fn stage_css(p: &Palette) -> String {
 /* The board is a Sprigging paint leaf (crisp neck + markers); note labels ride
    as a thin text layer over it, each positioned at the leaf's marker centre. */
 .fretboard-stack {{ position: relative; }}
+/* The board's scroll viewport: relative so it is the overlay's containing block
+   (its absolute label/card layers then clip and scroll with the leaf), and the
+   overflow axis + size come from an inline style so orientation picks which way
+   the neck scrolls. A neck that already fits shows no scrollbar. */
+.board-viewport {{ position: relative; }}
 /* Adjustable neck range: From/To steppers + a Full (auto-track) toggle. */
 .neck-control {{ display: flex; align-items: center; margin-top: 10px; }}
 .neck-label {{ color: {text_dim}; font-size: 13px; margin-right: 8px; }}

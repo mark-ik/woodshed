@@ -1416,6 +1416,32 @@ const CARD_W: f32 = 132.0;
 /// Approximate card height, for edge-flip placement (title, two rows, play).
 const CARD_H: f32 = 112.0;
 
+/// Every fretboard sits in a `.board-viewport`: an overflow container that also
+/// serves as its overlay's containing block, so the leaf and its absolute
+/// label/card layers clip and scroll as one. Shared by all four board lenses.
+fn board_viewport_class(_orientation: Orientation) -> &'static str {
+    "board-viewport"
+}
+
+/// The viewport's inline size + which axis scrolls. A horizontal neck runs along
+/// x: the flex column bounds its width, so `overflow-x:auto` scrolls the excess
+/// frets while its short height is pinned exactly — a wide range fits the pane and
+/// scrolls instead of pushing the layout. A vertical neck runs along y, where the
+/// row gives no natural height bound; it keeps its natural height and scrolls with
+/// the page (it is narrow, so it never widens the layout). Capping a vertical
+/// neck to an internal y-scroll needs the engine to clip a taller-than-box
+/// replaced leaf, which it does not yet honor — a follow-on.
+fn board_viewport_style(orientation: Orientation, w: u32, h: u32) -> String {
+    match orientation {
+        Orientation::Horizontal => {
+            format!("height:{h}px; overflow-x:auto; overflow-y:hidden;")
+        }
+        Orientation::Vertical => {
+            format!("width:{w}px;")
+        }
+    }
+}
+
 /// A pinned marker's detail card, placed just above or below its marker (top-half
 /// markers get the card below, bottom-half above, to keep it inside the board).
 /// Shows note + octave, scale degree + interval, and the string/fret.
@@ -1547,15 +1573,30 @@ pub(super) fn board(ui: &UiState) -> UiChild {
         el(
             "div",
             (
+                // The board sits in a scroll viewport: the leaf keeps its natural
+                // size (a wide neck is wider than the pane), and the viewport —
+                // an overflow container that is also the overlay's containing
+                // block — clips and scrolls the leaf and its absolute label/card
+                // layers together. So an arbitrary fret range fits the pane and
+                // the neck scrolls, instead of the board pushing the layout wide.
                 el(
                     "div",
                     (
                         custom_leaf::<UiState, ()>(FRETBOARD_LEAF_KEY, w, h),
-                        el("div", labels).attr("class", "label-layer"),
-                        el("div", cards).attr("class", "card-layer"),
+                        // The overlay layers span the whole board, not just their
+                        // auto content box: a lifted layer fully inside the
+                        // viewport clip has that clip dropped (so its markers would
+                        // escape), but a full-board box spills the clip and keeps
+                        // it, so the labels/cards clip and scroll with the leaf.
+                        el("div", labels)
+                            .attr("class", "label-layer")
+                            .attr("style", format!("width:{w}px; height:{h}px")),
+                        el("div", cards)
+                            .attr("class", "card-layer")
+                            .attr("style", format!("width:{w}px; height:{h}px")),
                     ),
                 )
-                .attr("class", "fretboard-stack")
+                .attr("class", board_viewport_class(geom.orientation))
                 // Names the neck as a region so assistive tech announces which
                 // board this is before the player steps through its notes.
                 .attr(
@@ -1568,7 +1609,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                         state.fret_count
                     ),
                 )
-                .attr("style", format!("width:{w}px; height:{h}px")),
+                .attr("style", board_viewport_style(geom.orientation, w, h)),
                 el(
                     "div",
                     (
