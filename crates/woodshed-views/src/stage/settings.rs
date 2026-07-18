@@ -341,31 +341,47 @@ fn fretboard_page(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
-    // Neck window: a preset range of frets. "Full" is the instrument's whole
-    // standard neck; the rest are windows (a mid-neck span or a short reach).
-    // Restores an old woodshed capability (pick the fret range).
-    let necks: [(&str, u8, Option<u8>); 6] = [
-        ("Full", 0, None),
-        ("0-5", 0, Some(5)),
-        ("0-12", 0, Some(12)),
-        ("5-9", 5, Some(9)),
-        ("8-16", 8, Some(16)),
-        ("2-22", 2, Some(22)),
-    ];
-    let neck_chips: Vec<UiChild> = necks
-        .iter()
-        .map(|&(label, start, end)| {
-            let class = if ui.neck_is(start, end) {
-                "side-item side-active"
-            } else {
-                "side-item"
-            };
-            Box::new(clickable(
-                el("div", text(label)).attr("class", class),
-                move |ui: &mut UiState, _| ui.set_neck(start, end),
-            )) as UiChild
-        })
-        .collect();
+    // Neck window: an adjustable fret range, not a preset list. From and To each
+    // step by one to any value; Full lets the end auto-track the instrument's
+    // whole neck. A wide range scrolls (the board fits its pane), so any range is
+    // reachable.
+    fn stepper(label: &'static str, delta: i32, start: bool) -> UiChild {
+        Box::new(clickable(
+            el("div", text(label)).attr("class", "neck-step"),
+            move |ui: &mut UiState, _| {
+                if start {
+                    ui.nudge_neck_start(delta)
+                } else {
+                    ui.nudge_neck_end(delta)
+                }
+            },
+        )) as UiChild
+    }
+    let full_class = if ui.neck_is_full() {
+        "neck-full side-active"
+    } else {
+        "neck-full"
+    };
+    let neck_control: UiChild = Box::new(
+        el(
+            "div",
+            (
+                el("div", text("From")).attr("class", "neck-label"),
+                stepper("\u{2212}", -1, true),
+                el("div", text(ui.neck_from().to_string())).attr("class", "neck-value"),
+                stepper("+", 1, true),
+                el("div", text("To")).attr("class", "neck-label neck-label-gap"),
+                stepper("\u{2212}", -1, false),
+                el("div", text(ui.neck_to().to_string())).attr("class", "neck-value"),
+                stepper("+", 1, false),
+                clickable(
+                    el("div", text("Full")).attr("class", full_class),
+                    move |ui: &mut UiState, _| ui.set_neck_full(),
+                ),
+            ),
+        )
+        .attr("class", "neck-control"),
+    );
     // Orientation: lay the neck out horizontally (frets left-to-right) or stand
     // it up vertically (nut at the top, low E on the left) like a chord diagram.
     let orient_chips: Vec<UiChild> = ["Horizontal", "Vertical"]
@@ -392,7 +408,7 @@ fn fretboard_page(ui: &UiState) -> UiChild {
                 el("div", text("Orientation")).attr("class", "settings-heading settings-gap"),
                 el("div", orient_chips).attr("class", "settings-options"),
                 el("div", text("Neck (frets)")).attr("class", "settings-heading settings-gap"),
-                el("div", neck_chips).attr("class", "settings-options"),
+                neck_control,
             ),
         )
         .attr("class", "board settings-page"),

@@ -447,16 +447,41 @@ impl UiState {
         self.app_settings.fretboard.board_layout = layout.label().to_string();
     }
 
-    /// Set the neck window shown on the board. `end` of `None` is the current
-    /// instrument's full standard neck; `sync_neck` applies it each frame.
-    pub fn set_neck(&mut self, start: u8, end: Option<u8>) {
-        self.app_settings.fretboard.neck_start = start;
-        self.app_settings.fretboard.neck_end = end;
+    /// The neck window shown now, `(from, to)`, both resolved: `to` reflects the
+    /// instrument's full neck when no explicit end is set. `sync_neck` keeps
+    /// `self.stage`'s frets in step with the settings, so these read from it.
+    pub fn neck_from(&self) -> u8 {
+        self.stage.fret_start
+    }
+    pub fn neck_to(&self) -> u8 {
+        self.stage.fret_count
+    }
+    /// Whether the end auto-tracks the instrument's full neck (no explicit end).
+    pub fn neck_is_full(&self) -> bool {
+        self.app_settings.fretboard.neck_end.is_none()
     }
 
-    pub fn neck_is(&self, start: u8, end: Option<u8>) -> bool {
-        self.app_settings.fretboard.neck_start == start
-            && self.app_settings.fretboard.neck_end == end
+    /// The largest fret the range may reach — matches `apply_neck`'s clamp.
+    const NECK_MAX: i32 = 30;
+
+    /// Nudge the window's first fret, kept in `0..=to`.
+    pub fn nudge_neck_start(&mut self, delta: i32) {
+        let to = self.neck_to() as i32;
+        let next = (self.app_settings.fretboard.neck_start as i32 + delta).clamp(0, to);
+        self.app_settings.fretboard.neck_start = next as u8;
+    }
+
+    /// Nudge the window's last fret, kept in `from..=NECK_MAX`. Setting it makes
+    /// the end explicit (it stops auto-tracking the instrument).
+    pub fn nudge_neck_end(&mut self, delta: i32) {
+        let from = self.app_settings.fretboard.neck_start as i32;
+        let next = (self.neck_to() as i32 + delta).clamp(from, Self::NECK_MAX);
+        self.app_settings.fretboard.neck_end = Some(next as u8);
+    }
+
+    /// Reset the end to the instrument's full neck (auto-tracking).
+    pub fn set_neck_full(&mut self) {
+        self.app_settings.fretboard.neck_end = None;
     }
 
     /// Pin or unpin a marker's detail card (multi-pin, so clicking toggles).

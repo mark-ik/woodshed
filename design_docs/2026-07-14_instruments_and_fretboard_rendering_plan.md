@@ -406,3 +406,22 @@ Remaining refinements, in priority order:
   - **Follow-on (shared with the neck feature):** a long neck stands tall in
     vertical and runs past the pane — the neck window is the fix, but a
     scroll/fit for the full neck (either orientation) is still wanted.
+- **2026-07-16**: **Neck range is adjustable now, not presets — and a scroll
+  finding.** Per feedback the preset chips (0-12, 8-16, 2-22) were the wrong
+  shape; those were only *examples* of an arbitrary range. Replaced with an
+  adjustable **From / To** stepper (each ±1 to any value) plus **Full**
+  (`neck_end = None`, auto-tracks the instrument). `UiState::{neck_from, neck_to,
+  nudge_neck_start, nudge_neck_end, set_neck_full, neck_is_full}`; `sync_neck`
+  still applies it each frame. Verified: stepping To changed the range live.
+  - **Scroll/fit blocked at the CSS layer — a real finding.** Wrapping the board
+    in an `overflow: scroll` container (with the flex `min-width: 0` fix) does
+    **not** clip it: genet composites a `custom_leaf`'s paint (and its absolute
+    label overlay) independently of CSS overflow, so the board spills past any
+    scroll ancestor — confirmed by the paint running past the `.board` panel edge
+    and the wheel scrolling the page, not the board. So proper scroll/fit can't be
+    a CSS wrapper; it needs the **leaf to own its viewport** — either clip/scroll
+    its own paint to a smaller box, or scale the whole range to fit (which also
+    wants in-leaf text so the labels scale with it). The non-working wrapper was
+    reverted; the adjustable range shipped. This is the concrete shape of the
+    "proper scroll and fit" follow-on, and it's gated on leaf-level rendering, not
+    layout tweaks.

@@ -217,6 +217,19 @@ pub fn stage_css(p: &Palette) -> String {
 /* The board is a Sprigging paint leaf (crisp neck + markers); note labels ride
    as a thin text layer over it, each positioned at the leaf's marker centre. */
 .fretboard-stack {{ position: relative; }}
+/* Adjustable neck range: From/To steppers + a Full (auto-track) toggle. */
+.neck-control {{ display: flex; align-items: center; margin-top: 10px; }}
+.neck-label {{ color: {text_dim}; font-size: 13px; margin-right: 8px; }}
+.neck-label-gap {{ margin-left: 18px; }}
+.neck-step {{ padding: 3px 10px; border-radius: 6px; background-color: {surface_2};
+             color: {tertiary}; font-size: 14px; cursor: pointer; }}
+.neck-step:hover {{ background-color: {surface_hover}; color: {text_header}; }}
+.neck-value {{ min-width: 26px; text-align: center; color: {text}; font-size: 14px;
+              padding: 0 4px; }}
+.neck-full {{ margin-left: 16px; padding: 4px 12px; border-radius: 6px;
+             color: {text_dim}; font-size: 13px; cursor: pointer; }}
+.neck-full.side-active {{ background-color: {surface_2}; color: {text}; }}
+.neck-full:hover {{ background-color: {surface}; color: {text}; }}
 .label-layer {{ position: absolute; top: 0; left: 0; }}
 .fret-label {{ position: absolute; display: flex; align-items: center;
               justify-content: center; color: {on_primary}; font-size: 11px;
