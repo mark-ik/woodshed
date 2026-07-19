@@ -82,7 +82,7 @@ Git repositories.
 
 | Area | Crate / role |
 |---|---|
-| Product views | `xilem-serval` over Genet's `ScriptedDom` |
+| Product views | `cambium` over Genet's `ScriptedDom` |
 | Layout and paint | `genet-layout`, `paint-list`, `netrender` |
 | Desktop host | `winit` 0.30, `wgpu` 29 |
 | Audio I/O | `cpal` 0.18 |
