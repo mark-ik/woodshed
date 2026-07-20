@@ -1668,10 +1668,21 @@ fn stage_screen(ui: &UiState) -> UiChild {
             (header(ui), lens_strip(ui), templates::screen(ui), set_tray::view(ui)),
         ));
     }
+    // The wide three-column arm is viewport-bounded: the screen is a column
+    // filling the window, the body row takes the remaining height, and each
+    // column (catalog / board / related) scrolls independently inside it — so a
+    // long scale list or a wide neck scrolls in place instead of stretching the
+    // page or shoving the Related panel off the window edge. The stacked
+    // Medium/Narrow layouts keep their flowing page scroll.
+    let wide3 = matches!(
+        (ui.board_layout(), ui.viewport),
+        (BoardLayout::TwoPane, ViewportClass::Wide)
+    );
     let body: UiChild = match (ui.board_layout(), ui.viewport) {
-        (BoardLayout::TwoPane, ViewportClass::Wide) => {
-            Box::new(el("div", (sidebar(ui), board(ui), related::panel(ui))).attr("class", "body"))
-        }
+        (BoardLayout::TwoPane, ViewportClass::Wide) => Box::new(
+            el("div", (sidebar(ui), board(ui), related::panel(ui)))
+                .attr("class", "body stage-body"),
+        ),
         (BoardLayout::FullCanvas, _) => board(ui),
         // Preserve the catalog on smaller surfaces without narrowing the neck.
         _ => Box::new(el(
@@ -1683,10 +1694,15 @@ fn stage_screen(ui: &UiState) -> UiChild {
             ),
         )),
     };
-    Box::new(el(
+    let screen = el(
         "div",
         (header(ui), transport(ui), lens_strip(ui), body, set_tray::view(ui)),
-    ))
+    );
+    Box::new(if wide3 {
+        screen.attr("class", "stage-screen")
+    } else {
+        screen
+    })
 }
 
 fn tab_content(ui: &UiState) -> UiChild {

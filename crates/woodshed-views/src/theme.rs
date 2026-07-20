@@ -156,8 +156,13 @@ pub fn stage_css(p: &Palette) -> String {
     format!(
         r#"
 .root {{ width: 100%; height: 100%; box-sizing: border-box;
+        display: flex; flex-direction: column;
         background-color: {bg}; color: {text};
         font-family: sans-serif; font-size: 14px; padding: 8px 16px 16px 16px; }}
+/* The single tab-content child fills the root; a screen that wants a bounded,
+   internally-scrolling layout (.stage-screen) inherits its height through this
+   flex chain rather than a percentage (which would double-count the chrome). */
+.root > * {{ min-height: 0; }}
 .desktop-frame {{ width: 100%; height: 100%; box-sizing: border-box;
                   display: flex; flex-direction: column; background-color: {bg};
                   color: {text}; font-family: sans-serif; font-size: 14px;
@@ -165,30 +170,31 @@ pub fn stage_css(p: &Palette) -> String {
 .desktop-frame .root {{ width: 100%; height: auto; min-height: 0; flex-grow: 1;
                         background-color: transparent; padding: 0 0 16px 0; }}
 .chrome {{ display: flex; margin-bottom: 10px; }}
-.chrome-title {{ color: {text_header}; font-size: 15px; padding: 4px 8px 4px 0; }}
+.chrome-title {{ color: {text_header}; font-size: 15px; font-weight: 700; padding: 4px 8px 4px 0; }}
 .chrome-drag {{ flex-grow: 1; height: 26px; }}
 .chrome-btn {{ color: {text_dim}; padding: 2px 12px; border-radius: 6px;
               font-size: 15px; }}
 .chrome-btn:hover {{ background-color: {surface_2}; color: {text}; }}
 .chrome-close:hover {{ background-color: {danger}; color: {on_primary}; }}
-.header-row {{ display: flex; margin-bottom: 12px; }}
+.header-row {{ display: flex; margin-bottom: 10px; }}
 .header-label {{ color: {text_dim}; padding: 4px 6px 4px 0; }}
 .header-gap {{ width: 18px; }}
-.pills {{ display: flex; margin-bottom: 12px; }}
+.pills {{ display: flex; margin-bottom: 10px; }}
 .pill {{ padding: 6px 14px; margin-right: 6px; border-radius: 14px; color: {text_dim}; }}
-.pill-active {{ background-color: {surface_2}; color: {tertiary}; }}
+.pill-active {{ background-color: {surface_2}; color: {tertiary}; font-weight: 600; }}
 .nav-spacer {{ flex-grow: 1; }}
 .search-wrap {{ width: 240px; margin-right: 8px; box-sizing: border-box; }}
 .search-wrap input {{ display: block; width: 240px; box-sizing: border-box;
-                     background-color: {surface_2}; color: {text}; padding: 6px 12px;
-                     border-radius: 14px; border: 1px solid {surface_2}; font-size: 13px; }}
+                     height: 32px; line-height: 30px;
+                     background-color: {surface_2}; color: {text}; padding: 0 12px;
+                     border-radius: 10px; border: 1px solid {surface_2}; font-size: 13px; }}
 .search-wrap input:focus {{ border: 1px solid {tertiary}; }}
 /* The field renders its text as element content and carries no browser input
    value semantics, so there is no ::placeholder to style. The hint is a sibling
    overlaid on the empty field, and pointer-events: none keeps a click on it
    landing in the field. Padding matches the field's 6px/12px plus its 1px border
    so the hint sits exactly where the typed text will appear. */
-.search-hint {{ position: absolute; top: 0; left: 0; padding: 7px 13px;
+.search-hint {{ position: absolute; top: 0; left: 0; padding: 0 13px; line-height: 32px;
                color: {text_disabled}; font-size: 13px; pointer-events: none; }}
 .search-list {{ background-color: {surface_2}; border-radius: 8px; padding: 4px;
                width: 240px; box-sizing: border-box;
@@ -197,11 +203,21 @@ pub fn stage_css(p: &Palette) -> String {
 .search-item:hover {{ background-color: {surface_hover}; }}
 .search-label {{ color: {text}; flex-grow: 1; font-size: 13px; }}
 .search-kind {{ color: {text_dim}; font-size: 11px; padding: 2px 0 0 8px; }}
-.lens-strip {{ display: flex; margin-bottom: 16px; }}
+.lens-strip {{ display: flex; margin-bottom: 12px; }}
 .lens {{ padding: 4px 12px; margin-right: 6px; border-radius: 12px; color: {text_dim};
         font-size: 13px; }}
-.lens-active {{ background-color: {surface_2}; color: {tertiary}; }}
+.lens-active {{ background-color: {surface_2}; color: {tertiary}; font-weight: 600; }}
 .body {{ display: flex; }}
+/* Wide 3-column Stage: the screen is a viewport-filling column, the body row
+   takes the remaining height, and each column scrolls independently — a long
+   catalog or a wide neck scrolls in place instead of stretching the page or
+   pushing the Related panel off the window (nested flex needs min-height: 0
+   at every level for the bound to reach the scrollers). */
+.stage-screen {{ display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }}
+.stage-body {{ flex: 1 1 auto; min-height: 0; }}
+.stage-body .side {{ flex: 0 0 220px; min-height: 0; overflow-y: auto; }}
+.stage-body .board {{ flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; }}
+.stage-body .related-panel {{ min-height: 0; overflow-y: auto; }}
 .side {{ width: 220px; margin-right: 16px; }}
 .side-item {{ padding: 5px 10px; color: {text_dim}; border-radius: 6px; }}
 .side-active {{ background-color: {surface_2}; color: {text}; }}
@@ -290,7 +306,9 @@ pub fn stage_css(p: &Palette) -> String {
 .side-strip {{ margin-top: 12px; }}
 .side-strip .side {{ width: 100%; display: flex; flex-wrap: wrap; margin-right: 0; }}
 .side-strip .side-item {{ margin-right: 6px; margin-bottom: 6px; }}
-.related-panel {{ width: 380px; flex: 0 0 380px; margin-left: 16px; background-color: {surface}; border-radius: 10px; padding: 14px; }}
+/* The panel may give ground down to 300px before the board starts scrolling,
+   so a mid-width window keeps all three columns on screen. */
+.related-panel {{ width: 380px; flex: 0 1 380px; min-width: 300px; margin-left: 16px; background-color: {surface}; border-radius: 10px; padding: 14px; box-sizing: border-box; }}
 .related-heading {{ color: {text}; font-size: 15px; font-weight: 700; }}
 .related-subtitle, .related-empty, .related-why {{ color: {text_dim}; font-size: 12px; }}
 .related-subtitle {{ margin-top: 2px; margin-bottom: 10px; }}
@@ -359,7 +377,7 @@ pub fn stage_css(p: &Palette) -> String {
 .scale-name {{ margin-top: 10px; color: {text_dim}; font-size: 12px; }}
 .placeholder {{ color: {text_dim}; padding: 24px; }}
 .caption {{ margin-top: 12px; color: {text_disabled}; font-size: 12px; }}
-.transport {{ display: flex; margin-bottom: 12px; }}
+.transport {{ display: flex; margin-bottom: 10px; }}
 .t-btn {{ background-color: {surface_2}; color: {text}; padding: 4px 12px;
          margin-right: 6px; border-radius: 6px; }}
 .t-narrow {{ padding: 4px 9px; }}
