@@ -424,7 +424,9 @@ pub fn stage_css(p: &Palette) -> String {
 .viewport-narrow .pills {{ flex-wrap: wrap; margin-bottom: 8px; }}
 .viewport-narrow .pill {{ padding: 8px 12px; margin-bottom: 6px; }}
 .viewport-narrow .nav-spacer {{ display: none; }}
-.viewport-narrow .search-wrap {{ width: 100%; margin: 0 0 8px 0; }}
+/* Narrow drops search to its own row; cap it so it reads as a field, not a
+   full-width empty strip (a 2x-DPI desktop is ~640 logical px, always narrow). */
+.viewport-narrow .search-wrap {{ width: 100%; max-width: 340px; margin: 0 0 8px 0; }}
 .viewport-narrow .search-wrap input, .viewport-narrow .search-list {{ width: 100%; }}
 .viewport-narrow .header-row, .viewport-narrow .transport,
 .viewport-narrow .prog-cards {{ flex-wrap: wrap; }}
