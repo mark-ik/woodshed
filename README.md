@@ -14,6 +14,11 @@ Built in Rust on [Genet](https://github.com/mark-ik/genet): a shared
 DOM-shaped Xilem view tree is laid out and painted by Genet/netrender, with a
 winit desktop host today and a browser host planned from the same view layer.
 
+<p align="center">
+  <img src="assets/screenshots/fretboard.png" alt="The Stage view: an A Major Blues scale laid out across the painted fretboard, root notes highlighted" width="880"><br>
+  <sub>Stage: any scale, chord, arpeggio, progression, or exercise laid out on the painted neck.</sub>
+</p>
+
 **Made with AI**
 
 ## Status
@@ -27,6 +32,31 @@ separate work, not implied by the shared view layer.
 See [the Genet host plan](design_docs/2026-07-04_genet_host_cross_platform_plan.md)
 for the delivery architecture and [the documentation index](design_docs/DOC_README.md)
 for the wider project record.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/arpeggio.png" alt="The Arpeggio lens with its transport deck stepping through a chord shape, the current note highlighted"><br>
+      <sub>Arpeggios: step or run a chord shape; the sounding note lights up as it plays.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/progression.png" alt="The Progression lens showing Roman-numeral chord cards above the chord tones on the neck"><br>
+      <sub>Progressions: Roman-numeral chord cards, with the picked chord's tones on the neck.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/rehearsal.png" alt="The Rehearsal view: a row of practice cards with per-card touch treatments"><br>
+      <sub>Rehearsal: stage material into an ordered Set and stream it as guided practice.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/exercise.png" alt="The Exercise lens running a chromatic 1-2-3-4 finger drill with a fading trail"><br>
+      <sub>Exercises: finger drills like the chromatic 1-2-3-4, with a fading trail behind the step.</sub>
+    </td>
+  </tr>
+</table>
 
 ## Workspace layout
 
