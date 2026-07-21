@@ -36,10 +36,11 @@ use layout_dom_api::{DomMutation, LayoutDomMut as _};
 use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList as _};
 use genet_layout::{
-    Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, SourceNodeId,
+    Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, ScrollTarget,
+    SourceNodeId,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use cambium_winit::{key_event_from_winit, modifiers_from_winit, A11yHost};
+use cambium_winit::{key_event_from_winit, modifiers_from_winit, wheel_axes, A11yHost, ScrollbarFade};
 use genet_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
@@ -159,6 +160,9 @@ struct App {
     /// re-skins, alongside the theme.
     reduce_motion: bool,
     text_scale: String,
+    /// Auto-hide clock for overlay scrollbars (shared cambium-winit policy):
+    /// wheel activity wakes the scrolled target's bar, which holds then fades.
+    scrollbar_fade: ScrollbarFade<ScrollTarget<NodeId>>,
 }
 
 /// Resolve a MIDI port dropdown selection to a connect target: index 0
@@ -716,12 +720,17 @@ impl App {
                 &mut self.neighborhood_rendered,
             );
             let source = SpriggingSource(&self.neighborhood_rendered);
-            let list = layout.emit_paint_list_with_leaves(
+            let mut list = layout.emit_paint_list_with_leaves(
                 &*dom_ref,
                 &ScrollOffsets::default(),
                 DeviceIntSize::new(lw as i32, lh as i32),
                 &source,
             );
+            // Overlay scrollbar thumbs for whatever is mid-hold/mid-fade (the
+            // engine draws the geometry; the shared fade clock supplies alpha).
+            let now = std::time::Instant::now();
+            let fade = &self.scrollbar_fade;
+            layout.append_scrollbars(&*dom_ref, &mut list, &|t| fade.alpha(t, now));
             let translated = paint_list_render::translate_paint_cmd_stream(
                 list.viewport(),
                 list.commands(),
@@ -1178,13 +1187,26 @@ impl ApplicationHandler for App {
         self.sync_a11y();
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         // A screen reader acted while the app was idle: the adapter set the wake
         // flag, so turn it into a redraw and `sync_a11y` will drain the action.
         if self.a11y_wake.swap(false, Ordering::Relaxed) {
             if let Some(window) = self.window.as_ref() {
                 window.request_redraw();
             }
+        }
+        // Overlay scrollbars mid-hold/mid-fade keep frames coming until hidden.
+        // `Wait` mode never wakes without an event, so ask for a timed wake —
+        // otherwise the fade freezes at whatever the last input painted.
+        if self.scrollbar_fade.any_visible(std::time::Instant::now()) {
+            if let Some(window) = self.window.as_ref() {
+                window.request_redraw();
+            }
+            event_loop.set_control_flow(ControlFlow::wait_duration(
+                std::time::Duration::from_millis(33),
+            ));
+        } else {
+            event_loop.set_control_flow(ControlFlow::Wait);
         }
     }
 
@@ -1248,17 +1270,23 @@ impl ApplicationHandler for App {
                 // Wheel scrolls the nearest overflow container under the
                 // cursor (the engine hit-tests, clamps, and chains).
                 let (dx, dy) = genet_winit_host::wheel_delta_from_winit(delta);
+                // Desktop convention (shared cambium-winit policy): Shift +
+                // vertical wheel scrolls horizontally.
+                let (dx, dy) = wheel_axes(dx, dy, self.modifiers.shift_key());
                 let (x, y) = self.cursor;
                 let scrolled = if let (Some(runner), Some(layout)) =
                     (self.runner.as_ref(), self.layout.as_mut())
                 {
                     let dom = runner.dom();
                     let dom_ref = dom.borrow();
-                    layout.scroll_at(&*dom_ref, x, y, dx, dy)
+                    layout.scroll_at_target(&*dom_ref, x, y, dx, dy)
                 } else {
-                    false
+                    None
                 };
-                if scrolled {
+                if let Some(target) = scrolled {
+                    // Wake the scrolled target's overlay bar; the fade clock
+                    // keeps redraws coming until it hides again.
+                    self.scrollbar_fade.note(target, std::time::Instant::now());
                     if let Some(window) = self.window.as_ref() {
                         window.request_redraw();
                     }
@@ -1313,6 +1341,7 @@ fn main() {
         a11y_wake: Arc::new(AtomicBool::new(false)),
         reduce_motion: false,
         text_scale: "Normal".into(),
+        scrollbar_fade: ScrollbarFade::new(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }
