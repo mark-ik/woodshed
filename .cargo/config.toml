@@ -46,7 +46,7 @@ sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
 tinct = { path = "C:/Users/mark_/Code/repos/genet/components/tinct" }
 
 [patch."https://github.com/mark-ik/muniment.git"]
-muniment = { path = "C:/Users/mark_/Code/repos/muniment" }
+muniment = { path = "C:/Users/mark_/Code/repos/eidetic/crates/muniment" }
 
 [patch."https://github.com/mark-ik/netrender.git"]
 netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }

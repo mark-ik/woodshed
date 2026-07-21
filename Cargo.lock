@@ -899,19 +899,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chartulary"
-version = "0.1.1"
-source = "git+https://github.com/mark-ik/chartulary.git?branch=main#28000355909782cf9ae2ef1771004411b067d297"
-dependencies = [
- "codicil",
- "muniment",
- "petgraph",
- "rkyv",
- "serde",
- "slotmap",
-]
-
-[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,7 +932,6 @@ dependencies = [
 [[package]]
 name = "codicil"
 version = "0.1.0"
-source = "git+https://github.com/mark-ik/codicil.git?branch=main#fe2f0a14f829c75e97b18ab17072c9dbcd71f8a7"
 dependencies = [
  "muniment",
  "serde",
@@ -4602,7 +4588,7 @@ dependencies = [
 name = "scholia"
 version = "0.1.0"
 dependencies = [
- "chartulary 0.1.1 (git+https://github.com/mark-ik/chartulary.git?branch=main)",
+ "chartulary",
  "serde",
  "serde_json",
 ]
@@ -6704,7 +6690,7 @@ dependencies = [
 name = "woodshed-graph"
 version = "0.1.0"
 dependencies = [
- "chartulary 0.1.1",
+ "chartulary",
  "scholia",
  "woodshedding",
 ]
