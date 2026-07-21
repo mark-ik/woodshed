@@ -1331,10 +1331,6 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
     leaf_section_board(ui, &ui.stage.lens_markers().0, deck, caption, aria)
 }
 
-const CARD_W: f32 = 132.0;
-/// Approximate card height, for edge-flip placement (title, two rows, play).
-const CARD_H: f32 = 112.0;
-
 /// Every fretboard sits in a `.board-viewport`: an overflow container that also
 /// serves as its overlay's containing block, so the leaf and its absolute
 /// label/card layers clip and scroll as one. Shared by all four board lenses.
@@ -1369,23 +1365,11 @@ fn board_viewport_style(orientation: Orientation, w: u32, h: u32, avail_h: f32) 
     }
 }
 
-/// A pinned marker's detail card, placed just above or below its marker (top-half
-/// markers get the card below, bottom-half above, to keep it inside the board).
-/// Shows note + octave, scale degree + interval, and the string/fret.
-fn note_card(d: &woodshed_core::FretDot, geom: &BoardGeom, string_count: usize) -> UiChild {
-    let (cx, cy) = geom.note_pos(d.string_index, d.fret);
-    let (_mw, mh) = geom.marker_size();
-    let (_bw, bh) = geom.size();
-    // Place the card below markers in the upper half of the board, above those
-    // in the lower half, so it stays on-screen — by screen position, so it holds
-    // for either orientation.
-    let below = cy < bh / 2.0;
-    let top = if below {
-        cy + mh / 2.0 + 6.0
-    } else {
-        cy - mh / 2.0 - 6.0 - CARD_H
-    };
-    let left = (cx - CARD_W / 2.0).max(2.0);
+/// A pinned marker's detail card. Cards flow in a wrapping strip under the
+/// board (never overlapping each other or the neck — the old marker-anchored
+/// popovers stacked illegibly when adjacent markers were pinned). Shows note +
+/// octave, scale degree + interval, the string/fret, Play, and an unpin ×.
+fn note_card(d: &woodshed_core::FretDot, string_count: usize) -> UiChild {
     let title = format!("{}{}", d.label, d.octave);
     let sub = if d.degree.is_empty() {
         d.interval_name.clone()
@@ -1395,11 +1379,22 @@ fn note_card(d: &woodshed_core::FretDot, geom: &BoardGeom, string_count: usize) 
     // Guitar-style numbering: string 1 is the highest (largest index).
     let pos = format!("string {} · fret {}", string_count - d.string_index, d.fret);
     let freq = d.frequency;
+    let (si, fret) = (d.string_index, d.fret);
     Box::new(
         el(
             "div",
             (
-                el("div", text(title)).attr("class", "note-card-title"),
+                el(
+                    "div",
+                    (
+                        el("span", text(title)).attr("class", "note-card-title"),
+                        clickable(
+                            el("span", text("×")).attr("class", "note-card-close"),
+                            move |ui: &mut UiState, _| ui.toggle_pin(si, fret),
+                        ),
+                    ),
+                )
+                .attr("class", "note-card-head"),
                 el("div", text(sub)).attr("class", "note-card-row"),
                 el("div", text(pos)).attr("class", "note-card-row"),
                 clickable(
@@ -1408,8 +1403,7 @@ fn note_card(d: &woodshed_core::FretDot, geom: &BoardGeom, string_count: usize) 
                 ),
             ),
         )
-        .attr("class", "note-card")
-        .attr("style", format!("left:{left:.1}px; top:{top:.1}px; width:{CARD_W:.1}px")),
+        .attr("class", "note-card"),
     ) as UiChild
 }
 
@@ -1486,6 +1480,9 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
+    // Pinned cards flow in a wrapping strip below the neck — never overlapping
+    // each other (adjacent pins used to stack their popovers) and never hiding
+    // the board.
     let cards: Vec<UiChild> = ui
         .pinned_markers
         .iter()
@@ -1493,9 +1490,11 @@ pub(super) fn board(ui: &UiState) -> UiChild {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| note_card(d, &geom, string_count))
+                .map(|d| note_card(d, string_count))
         })
         .collect();
+    let card_strip =
+        (!cards.is_empty()).then(|| el("div", cards).attr("class", "note-card-strip"));
     Box::new(
         el(
             "div",
@@ -1503,23 +1502,20 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                 // The board sits in a scroll viewport: the leaf keeps its natural
                 // size (a wide neck is wider than the pane), and the viewport —
                 // an overflow container that is also the overlay's containing
-                // block — clips and scrolls the leaf and its absolute label/card
-                // layers together. So an arbitrary fret range fits the pane and
+                // block — clips and scrolls the leaf and its absolute label
+                // layer together. So an arbitrary fret range fits the pane and
                 // the neck scrolls, instead of the board pushing the layout wide.
                 el(
                     "div",
                     (
                         custom_leaf::<UiState, ()>(FRETBOARD_LEAF_KEY, w, h),
-                        // The overlay layers span the whole board, not just their
+                        // The overlay layer spans the whole board, not just its
                         // auto content box: a lifted layer fully inside the
                         // viewport clip has that clip dropped (so its markers would
                         // escape), but a full-board box spills the clip and keeps
-                        // it, so the labels/cards clip and scroll with the leaf.
+                        // it, so the labels clip and scroll with the leaf.
                         el("div", labels)
                             .attr("class", "label-layer")
-                            .attr("style", format!("width:{w}px; height:{h}px")),
-                        el("div", cards)
-                            .attr("class", "card-layer")
                             .attr("style", format!("width:{w}px; height:{h}px")),
                     ),
                 )
@@ -1537,6 +1533,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                     ),
                 )
                 .attr("style", board_viewport_style(geom.orientation, w, h, ui.viewport_h)),
+                card_strip,
                 el(
                     "div",
                     (

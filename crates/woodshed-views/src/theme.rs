@@ -159,10 +159,11 @@ pub fn stage_css(p: &Palette) -> String {
         display: flex; flex-direction: column;
         background-color: {bg}; color: {text};
         font-family: sans-serif; font-size: 14px; padding: 8px 16px 16px 16px; }}
-/* The single tab-content child fills the root; a screen that wants a bounded,
-   internally-scrolling layout (.stage-screen) inherits its height through this
-   flex chain rather than a percentage (which would double-count the chrome). */
-.root > * {{ min-height: 0; }}
+/* A screen that wants a bounded, internally-scrolling layout (.stage-screen)
+   inherits its height through this flex chain rather than a percentage (which
+   would double-count the chrome); it carries its own min-height: 0. Other
+   screens keep intrinsic heights (a blanket min-height: 0 here let a wrapped
+   header row collapse under its second line). */
 .desktop-frame {{ width: 100%; height: 100%; box-sizing: border-box;
                   display: flex; flex-direction: column; background-color: {bg};
                   color: {text}; font-family: sans-serif; font-size: 14px;
@@ -254,11 +255,19 @@ pub fn stage_css(p: &Palette) -> String {
    target. */
 .fret-label.marked {{ color: {text_header}; }}
 .fret-label.excluded {{ opacity: 0.4; }}
-/* Pinned marker detail cards (quiet floating popovers over the board). */
+/* The Rehearsal hover peek still overlays its board. */
 .card-layer {{ position: absolute; top: 0; left: 0; }}
-.note-card {{ position: absolute; background-color: {surface_2};
+/* Pinned marker detail cards: a wrapping strip under the neck, so cards flow
+   beside each other instead of stacking over the board (or each other). */
+.note-card-strip {{ display: flex; flex-wrap: wrap; margin-top: 10px; }}
+.note-card {{ background-color: {surface_2};
              border: 1px solid {surface_hover}; border-radius: 8px;
-             padding: 7px 10px; box-sizing: border-box; }}
+             padding: 7px 10px; box-sizing: border-box; width: 140px;
+             margin: 0 8px 8px 0; }}
+.note-card-head {{ display: flex; align-items: center; }}
+.note-card-close {{ margin-left: auto; padding: 0 4px; color: {text_dim};
+                   font-size: 13px; cursor: pointer; border-radius: 4px; }}
+.note-card-close:hover {{ background-color: {surface_hover}; color: {text}; }}
 .note-card-title {{ color: {text_header}; font-size: 14px; margin-bottom: 3px; }}
 .note-card-row {{ color: {text_dim}; font-size: 11px; line-height: 15px; }}
 .note-card-play {{ margin-top: 7px; padding: 4px 0; border-radius: 5px;

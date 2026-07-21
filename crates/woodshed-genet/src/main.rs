@@ -689,10 +689,15 @@ impl App {
                 }
                 _ => {
                     let mut layout = IncrementalLayout::new(&*dom_ref, &sheets, lw, lh);
-                    // Carry element scroll (wheel positions in overflow
-                    // containers like the filmstrip) across rebuilds.
+                    // Carry BOTH scroll planes across rebuilds: element scroll
+                    // (wheel positions in overflow containers like the filmstrip)
+                    // and the document scroll. Dropping the latter made any
+                    // structural re-render snap a scrolled page back to the top,
+                    // so hover/click targets no longer sat where the cursor was
+                    // (the Settings "hover doesn't match the cursor" bug).
                     if let Some(prev) = self.layout.as_ref() {
                         layout.set_element_scroll(prev.element_scroll().clone());
+                        layout.set_viewport_scroll(&*dom_ref, prev.viewport_scroll());
                     }
                     self.layout = Some(layout);
                     self.layout_size = (lw, lh);

@@ -215,14 +215,36 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
             )) as UiChild
         })
         .collect();
-    // The hovered marker's ephemeral detail card (reuses the Stage board's card).
+    // The hovered marker's ephemeral detail card (reuses the Stage board's
+    // card, which is position-free now that Stage flows its pinned cards in a
+    // strip). The peek stays an overlay: this wrapper anchors it beside its
+    // marker, flipped above for markers in the lower half so it stays on-board.
     let peek: Vec<UiChild> = ui
         .hover_peek
         .and_then(|(si, fret)| {
             dot_list
                 .iter()
                 .find(|d| d.string_index == si && d.fret == fret)
-                .map(|d| super::note_card(d, &geom, string_count))
+                .map(|d| {
+                    const CARD_W: f32 = 140.0;
+                    const CARD_H: f32 = 112.0;
+                    let (cx, cy) = geom.note_pos(d.string_index, d.fret);
+                    let (_mw, mh) = geom.marker_size();
+                    let (_bw, bh) = geom.size();
+                    let below = cy < bh / 2.0;
+                    let top = if below {
+                        cy + mh / 2.0 + 6.0
+                    } else {
+                        cy - mh / 2.0 - 6.0 - CARD_H
+                    };
+                    let left = (cx - CARD_W / 2.0).max(2.0);
+                    Box::new(
+                        el("div", super::note_card(d, string_count)).attr(
+                            "style",
+                            format!("position:absolute; left:{left:.1}px; top:{top:.1}px;"),
+                        ),
+                    ) as UiChild
+                })
         })
         .into_iter()
         .collect();
