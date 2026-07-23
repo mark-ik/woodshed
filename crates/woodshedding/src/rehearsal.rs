@@ -242,7 +242,66 @@ pub struct Set {
     pub loop_mode: LoopMode,
 }
 
+/// One staged Card as a graph node. `index` identifies the Card occurrence in
+/// this snapshot, so staging the same catalog material twice still yields two
+/// distinct nodes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SetGraphNode {
+    pub index: usize,
+    pub number: usize,
+    pub label: String,
+    pub kind: &'static str,
+}
+
+/// A typed relation between two staged Card occurrences.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SetGraphEdge {
+    pub from: usize,
+    pub to: usize,
+    pub kind: SetGraphEdgeKind,
+}
+
+/// Relations which are facts of the Set itself. Harmonic relations belong to
+/// a richer projection layered over this snapshot, rather than being written
+/// back as Set truth.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SetGraphEdgeKind {
+    Next,
+}
+
+/// The graph projection of one Set. It is derived, so Cards, Rehearsal, and
+/// Looper continue to share one persisted material document.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SetGraph {
+    pub nodes: Vec<SetGraphNode>,
+    pub edges: Vec<SetGraphEdge>,
+}
+
 impl Set {
+    /// Project the ordered Set as numbered Card nodes joined by typed `Next`
+    /// edges. Consumers may filter edge kinds without changing Set truth.
+    pub fn graph(&self) -> SetGraph {
+        let nodes = self
+            .cards
+            .iter()
+            .enumerate()
+            .map(|(index, card)| SetGraphNode {
+                index,
+                number: index + 1,
+                label: card.label.clone(),
+                kind: card.material.tag(),
+            })
+            .collect();
+        let edges = (1..self.cards.len())
+            .map(|to| SetGraphEdge {
+                from: to - 1,
+                to,
+                kind: SetGraphEdgeKind::Next,
+            })
+            .collect();
+        SetGraph { nodes, edges }
+    }
+
     pub fn push(&mut self, card: Card) {
         self.cards.push(card);
     }
@@ -279,5 +338,43 @@ impl Set {
         } else if self.cursor == target {
             self.cursor = idx;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn card(label: &str) -> Card {
+        Card {
+            label: label.into(),
+            material: Material::Riff { name: label.into() },
+            setting: Setting::default(),
+            touch: Touch::default(),
+            timing: Timing::default(),
+            from: None,
+        }
+    }
+
+    #[test]
+    fn set_graph_numbers_occurrences_and_exposes_sequence_edges() {
+        let mut set = Set::default();
+        set.push(card("Shape"));
+        set.push(card("Shape"));
+        set.push(card("Turnaround"));
+
+        let graph = set.graph();
+        assert_eq!(graph.nodes.len(), 3);
+        assert_eq!(graph.nodes[0].number, 1);
+        assert_eq!(graph.nodes[1].number, 2);
+        assert_eq!(graph.nodes[0].label, graph.nodes[1].label);
+        assert_ne!(graph.nodes[0].index, graph.nodes[1].index);
+        assert_eq!(
+            graph.edges,
+            vec![
+                SetGraphEdge { from: 0, to: 1, kind: SetGraphEdgeKind::Next },
+                SetGraphEdge { from: 1, to: 2, kind: SetGraphEdgeKind::Next },
+            ]
+        );
     }
 }

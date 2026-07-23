@@ -47,7 +47,9 @@ use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowE
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
-use woodshed_views::stage::{stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY};
+use woodshed_views::stage::{
+    stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY,
+};
 use woodshed_views::theme::slate_stage_css;
 use cambium::{
     GenetAppRunner, HoverEvent, HoverPhase, PointerClick, Propagation, clickable, el, text,
@@ -111,6 +113,7 @@ struct App {
     neighborhood_leaves: sprigging::LeafRegistry<u64>,
     neighborhood_rendered: sprigging::RenderedLeaves,
     neighborhood_sig: u64,
+    set_graph_sig: u64,
     fretboard_sig: u64,
     rehearsal_fretboard_sig: u64,
     sheet: String,
@@ -257,6 +260,41 @@ impl App {
         let leaf = swatch.paint_leaf(|kind: &&str| related_kind_color(kind));
         self.neighborhood_leaves
             .insert(NEIGHBORHOOD_LEAF_KEY, Box::new(leaf));
+    }
+
+    /// Paint the Set graph projection into the same leaf registry as the
+    /// Related swatch. Its identity and edge filtering are owned by Woodshed;
+    /// Cambium supplies the shared canvas and native hit targets.
+    fn sync_set_graph_swatch(&mut self) {
+        let swatch = {
+            let Some(runner) = self.runner.as_ref() else {
+                return;
+            };
+            woodshed_views::stage::set_graph_swatch(runner.state())
+        };
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        swatch.width.hash(&mut hasher);
+        swatch.height.hash(&mut hasher);
+        for node in &swatch.graph.nodes {
+            node.id.hash(&mut hasher);
+            node.position.0.to_bits().hash(&mut hasher);
+            node.position.1.to_bits().hash(&mut hasher);
+            node.kind.hash(&mut hasher);
+        }
+        for edge in &swatch.graph.edges {
+            edge.from.hash(&mut hasher);
+            edge.to.hash(&mut hasher);
+        }
+        swatch.selected.hash(&mut hasher);
+        swatch.hovered.hash(&mut hasher);
+        let sig = hasher.finish();
+        if sig == self.set_graph_sig {
+            return;
+        }
+        self.set_graph_sig = sig;
+        let leaf = swatch.paint_leaf(|kind: &&str| related_kind_color(kind));
+        self.neighborhood_leaves
+            .insert(SET_GRAPH_LEAF_KEY, Box::new(leaf));
     }
 
     /// Rebuild the fretboard leaf from the current board when it changes. Mirrors
@@ -653,6 +691,7 @@ impl App {
         self.midi
             .set_clock_out(clock_out_enabled, clock_out_playing, clock_out_bpm);
         self.sync_related_swatch();
+        self.sync_set_graph_swatch();
         self.sync_fretboard_leaf();
         self.sync_fretboard_active();
         self.sync_rehearsal_fretboard_leaf();
@@ -1319,6 +1358,7 @@ fn main() {
         neighborhood_leaves: sprigging::LeafRegistry::new(),
         neighborhood_rendered: sprigging::RenderedLeaves::new(),
         neighborhood_sig: 0,
+        set_graph_sig: 0,
         fretboard_sig: 0,
         rehearsal_fretboard_sig: 0,
         sheet: slate_stage_css(),

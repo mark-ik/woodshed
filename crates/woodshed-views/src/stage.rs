@@ -35,6 +35,7 @@ mod templates;
 mod tools;
 
 pub const NEIGHBORHOOD_LEAF_KEY: u64 = 0x5753_4e42;
+pub const SET_GRAPH_LEAF_KEY: u64 = 0x5753_5347;
 
 /// How many related suggestions the graph swatch and the pane both show, so a
 /// node and its row stay in lockstep.
@@ -92,6 +93,61 @@ pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, 
         .with_size(w, h)
         .with_label("What might I stage next");
     swatch.hovered = ui.related_hover.map(Some);
+    swatch
+}
+
+/// The current Set as a numbered, selectable graph. The ordered Set remains
+/// the source document; this adapter supplies bounded layout and applies the
+/// user's edge-visibility setting for the graph-canvas component.
+pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<usize, &'static str> {
+    let graph = ui.set.graph();
+    let count = graph.nodes.len();
+    let columns = count.clamp(1, 6);
+    let rows = count.div_ceil(columns).max(1);
+    let nodes = graph
+        .nodes
+        .into_iter()
+        .map(|node| {
+            let row = node.index / columns;
+            let raw_column = node.index % columns;
+            let column = if row % 2 == 0 {
+                raw_column
+            } else {
+                columns - 1 - raw_column
+            };
+            GraphCanvasNode {
+                id: node.index,
+                kind: node.kind,
+                position: (
+                    (column as f32 + 0.5) / columns as f32,
+                    (row as f32 + 0.5) / rows as f32,
+                ),
+                label: format!("{} · {}", node.number, node.label),
+                key: Some(format!("set-card-{}", node.index)),
+            }
+        })
+        .collect();
+    let edges = if ui.app_settings.stage.show_set_sequence_edges {
+        graph
+            .edges
+            .into_iter()
+            .map(|edge| GraphCanvasEdge { from: edge.from, to: edge.to })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut swatch = GraphCanvasSwatch::new(
+        SET_GRAPH_LEAF_KEY,
+        GraphCanvasSubgraph { nodes, edges },
+    )
+    .with_size(520, (rows as u32 * 72).clamp(112, 256))
+    .with_label("Staged Set graph")
+    .with_expand(false)
+    .with_node_labels(true);
+    if !ui.set.cards.is_empty() {
+        swatch.selected = Some(ui.set.cursor.min(ui.set.cards.len() - 1));
+    }
+    swatch.hovered = ui.set_graph_hover;
     swatch
 }
 
@@ -307,6 +363,10 @@ pub struct UiState {
     pub song_clear_loop_requested: bool,
     /// Whether the document-bottom Set tray shows its Cards and editor.
     pub set_tray_expanded: bool,
+    /// The Set graph node under the pointer. Transient paint emphasis.
+    pub set_graph_hover: Option<usize>,
+    /// Whether the selected graph node is expanded into the shared Card editor.
+    pub set_graph_card_expanded: bool,
     /// Note markers the user has pinned as `(string_index, fret)` to keep their
     /// detail card open. Multi-pin, to compare. Transient (not persisted).
     pub pinned_markers: Vec<(usize, u8)>,
@@ -372,6 +432,8 @@ impl UiState {
             song_record_toggle_requested: false,
             song_clear_loop_requested: false,
             set_tray_expanded: true,
+            set_graph_hover: None,
+            set_graph_card_expanded: true,
             pinned_markers: Vec::new(),
             hover_peek: None,
             related_hover: None,

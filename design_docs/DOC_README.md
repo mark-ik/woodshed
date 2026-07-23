@@ -52,9 +52,10 @@ before any other doc in this directory.
 - [2026-07-11_stage_set_tools_plan.md](2026-07-11_stage_set_tools_plan.md)
   — **The product architecture.** Catalogs stage material into one Set;
   Rehearsal and Looper consume it; Fretboard, Metronome, and Tuner are shared
-  tools; Settings is the canonical configuration home. Mere projects related
-  catalog material and practice history contextually inside Stage. Retires
-  Practice as a top-level section and replaces Song/DAW framing with
+  tools; Settings is the canonical configuration home. Stage projects that Set
+  as numbered Card-occurrence nodes with `Next` order, typed theory/history
+  layers, configurable relationship views, and node-to-Card semantic zoom.
+  Retires Practice as a top-level section and replaces Song/DAW framing with
   Set-derived looping.
 - [2026-07-04_genet_host_cross_platform_plan.md](2026-07-04_genet_host_cross_platform_plan.md)
   — **The delivery architecture.** The move to the Genet desktop host is
@@ -151,6 +152,11 @@ section whenever a durable working insight emerges from a session.
 - **Stage is a verb and Set is the spine**: catalogs supply material; Stage
   adds configured Cards to one ordered Set; Rehearsal and Looper consume it.
   Do not create parallel practice, song, or tool-owned material documents.
+- **The Stage graph projects the Set**: each staged Card occurrence is a stable
+  node, Set order derives `Next`, and theory, history, and learned suggestions
+  are separately identifiable edge layers. Filtering changes the projection;
+  staging or editing changes the one Set through explicit actions. A node may
+  collapse from Card to summary to glyph without changing Card identity.
 - **Tools project shared state**: Fretboard, Metronome, and Tuner have
   standalone homes and contextual forms. Settings owns their durable
   configuration; contextual controls edit that same canonical state.

@@ -248,6 +248,7 @@ mod tests {
             tuning: crate::settings::TuningSettings { tuning_idx: 3 },
             stage: crate::settings::StageSettings {
                 related: related.clone(),
+                ..Default::default()
             },
             fretboard: crate::settings::FretboardSettings {
                 board_layout: "Hero".into(),

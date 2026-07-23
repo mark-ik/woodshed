@@ -344,6 +344,8 @@ pub fn stage_css(p: &Palette) -> String {
 .settings-page {{ flex: 1; min-height: 300px; }}
 .settings-options {{ margin-top: 10px; }}
 .set-tray {{ margin-top: 14px; background-color: {surface}; border-radius: 10px; padding: 12px; }}
+.set-graph {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }}
+.set-graph-heading {{ color: {text_dim}; font-size: 10px; width: 100%; text-transform: uppercase; }}
 .set-toolbar {{ display: flex; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }}
 .set-heading {{ color: {text}; font-size: 15px; font-weight: 700; margin-right: auto; padding-right: 10px; }}
 .set-cards {{ display: flex; flex-wrap: wrap; }}

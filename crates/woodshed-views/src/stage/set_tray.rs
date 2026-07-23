@@ -1,8 +1,8 @@
 use woodshedding::rehearsal::{Hold, LoopMode, Recipe, Touch};
 use woodshed_core::storage::AppSection;
-use cambium::{clickable, el, map_state, text, text_field};
+use cambium::{clickable, el, graph_canvas_swatch, map_state, text, text_field};
 
-use super::{UiChild, UiState};
+use super::{set_graph_swatch, UiChild, UiState};
 
 fn hold_label(hold: &Hold) -> String {
     match hold {
@@ -143,7 +143,10 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     ),
                 )
                 .attr("class", class),
-                move |ui: &mut UiState, _| ui.set.cursor = index,
+                move |ui: &mut UiState, _| {
+                    ui.set.cursor = index;
+                    ui.set_graph_card_expanded = true;
+                },
             )) as UiChild
         })
         .collect();
@@ -157,7 +160,56 @@ pub(super) fn view(ui: &UiState) -> UiChild {
         Box::new(el("div", cards).attr("class", "set-cards"))
     };
     let content: UiChild = if ui.set_tray_expanded {
-        Box::new(el("div", (body, card_editor(ui))))
+        let swatch = set_graph_swatch(ui);
+        let expanded_card: UiChild = if ui.set_graph_card_expanded {
+            card_editor(ui)
+        } else {
+            Box::new(el("div", ()))
+        };
+        let graph = graph_canvas_swatch(
+            &swatch,
+            |ui: &mut UiState, index: usize| {
+                let was_selected = ui.set.cursor == index;
+                ui.set.cursor = index;
+                ui.set_graph_card_expanded = if was_selected {
+                    !ui.set_graph_card_expanded
+                } else {
+                    true
+                };
+            },
+            |ui: &mut UiState, index: Option<usize>| ui.set_graph_hover = index,
+            |_ui: &mut UiState| {},
+        );
+        Box::new(el(
+            "div",
+            (
+                el(
+                    "div",
+                    (
+                        el("div", text("Set graph")).attr("class", "set-graph-heading"),
+                        graph,
+                        clickable(
+                            el(
+                                "div",
+                                text(if ui.app_settings.stage.show_set_sequence_edges {
+                                    "Sequence edges: on"
+                                } else {
+                                    "Sequence edges: off"
+                                }),
+                            )
+                            .attr("class", "t-btn"),
+                            |ui: &mut UiState, _| {
+                                ui.app_settings.stage.show_set_sequence_edges =
+                                    !ui.app_settings.stage.show_set_sequence_edges;
+                            },
+                        ),
+                    ),
+                )
+                .attr("class", "set-graph"),
+                expanded_card,
+                body,
+            ),
+        ))
     } else {
         Box::new(el("div", ()))
     };

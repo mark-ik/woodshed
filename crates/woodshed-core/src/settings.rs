@@ -81,10 +81,21 @@ impl Default for RelatedSettings {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StageSettings {
     pub related: RelatedSettings,
+    /// Show the Set's authored order as `Next` edges in its graph projection.
+    pub show_set_sequence_edges: bool,
+}
+
+impl Default for StageSettings {
+    fn default() -> Self {
+        Self {
+            related: RelatedSettings::default(),
+            show_set_sequence_edges: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -22,9 +22,24 @@ The product spine is:
 - **Settings** is the canonical home for configuration. Contextual controls
   edit the same state rather than maintaining screen-local copies.
 
-Catalog relations and practice history may be projected through Mere inside
-Stage. This is not an Explore section. Its job is to explain the current
-material and answer a practical question: **what might I stage next?**
+Catalog relations and practice history may be projected through the shared
+projection engine inside Stage. Woodshed owns the musical facts and actions;
+the engine owns selection, relationship filters, layout, and placed
+representations. This is not an Explore section. Its job is to explain the
+current material and answer a practical question: **what might I stage next?**
+
+The Set itself may also be projected as a graph. In that projection each staged
+Card occurrence is a numbered node, including repeated material, and Set order
+is a typed `Next` edge. Selecting a node opens the same Card editor used by the
+tray. Harmonic and historical edges may be layered onto this snapshot, but they
+do not become a parallel material document or overwrite Set order.
+
+This graph is the Stage workspace, not merely a diagram beside it. Staging
+material adds a Card occurrence to the Set and therefore a node to the graph.
+The same occurrence may appear as a numbered glyph, a compact summary, or its
+full editable Card. Expansion state belongs to the projection; Card edits land
+on the one Set. The list/tray remains an alternate projection for dense and
+accessible operation rather than a second workflow.
 
 The Looper is deliberately smaller than a DAW. It does not introduce tracks,
 arrangement sections, editing lanes, effects chains, or a song-authoring mode.
@@ -63,12 +78,14 @@ reordering, and accessibility. Use Chisel for custom-painted projections inside
 or beside it: fretboard geometry, interval diagrams, progression strips, and a
 graph neighborhood. Chisel does not own Card state or product actions.
 
-### Project catalog relations and practice history through Mere
+### Project catalog relations and practice history through a shared boundary
 
 `woodshed-graph` already gives catalog objects stable IDs and relates
 progressions to their chords and chords to scales they fit. Its stemma proof
 records practice lineage against those same IDs. Extend that projection rather
-than creating a recommendation-only store.
+than creating a recommendation-only store or importing Mere's graph kernel as
+Woodshed truth. A Woodshed adapter should expose portable material and relation
+snapshots to the shared projection engine (`scenograph`, named below).
 
 Keep catalog formulas as stable nodes. Root, instrument, tuning, timing, and
 touch belong to the staged Card or practice event; avoid multiplying the
@@ -79,12 +96,74 @@ looped, and recorded. Preview and staging are evidence of interest; completed
 Rehearsal time is evidence of practice. Suggestions should identify which
 evidence and relation produced them.
 
-The default Stage surface remains cards and lists. A contextual **Related**
-panel shows a small ranked set of useful neighbors as stageable cards. An
-optional graph view explains the neighborhood, with the selected catalog item
-at the center, theory relations around it, and the player's recent path or
-practice strength overlaid. The graph is a projection, not a second catalog
-editor and not the primary way to find material.
+The compact **Related** swatch is the focused frontier of the Stage graph: a
+small ranked set of useful neighbors, each stageable as a Card occurrence. It
+can expand without changing identity into a deeper relationship view with the
+selected material at the center, theory relations around it, and the player's
+recent path or practice strength overlaid. Catalog search remains the direct
+way to find a named item; the graph explains, extends, compares, and stages the
+relationships around the current focus.
+
+### Keep the Stage graph's authorities layered
+
+The projected Stage graph composes four layers which must remain identifiable:
+
+1. **Set layer:** staged Card occurrences and the `Next` edges derived from Set
+   order. This is authored session material.
+2. **Theory layer:** deterministic catalog and contextual musical relations
+   such as contains interval, fits scale, fifth of, resolves to, shares tones,
+   or voice-leads-to. Woodshed owns these facts and computations.
+3. **Evidence layer:** observed practice transitions and engagement strength,
+   with event kind and observation time retained.
+4. **Suggestion layer:** derived or learned frontier nodes and edges, carrying
+   producer, model/version where relevant, confidence, and an explanation.
+
+Showing or hiding a relation family changes projection state. Staging a
+frontier node, accepting a suggested relationship, drawing a Set edit, or
+editing a Card changes an owning document through an explicit action. A filter
+must never silently delete a relation, and a suggestion must never silently
+become catalog or Set truth.
+
+One material pair may carry several relations at once. Ranking chooses what to
+surface first; it must not deduplicate `diatonic`, `shares tones`,
+`voice-leading`, and `practiced after` into one winning reason. Selecting an
+edge should expose every applicable reason and its authority.
+
+### Project through the scenograph scene contract
+
+The shared projection engine named above is the `scenograph` family (`sceno`
+core, `scenomise` layout, `scenotime` runtime), the product-family projection
+compiler and runtime founded in mere's
+`2026-07-21_projection_engine_prior_art_brief`, where Woodshed is already
+forcing-function #3. Woodshed consumes its scene contract and does not import
+mere's graph kernel. `StageGraphSnapshot` is Woodshed's source adapter into that
+contract, the analog of mere's `cartography` graph adapter: Woodshed owns the
+musical facts and typed relations; `sceno` owns selection, placement,
+footprints, representation, and gesture routing.
+
+The engine's vocabulary maps onto the instrument. A fretboard is a `sceno`
+frame, a coordinate space from (string, fret) to screen; a note is a projected
+item with a point footprint; a fingering is a path footprint; a Tonnetz or
+circle is a second fixed-layout frame; a voice-leading relation is a routed
+edge. The P4e catalog is therefore `scenomise` layouts over Woodshed source
+facts, not seven hand-built swatches, and the current `related_swatch` radial
+placement is the first thing the contract retires.
+
+Woodshed is the source-model sanity check for that contract. Every other
+consumer (merecat, hocket, isometry) authors or generates content before the
+engine has anything to project; music theory hands Woodshed a dense,
+deterministic, multi-relational fixture on day one, where one chord pair carries
+diatonic, shared-tone, voice-leading, and practiced-after relations at once with
+no authoring step. That makes it the natural stress test of the projection-graph
+half of the contract (selection, multi-family edges, ranking without dedup),
+complementary to isometry's proof of the scene half (footprints, placement,
+representation). Its relations are static and deterministic, so it does not
+exercise the late-arriving signal or streaming-uncertainty paths; it is the
+clean first fixture, not the only proof. Sequencing follows: Woodshed's typed
+relations (P4a identity, P4b relations) are wall-side truth and proceed now,
+doubling as design pressure on `sceno`'s source and channel model;
+scene-contract consumption waits until mere and isometry prove and freeze it,
+since P4e swatches built before then are throwaway.
 
 ### Replace the Song model
 
@@ -169,23 +248,189 @@ Done when every catalog kind can stage valid Cards, the exact staged result is
 visible before leaving Stage, and neither Rehearsal nor Looper needs its own
 material editor.
 
-### P4. Add related material and practice-history projections
+### P4. Make the Stage graph the relationship and composition surface
 
-Extend `woodshed-graph` to include arpeggios, stable Card provenance, typed
-practice events, and the relations required for useful suggestions. Start with
-deterministic musical explanations: contains, fits scale, shares tones,
-voice-leading distance, used together in a progression, adjacent in practice,
-and neglected relative to nearby material.
+P4 grows the landed Related swatch and the in-progress Set graph into one
+reconfigurable projection over the current Set, catalog material, musical
+context, and practice evidence. It does not replace `Set`, `Card`, or
+`woodshed-graph`; it makes their relationships directly legible and editable.
 
-Expose a narrow projection snapshot from Woodshed core. Render ranked Related
-cards in ordinary `xilem_serval`; adapt the same snapshot to a Chisel-hosted
-Mere neighborhood view. Selecting a related node updates the Stage preview.
-Staging it still goes through the one Stage action.
+#### P4a. Finish the derived Set graph baseline
 
-Done when every suggestion names its reason, can be staged directly, respects
-the current instrument/tuning context, and can be dismissed or disabled in
-Settings; the graph and list select the same catalog identities; and disabling
-history-based suggestions leaves deterministic theory relations available.
+Give every staged Card occurrence a stable `CardId` which survives reorder,
+save/load, selection, Rehearsal, and Looper lowering. Staging the same material
+twice creates two IDs. Duplicating a Card creates a new ID; editing or moving it
+retains its ID. Migrate existing saved Sets once by assigning missing IDs on
+load and persisting them on the next save.
+
+Project the ordered Set into occurrence nodes addressed by `CardId`, with the
+visible number derived from current Set order and `Next` edges derived between
+adjacent occurrences. Keep the ordered `Vec<Card>` authoritative while the
+product remains linear. Repeats and Set looping use the existing loop model.
+Promote `Next` into authored flow only when an actual branching or alternate-
+ending workflow requires it.
+
+Replace the current all-or-nothing sequence-edge toggle with a serializable
+relation-visibility set. Preserve node selection, graph/list cursor parity,
+and graph focus through reorder or removal by stable identity rather than
+vector index.
+
+Done when duplicate material yields distinct stable occurrence nodes, reorder
+changes numbering without changing identity, removal drops only incident
+projected edges, a round-trip preserves the selected Card, and hiding `Next`
+changes only the view.
+
+#### P4b. Preserve typed musical relationships
+
+Split neighbor ranking from relation truth. Replace the flattened
+`RelatedMaterial { reason, score }` boundary with typed material relations that
+retain source, target, direction, kind, weight or distance, explanation, and
+provenance. Several relations may connect one pair. Ranking operates over
+these records and may choose a display order without deleting multiplicity.
+
+Grow the deterministic vocabulary from the existing `Contains`,
+`FitsInScale`, and `Realizes` relations toward:
+
+- contains pitch class, interval, degree, or material;
+- mode of, relative to, parallel to, and fifth of;
+- diatonic in, borrowed from, extends, alters, or substitutes for;
+- dominant of and resolves to;
+- shared tones and symmetric voice-leading distance;
+- used together or adjacent within a catalog progression;
+- practiced before/after and engagement strength.
+
+Keep root-independent formulas, contextual realizations, and instrument
+placements distinct. `scale:Major` and `chord:Dominant 7` remain catalog
+formula identities. A view may derive `C major` or `G7` from formula + tonic
+without multiplying the durable catalog twelvefold. Concrete voicings and
+string/fret positions remain Card setting and projection output.
+
+Add first-class pitch-class and interval identities when the first interval or
+circle projection needs them. Do not encode those relationships only in label
+text. Progression continuations must carry their context: current key,
+preceding material, and whether the reason is theoretical, historical, or
+learned.
+
+Done when an edge can explain all applicable relationships between two
+materials, formula and keyed-instance identity are unambiguous, deterministic
+relations are available without history or ML, and ranking no longer erases
+relation kinds.
+
+#### P4c. Compose one Stage projection snapshot
+
+Expose a portable `StageGraphSnapshot` from Woodshed core or a narrow adapter,
+Woodshed's source adapter into `sceno`'s scene contract (see the scenograph
+boundary decision above). Its inputs are the Set occurrence graph, the focused
+catalog/material identity,
+the current tonic/instrument/tuning, typed theory relations, practice evidence,
+and optional analysis signals. Its output carries stable node-instance IDs,
+typed edges, relation authority, selection, and representation hints. It must
+not depend on Genet, Chisel, wgpu, Burn, or Mere's kernel.
+
+Projection settings include:
+
+- focus and expansion depth;
+- visible relation families;
+- layout/preset;
+- theory, history, and learned-suggestion layers;
+- node label mode and edge explanation mode;
+- optional pinned visual positions;
+- level-of-detail thresholds for glyph, summary, and Card forms.
+
+Keep these settings separate from musical truth. Durable user choices live in
+`AppSettings::stage`; transient hover, animation, and temporary expansion stay
+in view state. The compact Related swatch and expanded Stage graph consume the
+same snapshot and actions.
+
+Done when one snapshot drives both surfaces, relation filters do not rebuild or
+mutate the Set/catalog, disabling history retains deterministic theory, and a
+suggested frontier is visibly distinct from staged Card occurrences.
+
+#### P4d. Make nodes expand into Cards without changing identity
+
+Give each staged occurrence three representations of the same Card:
+
+- **Glyph:** number or Roman numeral, suitable for dense maps.
+- **Summary:** material name, function, key, and compact state.
+- **Card:** the shared editor with material, setting, touch, timing, voicing,
+  audition, and Stage actions.
+
+Selecting a node synchronizes the Set cursor and the alternate list/tray.
+Expanding it changes projection state and gives the Card an assigned region;
+editing it updates the one Card. Shrinking it restores the compact
+representation. Expansion may move neighboring nodes but must preserve graph
+focus and camera. Respect reduced-motion settings.
+
+Keep semantics and actions in ordinary Cambium/`xilem_serval` elements. The
+painted graph layer may draw geometry underneath, but each visible node and
+edge explanation needs an accessible semantic target. The current external
+selected-Card editor is an acceptable bridge; P4d is complete only when the
+expanded Card occupies the node's projected region rather than appearing as an
+unrelated panel.
+
+Done when a numbered node expands into its editable Card and collapses back
+without losing identity, selection, edits, keyboard focus, or graph position;
+the same operations remain available through the list projection.
+
+#### P4e. Ship a small projection catalog
+
+Avoid one universal force layout. Each view should state which relationships
+and coordinate rules make it intelligible:
+
+1. **Set sequence:** numbered staged occurrences, `Next` as the primary path,
+   harmonic and evidence edges optional.
+2. **Focused relationships:** the current material with progressively
+   expandable typed neighbors. Arbitrary depth is a query capability; the view
+   reveals it on demand rather than drawing the entire catalog.
+3. **Circle of fifths:** contextual keys in a fixed cycle, expandable into
+   scales, diatonic chords, relative modes, and borrowed material.
+4. **Interval map:** pitch classes connected by selected intervals, with paths
+   projected onto the current instrument.
+5. **Scale family:** scales arranged by mode, contained degrees, or set
+   difference.
+6. **Voice leading:** chords placed by motion cost with shared and moving tones
+   exposed on edges.
+7. **Progression possibilities:** a directed frontier conditioned on key and
+   preceding staged Cards, separating deterministic function, catalog usage,
+   practice history, and learned suggestions.
+
+The Set-sequence and focused-relationship views are the first two consumers.
+The circle of fifths is the first full theory-map acceptance surface because it
+forces contextual material identity, fixed semantic layout, nested expansion,
+and Stage/fretboard synchronization without requiring ML. These layouts are
+`scenomise` arrangements over `sceno` frames rather than Woodshed-owned swatches,
+and they land when the scene contract does (see the scenograph boundary
+decision).
+
+Done when the same focused material can move between Set, relationship, and
+circle projections without changing musical truth; projection choice and
+relation filters persist as settings; and at least two layouts have headed
+interaction receipts rather than static screenshots.
+
+#### P4f. Join graph understanding to sound and practice
+
+Selecting a node updates Stage and the Fretboard. Selecting an edge exposes its
+reasons and offers an audition appropriate to the relation: shared tones,
+before/after chords, or animated voice movement. Staging a frontier node uses
+the ordinary Stage action and states where the new occurrence will enter the
+Set. The initial behavior may append; insertion after the focused occurrence
+must be an explicit action before it is offered.
+
+P5 supplies the shared clock and event-position identity. P6 and P7 consume
+the same `Next` traversal for Rehearsal and Looper. Practice events annotate
+the evidence layer after their honest lifecycle boundaries rather than after a
+mere hover or projection change.
+
+Burn-backed producers may later supply embeddings, transition likelihood,
+clusters, or personalized frontier ranking. Keep inference off the render
+path. Every learned edge carries model/version, confidence, and generation;
+turning the learned layer off leaves the deterministic engine intact. Accepting
+a suggestion is an explicit Stage or relation action.
+
+Done when a user can stage a short progression from the visible frontier,
+expand its Cards to choose voicings, hear and see why each transition relates,
+run the numbered Set through Rehearsal, and reopen the same Set and projection
+settings after restart.
 
 ### P5. Unify the clock and visual articulation
 
@@ -259,14 +504,30 @@ receipts are recorded before those platforms are advertised.
 
 - The existing portable `Set` and `Card` model already carries material,
   setting, touch, timing, provenance, cursor, and loop mode.
+- The in-progress `Set::graph()` slice is a useful wiring proof, not the final
+  projection model. It addresses occurrences by vector index, derives only
+  `Next`, lays them out in a hardcoded serpentine grid, exposes one Boolean edge
+  toggle, and opens the shared Card editor beside the graph. P4a-P4d name the
+  remaining identity, relationship, layout, and inline-representation work.
 - Card is a sound domain unit, but the current UI should not force one visual
   card treatment across Stage, Set tray, Rehearsal, and Looper.
 - Chisel is a good fit for custom-painted material projections. Its semantic
   event/action seam is still a placeholder, so ordinary `xilem_serval` elements
   remain the right owner for Card interaction and accessibility.
-- `woodshed-graph` projects scales, chords, arpeggios, stable IDs, scored theory
-  relations, and practice lineage into both the Related list and Chisel
-  neighborhood. Progressions and exercises still need first-class graph nodes.
+- `woodshed-graph` projects scales, chords, arpeggios, progression and exercise
+  identities, scored theory relations, and practice lineage into both the
+  Related list and Chisel neighborhood. The public neighbor boundary still
+  flattens multiple relations into one reason/score and then rebuilds a
+  center-star snapshot; progression, exercise, key, pitch-class, and interval
+  relationships remain thin or absent.
+- The current Cambium `GraphCanvasSwatch` carries uniform nodes and untyped
+  `from/to` edges. It is enough for the Set-graph wiring proof. Directed and
+  typed edge treatments, per-node regions, semantic zoom, and live Card slots
+  belong at the shared projection boundary rather than as Woodshed-only swatch
+  exceptions.
+- Catalog formulas and contextual realizations are distinct. The catalog owns
+  `Major` and `Dominant 7`; a projection derives `C major` and `G7` under the
+  current tonic. A Card owns the concrete instrument setting and touch.
 - Current `PracticeSet` values already lower to the same Cards, so Practice can
   become Set Templates without a new data model.
 - Current `SongDoc` duplicates ordering, tempo, and duration. Progressions can
@@ -281,6 +542,39 @@ receipts are recorded before those platforms are advertised.
   coherent narrow-screen information architecture.
 
 ## Progress
+
+- **2026-07-22, scenograph reconciliation:** Named the shared projection engine
+  as the `scenograph` family (`sceno`/`scenomise`/`scenotime`) founded in mere's
+  projection-engine prior-art brief, where Woodshed is already forcing-function
+  #3. Reframed `StageGraphSnapshot` as Woodshed's source adapter into `sceno`'s
+  scene contract, the analog of mere's `cartography` graph adapter, and recorded
+  the fretboard-as-frame, note-as-point, fingering-as-path mapping; the P4e
+  catalog is `scenomise` layouts, not Woodshed swatches, and `related_swatch` is
+  the first placement the contract retires. Recorded Woodshed's role as the
+  source-model sanity check: a dense, deterministic, multi-relational fixture
+  that needs no authoring, complementary to isometry's scene-side proof and not
+  a replacement for the proof ladder. Sequencing unchanged on the truth side
+  (P4a identity, P4b relations proceed now as contract pressure); scene-contract
+  consumption waits for mere and isometry to prove and freeze it. No code
+  changed.
+
+- **2026-07-21, Stage graph projection plan:** Expanded P4 from a ranked Related
+  neighborhood into the authored Stage-graph direction. The plan now separates
+  Set, deterministic theory, practice evidence, and learned suggestions;
+  requires stable Card-occurrence identity and typed multi-relations; defines
+  node-to-Card semantic zoom; and names the Set, focused relationship, circle
+  of fifths, interval, scale-family, voice-leading, and progression projections.
+  No code was changed in this planning pass. The existing dirty-tree Set graph
+  remains the P4a wiring baseline described below.
+
+- **2026-07-21, authored Set graph slice:** Began evolving the Set tray from a
+  card-only arrangement into a graph projection of the same Set. The portable
+  Set now derives distinct numbered Card-occurrence nodes and typed `Next`
+  edges; the view exposes sequence-edge visibility as a durable Stage setting.
+  The graph remains a projection: staging, editing, Rehearsal, Looper, and
+  persistence still address the one Set. Rich harmonic edge layers, alternative
+  layouts, direct graph authoring, and stable Card identity across arbitrary
+  branching remain follow-ons.
 
 - **2026-07-11:** Reconciled the maintainer's product model with the live Set,
   PracticeSet, SongDoc, AudioBackend, capture engine, persistence, navigation,

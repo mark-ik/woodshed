@@ -281,6 +281,11 @@ fn stage_page(ui: &UiState) -> UiChild {
         "Neighborhood graph: off"
     };
     let hidden_count = ui.app_settings.stage.related.dismissed_ids.len();
+    let sequence_label = if ui.app_settings.stage.show_set_sequence_edges {
+        "Set sequence edges: on"
+    } else {
+        "Set sequence edges: off"
+    };
     Box::new(
         el(
             "div",
@@ -305,6 +310,13 @@ fn stage_page(ui: &UiState) -> UiChild {
                         .attr("class", "side-item"),
                     |ui: &mut UiState, _| {
                         ui.app_settings.stage.related.dismissed_ids.clear();
+                    },
+                ),
+                clickable(
+                    el("div", text(sequence_label)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        ui.app_settings.stage.show_set_sequence_edges =
+                            !ui.app_settings.stage.show_set_sequence_edges;
                     },
                 ),
             ),
