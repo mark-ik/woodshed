@@ -809,6 +809,8 @@ dependencies = [
 [[package]]
 name = "cambium"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52c0d7fce8d06cc80e5d0a72eae9400fcbcba7fe5026b64ea4ba656962c28342"
 dependencies = [
  "genet-scripted-dom",
  "layout-dom-api",
@@ -820,14 +822,10 @@ dependencies = [
 [[package]]
 name = "cambium-winit"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a4cfe754509bca0a1e3c29ae478204f72ee2f6b48f3a763cd33bb90b28f6472"
 dependencies = [
- "accesskit",
  "cambium",
- "genet-layout",
- "genet-scripted-dom",
- "genet-winit-host",
- "layout-dom-api",
- "sprigging",
  "winit",
 ]
 
@@ -1427,7 +1425,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -1918,7 +1916,7 @@ dependencies = [
  "layout-dom-api",
  "malloc_size_of_derive",
  "markup5ever",
- "paint_list_api",
+ "paint_list_api 0.1.0",
  "parley",
  "rayon",
  "resvg",
@@ -2907,6 +2905,8 @@ dependencies = [
 [[package]]
 name = "meristem"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62ebdfb1ffd9b33bfc07a0be55940e0a72c1950d96952ff5dd8249d5efda5fab"
 dependencies = [
  "anymore",
  "hashbrown 0.17.1",
@@ -3617,12 +3617,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "paint_list_api"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8d106a9c20e5ff07e914931f79dc4c3477593bc751c59f70d6db5f483c0da9"
+dependencies = [
+ "euclid",
+ "serde",
+]
+
+[[package]]
 name = "paint_list_render"
 version = "0.1.0"
 dependencies = [
  "log",
  "netrender",
- "paint_list_api",
+ "paint_list_api 0.1.0",
 ]
 
 [[package]]
@@ -5023,9 +5033,11 @@ dependencies = [
 [[package]]
 name = "sprigging"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513ac52a93e35b397ec660cd9d7d869da66e54cf62b724c9d111b6cc5cbfc5b6"
 dependencies = [
  "accesskit",
- "paint_list_api",
+ "paint_list_api 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "vello",
 ]
 
@@ -5341,6 +5353,7 @@ dependencies = [
 [[package]]
 name = "tinct"
 version = "0.1.2"
+source = "git+https://github.com/mark-ik/genet.git?branch=main#179fe1b211453f9521aef92ee51e67c23151ac75"
 dependencies = [
  "serde",
 ]
@@ -6228,7 +6241,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -6675,7 +6688,7 @@ dependencies = [
  "genet-winit-host",
  "layout-dom-api",
  "netrender",
- "paint_list_api",
+ "paint_list_api 0.1.0",
  "paint_list_render",
  "serde_json",
  "sprigging",
@@ -7095,3 +7108,31 @@ dependencies = [
  "syn",
  "winnow",
 ]
+
+[[patch.unused]]
+name = "tinct"
+version = "0.1.2"
+
+[[patch.unused]]
+name = "cambium"
+version = "0.3.0"
+
+[[patch.unused]]
+name = "cambium-winit"
+version = "0.3.0"
+
+[[patch.unused]]
+name = "sprigging"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "cambium"
+version = "0.3.0"
+
+[[patch.unused]]
+name = "cambium-winit"
+version = "0.3.0"
+
+[[patch.unused]]
+name = "sprigging"
+version = "0.2.0"
