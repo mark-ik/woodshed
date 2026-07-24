@@ -68,7 +68,7 @@ seiche = { path = "C:/Users/mark_/Code/repos/mere/crates/conatus/seiche" }
 sceno = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/sceno" }
 scenomise = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/scenomise" }
 scenotime = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/scenotime" }
-graphshell = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell" }
+graphshell = { path = "C:/Users/mark_/Code/repos/mere/ports/graphshell" }
 graphshell-client = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-endpoint" }
 graphshell-protocol = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-protocol" }
