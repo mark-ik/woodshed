@@ -25,9 +25,9 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # stylo_taffy adapter. Cargo does not chain a second patch through the
 # committed crates.io -> Genet Git redirect.
 [patch.crates-io]
-cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
-cambium-winit = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium-winit" }
-sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
+cambium = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium" }
+cambium-winit = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit" }
+sprigging = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/sprigging" }
 layout-dom-api = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
 genet-scripted-dom = { path = "C:/Users/mark_/Code/repos/genet/components/genet-scripted-dom" }
 
@@ -36,20 +36,40 @@ genet-scripted-dom = { path = "C:/Users/mark_/Code/repos/genet/components/genet-
 "genet-layout" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-layout" }
 "genet-scripted-dom" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-scripted-dom" }
 "genet-winit-host" = { path = "C:/Users/mark_/Code/repos/genet/components/genet-winit-host" }
-
-[patch."https://github.com/mark-ik/cambium.git"]
-cambium = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium" }
-"cambium-winit" = { path = "C:/Users/mark_/Code/repos/cambium/crates/cambium-winit" }
-sprigging = { path = "C:/Users/mark_/Code/repos/cambium/crates/sprigging" }
-
+# ─── Adopted into genet 2026-07-23 (repo consolidation) ───────────────────
+netfetcher = { path = "C:/Users/mark_/Code/repos/genet/components/netfetcher" }
+cambium = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium" }
+"cambium-winit" = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit" }
+sprigging = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/sprigging" }
 [patch."https://github.com/mark-ik/tinct"]
 tinct = { path = "C:/Users/mark_/Code/repos/genet/components/tinct" }
-
-[patch."https://github.com/mark-ik/muniment.git"]
-muniment = { path = "C:/Users/mark_/Code/repos/eidetic/crates/muniment" }
 
 [patch."https://github.com/mark-ik/netrender.git"]
 netrender = { path = "C:/Users/mark_/Code/repos/netrender/netrender" }
 netrender_device = { path = "C:/Users/mark_/Code/repos/netrender/netrender_device" }
 paint_list_api = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_api" }
 paint_list_render = { path = "C:/Users/mark_/Code/repos/netrender/paint_list_render" }
+[patch."https://github.com/mark-ik/mere.git"]
+# ─── Absorbed into mere 2026-07-23 (repo consolidation) ───────────────────
+# These were sibling repos until today; they are mere workspace members now,
+# so their redirects live here rather than in per-repo tables.
+personae = { path = "C:/Users/mark_/Code/repos/mere/crates/persona/personae" }
+armillary = { path = "C:/Users/mark_/Code/repos/mere/crates/armillary" }
+muniment = { path = "C:/Users/mark_/Code/repos/mere/crates/eidetic/muniment" }
+codicil = { path = "C:/Users/mark_/Code/repos/mere/crates/eidetic/codicil" }
+chartulary = { path = "C:/Users/mark_/Code/repos/mere/crates/eidetic/chartulary" }
+scholia = { path = "C:/Users/mark_/Code/repos/mere/crates/eidetic/scholia" }
+servitor = { path = "C:/Users/mark_/Code/repos/mere/crates/servitor" }
+vates = { path = "C:/Users/mark_/Code/repos/mere/crates/intel/vates" }
+sibylla = { path = "C:/Users/mark_/Code/repos/mere/crates/intel/sibylla" }
+numen = { path = "C:/Users/mark_/Code/repos/mere/crates/conatus/numen" }
+quint = { path = "C:/Users/mark_/Code/repos/mere/crates/conatus/quint" }
+seiche = { path = "C:/Users/mark_/Code/repos/mere/crates/conatus/seiche" }
+sceno = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/sceno" }
+scenomise = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/scenomise" }
+scenotime = { path = "C:/Users/mark_/Code/repos/mere/crates/scenograph/scenotime" }
+graphshell = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell" }
+graphshell-client = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-client" }
+graphshell-endpoint = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-endpoint" }
+graphshell-protocol = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-protocol" }
+graphshell-stdio = { path = "C:/Users/mark_/Code/repos/mere/crates/graphshell/graphshell-stdio" }

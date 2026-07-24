@@ -7110,6 +7110,66 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "armillary"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "graphshell"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "graphshell-client"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "graphshell-endpoint"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "graphshell-protocol"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "graphshell-stdio"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "numen"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "quint"
+version = "0.0.2"
+
+[[patch.unused]]
+name = "sceno"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "scenomise"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "scenotime"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "seiche"
+version = "0.0.3"
+
+[[patch.unused]]
+name = "servitor"
+version = "0.0.1"
+
+[[patch.unused]]
+name = "sibylla"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "vates"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "tinct"
 version = "0.1.2"
 
@@ -7120,6 +7180,10 @@ version = "0.3.0"
 [[patch.unused]]
 name = "cambium-winit"
 version = "0.3.0"
+
+[[patch.unused]]
+name = "netfetcher"
+version = "0.1.0"
 
 [[patch.unused]]
 name = "sprigging"

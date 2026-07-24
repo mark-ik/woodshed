@@ -14,7 +14,7 @@ serde = { workspace = true }
 # Persona-keyed encrypt-at-rest for the private practice session — the woodshed
 # pole of the personae suite adoption (one persona, many devices, sealed state).
 # Sibling repo, like woodshed-graph's chartulary path dep.
-personae = { path = "../../../personae" }
+personae = { git = "https://github.com/mark-ik/mere.git", branch = "main" }
 hex = "0.4"
 
 [dev-dependencies]
