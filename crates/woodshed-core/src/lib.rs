@@ -32,7 +32,7 @@ use woodshedding::progression::{
 };
 use woodshedding::practice::{PracticeItem, PracticeSet};
 use woodshedding::rehearsal::{
-    Card, FretWindow, LoopMode, MarkMode, Material, Recipe, Set, Setting, Timing, Touch,
+    Card, CardId, FretWindow, LoopMode, MarkMode, Material, Recipe, Set, Setting, Timing, Touch,
 };
 use woodshedding::scale::{catalog as scale_catalog, ScaleFormula};
 use woodshedding::tuning::{catalog as tuning_catalog, Tuning, TuningSpec};
@@ -86,13 +86,104 @@ pub enum RelatedTarget {
     Exercise(usize),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Take `limit` suggestions without letting one relation family fill the panel.
+///
+/// A display policy, not a change to relation truth: nothing is dropped that a
+/// longer list would not also drop, and no record inside a suggestion is
+/// touched. It exists because the raw ranking is honest but unhelpful at six
+/// rows — `Major` appears in nine catalog progressions, all scoring 96, so the
+/// harmonic neighbours that make the frontier worth reading never appeared.
+/// Round-robin by the primary relation kind keeps the strongest of each family
+/// first, in score order within a family.
+fn diversify(suggestions: Vec<RelatedSuggestion>, limit: usize) -> Vec<RelatedSuggestion> {
+    use std::collections::BTreeMap;
+
+    if suggestions.len() <= limit {
+        return suggestions;
+    }
+    // Preserve rank inside each family; families keep the order in which their
+    // strongest member appeared, so the overall best suggestion is still first.
+    let mut families: Vec<Vec<RelatedSuggestion>> = Vec::new();
+    let mut seen: BTreeMap<woodshed_graph::RelationKind, usize> = BTreeMap::new();
+    for suggestion in suggestions {
+        let kind = suggestion
+            .relations
+            .first()
+            .map(|relation| relation.kind)
+            .unwrap_or(woodshed_graph::RelationKind::SharesTones);
+        match seen.get(&kind) {
+            Some(&index) => families[index].push(suggestion),
+            None => {
+                seen.insert(kind, families.len());
+                families.push(vec![suggestion]);
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(limit);
+    let mut round = 0;
+    while out.len() < limit {
+        let mut placed = false;
+        for family in &mut families {
+            if round < family.len() {
+                out.push(family[round].clone());
+                placed = true;
+                if out.len() == limit {
+                    break;
+                }
+            }
+        }
+        if !placed {
+            break;
+        }
+        round += 1;
+    }
+    out
+}
+
+/// One ranked neighbor of the focused material, carrying **every** relation
+/// that connects them rather than the one that ranked highest. Practice
+/// evidence joins that list as another record; it no longer overwrites the
+/// theory relation that was there first.
+#[derive(Clone, Debug, PartialEq)]
 pub struct RelatedSuggestion {
     pub title: String,
     pub kind: &'static str,
-    pub reason: String,
+    /// Strongest first, always at least one.
+    pub relations: Vec<woodshed_graph::MaterialRelation>,
     pub score: u16,
     pub target: RelatedTarget,
+}
+
+impl RelatedSuggestion {
+    /// The explanation a one-line row shows.
+    pub fn reason(&self) -> &str {
+        self.relations
+            .first()
+            .map(|relation| relation.explanation.as_str())
+            .unwrap_or_default()
+    }
+
+    /// Every explanation, which is what an expanded row or a selected edge
+    /// should show: all applicable reasons, each with its own authority.
+    pub fn reasons(&self) -> Vec<&str> {
+        self.relations
+            .iter()
+            .map(|relation| relation.explanation.as_str())
+            .collect()
+    }
+
+    /// How many relations connect this pair. `1` is the common case; more is
+    /// what the old flattened boundary used to discard.
+    pub fn relation_count(&self) -> usize {
+        self.relations.len()
+    }
+
+    /// Whether observed practice is among the reasons.
+    pub fn has_evidence(&self) -> bool {
+        self.relations
+            .iter()
+            .any(|relation| relation.authority == woodshed_graph::RelationAuthority::Evidence)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -409,6 +500,7 @@ pub fn card_from_practice_item(item: &PracticeItem, set_name: &str) -> Card {
             root,
             position,
         } => Card {
+            id: CardId::UNASSIGNED,
             label: item.label(),
             material: Material::Scale {
                 name: formula.name.to_string(),
@@ -427,6 +519,7 @@ pub fn card_from_practice_item(item: &PracticeItem, set_name: &str) -> Card {
             root,
             position,
         } => Card {
+            id: CardId::UNASSIGNED,
             label: item.label(),
             material: Material::Chord {
                 name: formula.name.to_string(),
@@ -444,6 +537,7 @@ pub fn card_from_practice_item(item: &PracticeItem, set_name: &str) -> Card {
             exercise,
             starting_fret,
         } => Card {
+            id: CardId::UNASSIGNED,
             label: item.label(),
             material: Material::Riff {
                 name: exercise.name.to_string(),
@@ -460,16 +554,15 @@ pub fn card_from_practice_item(item: &PracticeItem, set_name: &str) -> Card {
 }
 
 /// Materialize a practice set as a rehearsal [`Set`] (cursor at the top).
+/// Each stamped card enters as its own occurrence, so a template that repeats
+/// material yields distinct, separately editable cards.
 pub fn set_from_practice(ps: &PracticeSet) -> Set {
-    Set {
-        cards: ps
-            .items
+    Set::from_cards(
+        ps.items
             .iter()
-            .map(|item| card_from_practice_item(item, &ps.name))
-            .collect(),
-        cursor: 0,
-        loop_mode: LoopMode::All,
-    }
+            .map(|item| card_from_practice_item(item, &ps.name)),
+        LoopMode::All,
+    )
 }
 
 /// How long the rehearsal transport dwells on `card` before advancing.
@@ -684,7 +777,7 @@ impl StageState {
             Lens::Exercises => woodshed_graph::exercise_id(self.exercise().name),
         };
 
-        woodshed_graph::related_material(&selected_id, limit)
+        woodshed_graph::related_neighbors(&selected_id, limit)
             .into_iter()
             .filter_map(|item| {
                 use woodshed_graph::CatalogKind;
@@ -719,7 +812,7 @@ impl StageState {
                 Some(RelatedSuggestion {
                     title: item.name,
                     kind,
-                    reason: item.reason,
+                    relations: item.relations,
                     score: item.score,
                     target,
                 })
@@ -765,11 +858,25 @@ impl StageState {
                 };
                 let count = history.related_transition_count(&selected_id, &target_id);
                 if count > 0 {
-                    suggestion.reason = if count == 1 {
+                    // Evidence is an additional relation, not a replacement.
+                    // The old boundary overwrote the theory reason here, which
+                    // is exactly the erasure P4b removes: a pair that is both
+                    // diatonic and practiced-after is both, and says so.
+                    let explanation = if count == 1 {
                         "Previously staged from here".to_string()
                     } else {
                         format!("Staged from here {count} times")
                     };
+                    suggestion.relations.insert(
+                        0,
+                        woodshed_graph::MaterialRelation::evidence(
+                            selected_id.clone(),
+                            target_id.clone(),
+                            woodshed_graph::RelationKind::PracticedAfter,
+                            (90 + count.min(10)) as u16,
+                            explanation,
+                        ),
+                    );
                 }
                 (count, stable_order, suggestion)
             })
@@ -805,15 +912,15 @@ impl StageState {
         } else {
             self.related_material(usize::MAX)
         };
-        suggestions
+        let kept: Vec<RelatedSuggestion> = suggestions
             .into_iter()
             .filter(|suggestion| {
                 !settings
                     .dismissed_ids
                     .contains(&self.related_target_id(suggestion.target))
             })
-            .take(limit)
-            .collect()
+            .collect();
+        diversify(kept, limit)
     }
 
     pub fn neighborhood_snapshot(
@@ -1042,6 +1149,7 @@ impl StageState {
         };
         let card = match self.lens {
             Lens::Scales => Card {
+                id: CardId::UNASSIGNED,
                 label: format!("{} {}", self.root_name(), self.scale().name),
                 material: Material::Scale {
                     name: self.scale().name.to_string(),
@@ -1053,6 +1161,7 @@ impl StageState {
                 from: None,
             },
             Lens::Chords => Card {
+                id: CardId::UNASSIGNED,
                 label: self.material_name(),
                 material: Material::Chord {
                     name: self.chord().name.to_string(),
@@ -1064,6 +1173,7 @@ impl StageState {
                 from: None,
             },
             Lens::Arpeggios => Card {
+                id: CardId::UNASSIGNED,
                 label: self.material_name(),
                 material: Material::Chord {
                     name: self.arpeggio_chord().name.to_string(),
@@ -1085,6 +1195,7 @@ impl StageState {
                 let expanded = self.progression_expanded.min(chords.len() - 1);
                 let chord = &chords[expanded];
                 Card {
+                    id: CardId::UNASSIGNED,
                     label: board.expanded_label.clone(),
                     material: Material::Chord {
                         name: chord.formula.name.to_string(),
@@ -1100,6 +1211,7 @@ impl StageState {
                 }
             }
             Lens::Exercises => Card {
+                id: CardId::UNASSIGNED,
                 label: self.exercise().name.to_string(),
                 material: Material::Riff {
                     name: self.exercise().name.to_string(),
@@ -1125,6 +1237,7 @@ impl StageState {
             return None;
         }
         Some(Card {
+            id: CardId::UNASSIGNED,
             label: format!(
                 "{} path — {} notes",
                 self.material_name(),
@@ -2268,10 +2381,42 @@ mod tests {
             .iter()
             .find(|item| item.kind == "Scale" && item.title == "Major")
             .expect("Major 7 relates to Major");
-        assert!(major.reason.contains("fits this scale"));
+        assert!(major.reason().contains("Fits Major"), "{:?}", major.reasons());
         s.select_related(major.target);
         assert_eq!(s.lens, Lens::Scales);
         assert_eq!(s.scale().name, "Major");
+    }
+
+    #[test]
+    fn the_panel_shows_more_than_one_relation_family() {
+        // Nine progressions all score 96 for `Major`, so the raw ranking filled
+        // a six-row panel with one family and the harmonic frontier never
+        // appeared. The display policy interleaves families; it drops nothing a
+        // longer list would have kept.
+        let mut s = StageState::new();
+        s.set_lens(Lens::Chords);
+        let major = s.chords().iter().position(|c| c.name == "Major").unwrap();
+        s.select_chord(major);
+        let history = history::PracticeHistory::default();
+        let settings = storage::RelatedSettings::default();
+        let shown = s.related_material_configured(&history, &settings, 6);
+        assert_eq!(shown.len(), 6);
+        let families: std::collections::BTreeSet<_> = shown
+            .iter()
+            .map(|item| item.relations[0].kind)
+            .collect();
+        assert!(
+            families.len() >= 3,
+            "the panel shows several relation families: {:?}",
+            shown.iter().map(|i| i.reason()).collect::<Vec<_>>()
+        );
+        // And at least one visible pair carries several relations at once,
+        // which is what the flattened boundary used to hide.
+        assert!(
+            shown.iter().any(|item| item.relation_count() > 1),
+            "multiplicity reaches the panel: {:?}",
+            shown.iter().map(|i| i.relation_count()).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2288,7 +2433,23 @@ mod tests {
         );
         let ranked = s.related_material_with_history(&history, 5);
         assert_eq!(ranked[0].title, "Minor 7");
-        assert_eq!(ranked[0].reason, "Previously staged from here");
+        assert_eq!(ranked[0].reason(), "Previously staged from here");
+        assert!(ranked[0].has_evidence());
+        // The theory relation that was there first survives the promotion: the
+        // old boundary replaced it, which is the erasure P4b removes.
+        assert!(
+            ranked[0].relation_count() > 1,
+            "evidence joins the reasons rather than replacing them: {:?}",
+            ranked[0].reasons()
+        );
+        assert!(
+            ranked[0]
+                .relations
+                .iter()
+                .any(|r| r.authority != woodshed_graph::RelationAuthority::Evidence),
+            "a deterministic relation remains: {:?}",
+            ranked[0].reasons()
+        );
     }
 
     #[test]
@@ -2310,6 +2471,11 @@ mod tests {
         };
         let related = s.related_material_configured(&history, &settings, 5);
         assert!(related.iter().all(|item| item.title != "Minor 7"));
-        assert!(related.iter().all(|item| !item.reason.contains("Previously")));
+        assert!(related.iter().all(|item| !item.has_evidence()));
+        assert!(
+            related
+                .iter()
+                .all(|item| !item.reasons().iter().any(|r| r.contains("Previously")))
+        );
     }
 }

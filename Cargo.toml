@@ -44,13 +44,27 @@ winit = "0.30"
 # local checkouts are picked up via the gitignored .cargo/config.toml
 # source-specific [patch] overrides (the Mere pattern). Cambium supplies
 # the view toolkit and Sprigging leaves; Genet supplies the engine and host.
-cambium = "0.2.0"
-cambium-winit = "0.2.0"
-sprigging = "0.1.0"
+# From genet's git, NOT crates.io — the same rule hocket landed on 2026-07-24
+# after a clean Linux checkout caught it. Two reasons, and both only show up
+# away from a dev machine whose gitignored [patch] file hides them:
+#
+#   1. `cambium-winit` can never be published. The consolidation rewired it
+#      onto genet-layout and genet-winit-host, which inherit genet's
+#      `publish = false`, so the 0.3.0 this pinned does not exist and cannot
+#      be made to. Only a yanked 0.2.0 and an ancient 0.1.0 are on crates.io.
+#   2. The published cambium/sprigging depend on the crates.io `paint_list_api`
+#      while we (and the rest of the genet stack) git-dep netrender's, so a
+#      `sprigging::PaintCmd` is not a `paint_list_api::PaintCmd`.
+#      `[patch.crates-io]` does not redirect a published crate's own registry
+#      dependency; taking all three from the source everything else uses does.
+cambium = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+cambium-winit = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+sprigging = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-probe = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 netrender_device = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }

@@ -1,7 +1,22 @@
 use cambium::{clickable, el, graph_canvas_swatch, on_hover, text, HoverEvent, HoverPhase};
-use woodshed_core::RelatedTarget;
+use woodshed_core::{RelatedSuggestion, RelatedTarget};
 
 use super::{related_swatch, UiChild, UiState, RELATED_LIMIT};
+
+/// The relation kinds beyond the one the row already shows, so multiplicity is
+/// visible rather than silently ranked away. Empty when there is only one.
+fn also_label(item: &RelatedSuggestion) -> String {
+    if item.relation_count() < 2 {
+        return String::new();
+    }
+    let others: Vec<&str> = item
+        .relations
+        .iter()
+        .skip(1)
+        .map(|relation| relation.kind.label())
+        .collect();
+    format!("also {}", others.join(" · "))
+}
 
 pub(super) fn panel(ui: &UiState) -> UiChild {
     let suggestions = ui.stage.related_material_configured(
@@ -38,8 +53,14 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                                         (
                                             el("div", text(item.title.clone()))
                                                 .attr("class", "related-name"),
-                                            el("div", text(item.reason.clone()))
+                                            el("div", text(item.reason().to_string()))
                                                 .attr("class", "related-why"),
+                                            // A pair related several ways says
+                                            // so. The row shows one reason for
+                                            // room, not because the others were
+                                            // ranked away.
+                                            el("div", text(also_label(item)))
+                                                .attr("class", "related-also"),
                                         ),
                                     )
                                     .attr("class", "related-copy-text"),

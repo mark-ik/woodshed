@@ -4,7 +4,10 @@
 //! flattened for serialization so sessions written before `AppSettings`
 //! continue to read the same `theme`, `tuning_idx`, `bpm`, and related keys.
 
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
+use woodshedding::rehearsal::SetGraphEdgeKind;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SettingsPage {
@@ -85,16 +88,56 @@ impl Default for RelatedSettings {
 #[serde(default)]
 pub struct StageSettings {
     pub related: RelatedSettings,
-    /// Show the Set's authored order as `Next` edges in its graph projection.
-    pub show_set_sequence_edges: bool,
+    /// Which projected relation families the Set graph draws. A set rather
+    /// than a flag per family, so the harmonic, evidence, and suggestion
+    /// layers join it by becoming members. Visibility is a view state: hiding
+    /// a family draws fewer edges and changes no Set truth.
+    pub visible_set_relations: BTreeSet<SetGraphEdgeKind>,
+    /// Legacy key (sessions written 2026-07-21..24 carried one boolean for
+    /// all sequence edges). Read once by
+    /// [`StageSettings::adopt_legacy_relation_visibility`] and dropped on the
+    /// next save.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_set_sequence_edges: Option<bool>,
 }
 
 impl Default for StageSettings {
     fn default() -> Self {
         Self {
             related: RelatedSettings::default(),
-            show_set_sequence_edges: true,
+            visible_set_relations: SetGraphEdgeKind::ALL.into_iter().collect(),
+            show_set_sequence_edges: None,
         }
+    }
+}
+
+impl StageSettings {
+    /// Fold the pre-P4a boolean into the relation set. Idempotent: the legacy
+    /// field is taken, so a later save writes only the set.
+    pub fn adopt_legacy_relation_visibility(&mut self) {
+        let Some(shown) = self.show_set_sequence_edges.take() else {
+            return;
+        };
+        if shown {
+            self.visible_set_relations.insert(SetGraphEdgeKind::Next);
+        } else {
+            self.visible_set_relations.remove(&SetGraphEdgeKind::Next);
+        }
+    }
+
+    pub fn shows_relation(&self, kind: SetGraphEdgeKind) -> bool {
+        self.visible_set_relations.contains(&kind)
+    }
+
+    pub fn toggle_relation(&mut self, kind: SetGraphEdgeKind) {
+        if !self.visible_set_relations.remove(&kind) {
+            self.visible_set_relations.insert(kind);
+        }
+    }
+
+    /// The visible families, in a stable order, for filtering a projection.
+    pub fn visible_relations(&self) -> Vec<SetGraphEdgeKind> {
+        self.visible_set_relations.iter().copied().collect()
     }
 }
 

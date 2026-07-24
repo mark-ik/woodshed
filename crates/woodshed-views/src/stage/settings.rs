@@ -1,4 +1,5 @@
 use woodshed_core::audio::CalibrationStatus;
+use woodshedding::rehearsal::SetGraphEdgeKind;
 use cambium::{clickable, el, map_state, select, text};
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
@@ -281,11 +282,27 @@ fn stage_page(ui: &UiState) -> UiChild {
         "Neighborhood graph: off"
     };
     let hidden_count = ui.app_settings.stage.related.dismissed_ids.len();
-    let sequence_label = if ui.app_settings.stage.show_set_sequence_edges {
-        "Set sequence edges: on"
-    } else {
-        "Set sequence edges: off"
-    };
+    // One entry per derivable relation family, so the Set graph's visible
+    // relations are configured here rather than through a single switch that
+    // stops describing the projection as families are added.
+    let relation_items: Vec<UiChild> = SetGraphEdgeKind::ALL
+        .into_iter()
+        .map(|kind| {
+            let state = if ui.app_settings.stage.shows_relation(kind) {
+                "on"
+            } else {
+                "off"
+            };
+            Box::new(clickable(
+                el(
+                    "div",
+                    text(format!("Set {} edges: {state}", kind.label().to_lowercase())),
+                )
+                .attr("class", "side-item"),
+                move |ui: &mut UiState, _| ui.app_settings.stage.toggle_relation(kind),
+            )) as UiChild
+        })
+        .collect();
     Box::new(
         el(
             "div",
@@ -312,13 +329,7 @@ fn stage_page(ui: &UiState) -> UiChild {
                         ui.app_settings.stage.related.dismissed_ids.clear();
                     },
                 ),
-                clickable(
-                    el("div", text(sequence_label)).attr("class", "side-item"),
-                    |ui: &mut UiState, _| {
-                        ui.app_settings.stage.show_set_sequence_edges =
-                            !ui.app_settings.stage.show_set_sequence_edges;
-                    },
-                ),
+                el("div", relation_items),
             ),
         )
         .attr("class", "board settings-page"),

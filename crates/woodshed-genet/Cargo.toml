@@ -17,6 +17,9 @@ sprigging = { workspace = true }
 layout-dom-api = { workspace = true }
 genet-scripted-dom = { workspace = true }
 genet-layout = { workspace = true }
+# The shared automatability substrate: selector resolution + the scenario
+# driver, so woodshed's self-drive lane is the genet one, not a private copy.
+genet-probe = { workspace = true }
 genet-winit-host = { workspace = true }
 netrender = { workspace = true }
 paint_list_api = { workspace = true }
@@ -24,4 +27,6 @@ paint_list_render = { workspace = true }
 wgpu = { workspace = true }
 winit = { workspace = true }
 directories = "5"
+# Scenario captures encode a PNG from a texture readback.
+image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { workspace = true }

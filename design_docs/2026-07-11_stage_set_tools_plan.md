@@ -159,11 +159,34 @@ half of the contract (selection, multi-family edges, ranking without dedup),
 complementary to isometry's proof of the scene half (footprints, placement,
 representation). Its relations are static and deterministic, so it does not
 exercise the late-arriving signal or streaming-uncertainty paths; it is the
-clean first fixture, not the only proof. Sequencing follows: Woodshed's typed
-relations (P4a identity, P4b relations) are wall-side truth and proceed now,
-doubling as design pressure on `sceno`'s source and channel model;
-scene-contract consumption waits until mere and isometry prove and freeze it,
-since P4e swatches built before then are throwaway.
+clean first fixture, not the only proof.
+
+Sequencing: Woodshed's typed relations (P4a identity, P4b relations) are
+wall-side truth and proceed now, doubling as design pressure on `sceno`'s
+source and channel model. Scene-contract consumption was gated on mere and
+isometry proving and freezing the contract. **The proving half is done**
+(verified 2026-07-24): mere consumes `sceno` through `cartography::scene_out`
+and a persisted spiral score; isometry deleted `Overmap::layout` and its force
+solver, emitting the same score/scene types for its overmap and tactical
+board; a serialized coastal fixture exercises the geographic path; and
+graphshell consumes `scenotime`'s snapshot/diff pair for remote replay. The
+family also moved: `sceno`/`scenomise`/`scenotime` 0.0.2 now live in mere at
+`crates/scenograph`, not a standalone repo.
+
+What remains is the freeze, not the proof. The live items are listed in that
+family's scene contract note: whether action intents belong in the contract or
+stay in graphshell's protocol, whether the unconsumed `measure` module earns
+its place, per-item emphasis channels, and where hit resolution lives. Two
+consequences for this plan. First, `scenomise::relax` (2026-07-23) is
+dependency-free relaxation aimed squarely at swatch-scale surfaces, which is
+exactly what `related_swatch` is, so the retirement named above has a landed
+mechanism waiting for it. Second, the shipped arrangements are `Spiral`,
+`Board`, and `Geographic`; Woodshed's circle-of-fifths and interval maps are
+fixed semantic layouts that no shipped arrangement covers, so P4e either
+contributes a new arrangement upstream or places through `Placement::Coordinate`
+in a Woodshed-owned frame. That choice is the first real design question
+Woodshed puts to the contract, and it is worth asking before the freeze rather
+than after.
 
 ### Replace the Song model
 
@@ -280,6 +303,11 @@ changes numbering without changing identity, removal drops only incident
 projected edges, a round-trip preserves the selected Card, and hiding `Next`
 changes only the view.
 
+**Landed 2026-07-24** (see Progress), with unit tests per done condition and a
+headed receipt (`scenarios/p4a_occurrence_identity.scn`). `Card` identity is not
+yet consumed by the Looper: preserving captures by occurrence rather than by bar
+index is P7's work, and it is the reason this slice came first.
+
 #### P4b. Preserve typed musical relationships
 
 Split neighbor ranking from relation truth. Replace the flattened
@@ -315,6 +343,13 @@ Done when an edge can explain all applicable relationships between two
 materials, formula and keyed-instance identity are unambiguous, deterministic
 relations are available without history or ML, and ranking no longer erases
 relation kinds.
+
+**Landed 2026-07-24** (see Progress), with unit tests per done condition and a
+headed receipt (`scenarios/p4b_typed_relations.scn`). The keyed half is
+deliberately not in it: `diatonic in`, `borrowed from`, `dominant of`,
+`resolves to`, `relative to`, and `parallel to` are contextual relations that
+exist only once a tonic is chosen, so they land with the keyed-instance layer
+and first-class pitch-class identities rather than being faked over formulas.
 
 #### P4c. Compose one Stage projection snapshot
 
@@ -398,9 +433,11 @@ The Set-sequence and focused-relationship views are the first two consumers.
 The circle of fifths is the first full theory-map acceptance surface because it
 forces contextual material identity, fixed semantic layout, nested expansion,
 and Stage/fretboard synchronization without requiring ML. These layouts are
-`scenomise` arrangements over `sceno` frames rather than Woodshed-owned swatches,
-and they land when the scene contract does (see the scenograph boundary
-decision).
+`scenomise` arrangements over `sceno` frames rather than Woodshed-owned
+swatches. The shipped arrangements (`Spiral`, `Board`, `Geographic`) do not
+cover a circle of fifths or an interval map, so this catalog is where Woodshed
+either contributes a fixed-semantic-layout arrangement upstream or places
+authored coordinates in its own frame (see the scenograph boundary decision).
 
 Done when the same focused material can move between Set, relationship, and
 circle projections without changing musical truth; projection choice and
@@ -504,22 +541,36 @@ receipts are recorded before those platforms are advertised.
 
 - The existing portable `Set` and `Card` model already carries material,
   setting, touch, timing, provenance, cursor, and loop mode.
-- The in-progress `Set::graph()` slice is a useful wiring proof, not the final
-  projection model. It addresses occurrences by vector index, derives only
-  `Next`, lays them out in a hardcoded serpentine grid, exposes one Boolean edge
-  toggle, and opens the shared Card editor beside the graph. P4a-P4d name the
-  remaining identity, relationship, layout, and inline-representation work.
+- `Set::graph()` now addresses occurrences by stable `CardId` and filters by a
+  serializable relation set (P4a, 2026-07-24). What remains of the original
+  finding still stands: it derives only `Next`, lays occurrences out in a
+  hardcoded serpentine grid, and opens the shared Card editor beside the graph
+  rather than in the node's own region. P4b-P4d name the remaining
+  relationship, layout, and inline-representation work.
 - Card is a sound domain unit, but the current UI should not force one visual
   card treatment across Stage, Set tray, Rehearsal, and Looper.
 - Chisel is a good fit for custom-painted material projections. Its semantic
   event/action seam is still a placeholder, so ordinary `xilem_serval` elements
   remain the right owner for Card interaction and accessibility.
 - `woodshed-graph` projects scales, chords, arpeggios, progression and exercise
-  identities, scored theory relations, and practice lineage into both the
-  Related list and Chisel neighborhood. The public neighbor boundary still
-  flattens multiple relations into one reason/score and then rebuilds a
-  center-star snapshot; progression, exercise, key, pitch-class, and interval
-  relationships remain thin or absent.
+  identities, typed theory relations, and practice lineage into both the
+  Related list and Chisel neighborhood. The flattened `{reason, score}` boundary
+  is gone (P4b, 2026-07-24): a pair now carries every applicable relation, each
+  with its own weight, measurement, and authority. What remains thin: keyed
+  relations (diatonic in, borrowed from, dominant of, resolves to, relative and
+  parallel) are deliberately absent, because they exist only under a chosen
+  tonic and belong to the keyed-instance layer with first-class pitch-class and
+  interval identities; the center-star snapshot rebuild is still there.
+- Ranking crowding is a real effect, found by receipt: `Major` appears in nine
+  catalog progressions that all score 96, so a six-row panel showed one relation
+  family and no harmonic neighbour at all. Display now interleaves families,
+  which deletes nothing a longer list would have kept, but it is a symptom worth
+  remembering — a flat weight per relation kind ranks by family, not by
+  usefulness to the player.
+- The Related panel scrolls inside a row whose height the fretboard sets, so at
+  1500x1200 roughly two rows are visible and the multiplicity line needs a
+  scroll to reach. The relations are correct and observable; their presentation
+  is not yet. Panel height belongs with P8's adaptive compositions.
 - The current Cambium `GraphCanvasSwatch` carries uniform nodes and untyped
   `from/to` edges. It is enough for the Set-graph wiring proof. Directed and
   typed edge treatments, per-node regions, semantic zoom, and live Card slots
@@ -542,6 +593,111 @@ receipts are recorded before those platforms are advertised.
   coherent narrow-screen information architecture.
 
 ## Progress
+
+- **2026-07-24, P4b landed — typed relations, and the end of the flattened
+  reason:** `woodshed-graph`'s public boundary was `RelatedMaterial { reason,
+  score }`, one winning string per neighbour, and the index deduplicated by
+  target so the second and third ways two materials relate were discarded before
+  anyone could see them. It is now `MaterialRelation { source, target, kind,
+  weight, distance, shared_tones, explanation, authority }` with
+  `RelatedNeighbor` carrying **every** relation for a pair, `relations_between`
+  for the full list, and `RelationKind` naming a 14-member deterministic
+  vocabulary with `inverse`/`is_symmetric` so one computation records both
+  directions honestly. New derived relations, all root-independent: chord
+  `Extends`/`ExtendedBy` (strict subset), `Alters` (same size, one tone moved),
+  `SharesTones` and `VoiceLeadsTo` as *separate* records rather than one blended
+  score, scale `ModeOf` (rotation of the same interval set) and `ScaleNeighbor`
+  (one degree apart), and `UsedTogether` for chords the catalog itself puts
+  adjacent inside a progression. Every record carries its `RelationAuthority`
+  (Catalog / Computed / Evidence), and `MaterialRelation::evidence` is the only
+  public constructor, so an observation cannot enter wearing catalog authority.
+  Core's history ranking now *inserts* an evidence relation instead of
+  overwriting the theory reason, which was the erasure the plan named. The
+  Related row shows its primary reason plus an `also ...` line naming the other
+  kinds. Verified: 14 graph tests (multiplicity survives ranking, authorities
+  are attributable, modes relate as modes, deterministic relations need no
+  history), 46 core tests, and `p4b_typed_relations.scn` asserting on the
+  relation records themselves rather than on rendered text: `RESULT ok`, two
+  captures. **Found by receipt**: the first run failed honestly. Every visible
+  neighbour of `Major` carried exactly one relation, because nine catalog
+  progressions all score 96 and filled the six-row panel; the multi-relation
+  pairs sat at rank 10. Added a display-side family interleave (documented as a
+  display policy that deletes nothing) and a test pinning it. Recorded but not
+  fixed: the panel's own height leaves about two rows visible.
+
+- **2026-07-24, P4a receipt — woodshed drives itself:** Woodshed had no
+  self-drive lane, so its receipts were SendKeys plus a desktop grab, which the
+  harness notes warn loses the foreground race and can photograph the wrong
+  window. It now consumes `genet-probe`: the generic half (scenario parsing, the
+  verb loop, selector resolution, assertions) is the shared crate, and what
+  landed here is only woodshed's half —
+  [`crates/woodshed-genet/src/scenario.rs`](../crates/woodshed-genet/src/scenario.rs)
+  implementing `Automatable`/`Driveable` (surfaces, a typed snapshot, semantic
+  events diffed from real state transitions, named commands, pointer routing
+  through the app's own hit-test path) plus an in-process capture: the frame's
+  own rasterized view composed into a `COPY_SRC` target and read back, so a
+  capture needs no compositor, no foreground, and no ffmpeg. `WOODSHED_STATE`
+  points the session at a scratch profile, because an automated run would
+  otherwise read and then overwrite the real practice session.
+  `p4a_occurrence_identity.scn` stages one catalog material three times, so the
+  three occurrences are label-identical and only identity can tell them apart:
+  it selects the second through its DOM key, reorders it, and asserts the id
+  held while the number moved 2 -> 3, then hides the relation family and asserts
+  the edges went while the occurrences stayed. `RESULT ok`, four captures in
+  `testing/woodshed/scenarios/p4a_occurrence_identity/`, run through
+  `testing/woodshed/run-scenario.ps1`. **Found by looking at the frames**: the
+  relation toggle sat beside the swatch and was overdrawn by node labels that
+  paint past the swatch's box. Fixed by giving the controls their own row; the
+  underlying overflow (a 520px swatch with labels wider than its node spacing)
+  is layout work for P4d/P4e, recorded rather than papered over.
+
+- **2026-07-24, P4a landed — occurrence identity:** Every staged Card carries a
+  `CardId`, minted by the owning `Set` and never reused, so staging the same
+  material twice yields two occurrences and duplicating mints a third while the
+  original keeps its own. `Set` gained `from_cards`, `ensure_card_ids`,
+  `index_of`, `id_at`, `cursor_id`, `select_id`, `card`/`card_mut`;
+  `Set::graph()` addresses nodes and `Next` edges by id, with the visible number
+  and serpentine slot derived from current order. The all-or-nothing edge toggle
+  became `StageSettings::visible_set_relations`, a serializable set over
+  `SetGraphEdgeKind` with `ALL`/`label`, so the harmonic, evidence, and
+  suggestion families join it as members; `SetGraph::with_relations` filters the
+  projection without touching Set truth, and the Settings page lists one entry
+  per family. The Set-graph swatch is now keyed by `CardId` (selection, hover,
+  DOM key `set-card-<id>`), and native focus is tracked honestly through
+  `graph_canvas_swatch_with_focus` rather than painting a ring where the
+  keyboard is not. One bounded load migration in `apply_persisted`: legacy Sets
+  gain ids, the legacy boolean folds into the relation set, and both persist on
+  the next save; the legacy key stops being written. Verified: 7 new
+  `woodshedding` tests (167 total) covering distinct occurrences, reorder,
+  removal without id reuse, relation hiding, round-trip identity, and legacy
+  migration idempotence; a new `woodshed-core` storage test for the settings
+  fold (45 total); `cargo check` green for `woodshed-views` and
+  `woodshed-genet`. **Build blocker found and repointed**: genet's 2026-07-24
+  sweep moved the family to cambium 0.3.1 / cambium-winit 0.3.0 / sprigging
+  0.2.1, which silently stopped matching this workspace's 0.2.0 pins, so the
+  local `[patch]` entries went unused and the host built against the published
+  0.2.0 API without `graph_canvas_swatch` or `on_hover`. Pins bumped to the
+  current family. cambium 0.3.1 and sprigging 0.2.1 are on crates.io;
+  **cambium-winit 0.3.0 is not published**, so the desktop host currently
+  resolves it only through the local patch. No headed receipt yet: the changed
+  surfaces (node selection, the relation toggle's label) want one before P4a is
+  called finished.
+
+- **2026-07-24, the gate opened:** Re-checked the scenograph sequencing clause
+  against the family's actual state. Mere and isometry both proved the scene
+  contract on 2026-07-22 (mere's `cartography::scene_out` + persisted spiral
+  score with a headed receipt; isometry deleting `Overmap::layout` and emitting
+  the same score/scene types), P5's geographic fixture landed the same day, and
+  2026-07-23 added `scenomise::relax` plus graphshell's consumption of
+  `scenotime` diffs. So the "wait for mere and isometry" half of the gate is
+  satisfied and only the freeze remains; the boundary decision now names the
+  specific open items rather than a general wait. Also recorded that the family
+  moved into mere at `crates/scenograph` (0.0.2) in the 2026-07-23
+  consolidation, and that Woodshed's fixed semantic layouts are not covered by
+  the shipped `Spiral`/`Board`/`Geographic` arrangements, which is the first
+  design question Woodshed owes the contract. Counterpart notes recorded on the
+  mere side in the scene contract note and the prior-art brief. No code
+  changed.
 
 - **2026-07-22, scenograph reconciliation:** Named the shared projection engine
   as the `scenograph` family (`sceno`/`scenomise`/`scenotime`) founded in mere's

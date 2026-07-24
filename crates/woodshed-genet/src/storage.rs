@@ -16,6 +16,14 @@ pub struct FsStorage {
 
 impl FsStorage {
     pub fn new() -> Self {
+        // `WOODSHED_STATE` points the session at another file. A scenario run
+        // sets it to a scratch profile: without it, an automated run would read
+        // and then overwrite the real practice session.
+        if let Ok(path) = std::env::var("WOODSHED_STATE") {
+            return Self {
+                path: Some(PathBuf::from(path)),
+            };
+        }
         let path = ProjectDirs::from("dev", "Woodshed", "Woodshed")
             .map(|dirs| dirs.config_dir().join("genet-state.json"));
         Self { path }

@@ -47,15 +47,257 @@ pub enum CatalogKind {
     Exercise,
 }
 
-/// One explainable neighbor of a catalog object.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelatedMaterial {
+/// Who says so. A relation's authority travels with it, because a filter that
+/// hides one layer must not be able to delete another's facts, and a suggestion
+/// must never read as catalog truth.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RelationAuthority {
+    /// Authored in the catalog and read back (a progression's roles).
+    Catalog,
+    /// Derived from catalog truth by a deterministic rule. Reproducible from
+    /// the formulas alone, with no history and no inference.
+    Computed,
+    /// Observed practice. Produced by the consumer that owns the history, not
+    /// by this crate; the kind exists here so one record type spans the layers.
+    Evidence,
+}
+
+/// The relation vocabulary, root-independent by construction.
+///
+/// Every kind here relates catalog *formulas*, which is why none of them names
+/// a key: `Major 7` extends `Major` whatever the tonic. The keyed relations the
+/// plan also wants (diatonic in, borrowed from, dominant of, resolves to,
+/// relative/parallel) are contextual — they exist only once a tonic is chosen —
+/// so they belong to the keyed-instance layer, beside first-class pitch-class
+/// identities, rather than being faked at formula level here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RelationKind {
+    /// A progression calls for this chord.
+    ContainsMaterial,
+    /// This chord is called for by that progression.
+    AppearsIn,
+    /// This chord's tones are a subset of that scale's.
+    FitsInScale,
+    /// That scale admits this chord.
+    ScaleAdmits,
+    /// An arpeggio is the sequential realization of a chord formula.
+    Realizes,
+    /// A chord formula is realized by that arpeggio.
+    RealizedBy,
+    /// This chord's tones are a strict subset of that chord's (Major -> Major 7).
+    ExtendedBy,
+    /// This chord strictly contains that chord's tones.
+    Extends,
+    /// Same tone count, one tone moved: an alteration of the same colour.
+    Alters,
+    /// The two share pitch classes; the count rides on the record.
+    SharesTones,
+    /// Symmetric voice-leading distance; the distance rides on the record.
+    VoiceLeadsTo,
+    /// One scale is a rotation of the other's interval set.
+    ModeOf,
+    /// Same degree count, differing by exactly one tone.
+    ScaleNeighbor,
+    /// Two chords sit next to each other inside a catalog progression.
+    UsedTogether,
+    /// Observed: this was practiced before that (consumer-supplied).
+    PracticedBefore,
+    /// Observed: this was practiced after that (consumer-supplied).
+    PracticedAfter,
+}
+
+impl RelationKind {
+    /// Short human name, for an edge explanation or a relation filter.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ContainsMaterial => "contains",
+            Self::AppearsIn => "appears in",
+            Self::FitsInScale => "fits in scale",
+            Self::ScaleAdmits => "admits",
+            Self::Realizes => "realizes",
+            Self::RealizedBy => "realized by",
+            Self::ExtendedBy => "extended by",
+            Self::Extends => "extends",
+            Self::Alters => "alters",
+            Self::SharesTones => "shares tones",
+            Self::VoiceLeadsTo => "voice-leads to",
+            Self::ModeOf => "mode of",
+            Self::ScaleNeighbor => "one tone apart",
+            Self::UsedTogether => "used together",
+            Self::PracticedBefore => "practiced before",
+            Self::PracticedAfter => "practiced after",
+        }
+    }
+
+    /// Which layer owns it. The Set layer is not here: Set order is the Set's
+    /// own truth, not a catalog relation.
+    pub fn authority(self) -> RelationAuthority {
+        match self {
+            Self::ContainsMaterial | Self::AppearsIn | Self::UsedTogether => {
+                RelationAuthority::Catalog
+            }
+            Self::PracticedBefore | Self::PracticedAfter => RelationAuthority::Evidence,
+            _ => RelationAuthority::Computed,
+        }
+    }
+
+    /// The kind naming the same fact from the other end. Symmetric kinds are
+    /// their own inverse, which is what lets one computation record both
+    /// directions without inventing a second relation.
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::ContainsMaterial => Self::AppearsIn,
+            Self::AppearsIn => Self::ContainsMaterial,
+            Self::FitsInScale => Self::ScaleAdmits,
+            Self::ScaleAdmits => Self::FitsInScale,
+            Self::Realizes => Self::RealizedBy,
+            Self::RealizedBy => Self::Realizes,
+            Self::ExtendedBy => Self::Extends,
+            Self::Extends => Self::ExtendedBy,
+            Self::PracticedBefore => Self::PracticedAfter,
+            Self::PracticedAfter => Self::PracticedBefore,
+            symmetric => symmetric,
+        }
+    }
+
+    pub fn is_symmetric(self) -> bool {
+        self.inverse() == self
+    }
+
+    /// Every deterministic kind this crate can currently derive, for a relation
+    /// filter that wants to name its families rather than count them.
+    pub const DETERMINISTIC: [Self; 14] = [
+        Self::ContainsMaterial,
+        Self::AppearsIn,
+        Self::FitsInScale,
+        Self::ScaleAdmits,
+        Self::Realizes,
+        Self::RealizedBy,
+        Self::ExtendedBy,
+        Self::Extends,
+        Self::Alters,
+        Self::SharesTones,
+        Self::VoiceLeadsTo,
+        Self::ModeOf,
+        Self::ScaleNeighbor,
+        Self::UsedTogether,
+    ];
+}
+
+/// One typed relation between two catalog materials.
+///
+/// This replaces the old flattened `{ reason, score }` pair. The difference
+/// that matters: several of these may connect the same pair, and ranking
+/// chooses what to show first without deleting the rest.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MaterialRelation {
+    pub source: String,
+    pub target: String,
+    pub kind: RelationKind,
+    /// This relation's own strength in `0..=100`. Not a ranking of the
+    /// neighbor: one pair's several relations each carry their own.
+    pub weight: u16,
+    /// Continuous distance where the relation has one (voice-leading motion).
+    pub distance: Option<f32>,
+    /// Shared pitch-class count where the relation is about tones.
+    pub shared_tones: Option<usize>,
+    /// Why, in the player's words.
+    pub explanation: String,
+    pub authority: RelationAuthority,
+}
+
+impl MaterialRelation {
+    fn new(
+        source: impl Into<String>,
+        target: impl Into<String>,
+        kind: RelationKind,
+        weight: u16,
+        explanation: impl Into<String>,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            target: target.into(),
+            kind,
+            weight,
+            distance: None,
+            shared_tones: None,
+            explanation: explanation.into(),
+            authority: kind.authority(),
+        }
+    }
+
+    /// Build an observed relation. Public because the evidence layer is the
+    /// consumer's: this crate owns no history and must not pretend to. The kind
+    /// must be an [`RelationAuthority::Evidence`] one, so an observation cannot
+    /// enter the record set wearing catalog authority.
+    pub fn evidence(
+        source: impl Into<String>,
+        target: impl Into<String>,
+        kind: RelationKind,
+        weight: u16,
+        explanation: impl Into<String>,
+    ) -> Self {
+        debug_assert_eq!(
+            kind.authority(),
+            RelationAuthority::Evidence,
+            "an observed relation must use an evidence kind"
+        );
+        Self {
+            authority: RelationAuthority::Evidence,
+            ..Self::new(source, target, kind, weight, explanation)
+        }
+    }
+
+    fn with_distance(mut self, distance: f32) -> Self {
+        self.distance = Some(distance);
+        self
+    }
+
+    fn with_shared_tones(mut self, shared: usize) -> Self {
+        self.shared_tones = Some(shared);
+        self
+    }
+}
+
+/// One neighbor of a focused material, with **every** relation that connects
+/// them. `score` orders neighbors for display; it never decides which relations
+/// survive.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RelatedNeighbor {
     pub id: String,
     pub name: String,
     pub kind: CatalogKind,
-    pub reason: String,
-    /// Deterministic harmonic relevance in `0..=100`.
+    /// Strongest first. Always at least one.
+    pub relations: Vec<MaterialRelation>,
+    /// Display rank in `0..=100`: the strongest relation, plus a small bonus
+    /// for carrying several, so a pair related four ways outranks a pair
+    /// related once at the same strength.
     pub score: u16,
+}
+
+impl RelatedNeighbor {
+    /// The relation shown when there is room for one.
+    pub fn primary(&self) -> &MaterialRelation {
+        &self.relations[0]
+    }
+
+    /// The primary explanation, which is what a one-line row shows.
+    pub fn reason(&self) -> &str {
+        &self.primary().explanation
+    }
+
+    /// Every applicable relation kind, in display order.
+    pub fn kinds(&self) -> Vec<RelationKind> {
+        self.relations.iter().map(|r| r.kind).collect()
+    }
+
+    /// Every explanation, which is what selecting the edge should expose.
+    pub fn explanations(&self) -> Vec<&str> {
+        self.relations
+            .iter()
+            .map(|r| r.explanation.as_str())
+            .collect()
+    }
 }
 
 /// The node id for a scale.
@@ -208,13 +450,12 @@ fn kind_of(node: &Container) -> Option<CatalogKind> {
     }
 }
 
-/// Return the selected catalog object's immediate musical neighbors with a
-/// human-readable explanation. Results are deterministic and derive only from
-/// catalog truth; personalized practice-history ranking is layered on later.
-pub fn related_material(selected_id: &str, limit: usize) -> Vec<RelatedMaterial> {
-    static INDEX: OnceLock<HashMap<String, Vec<RelatedMaterial>>> = OnceLock::new();
-    INDEX
-        .get_or_init(build_related_index)
+/// The selected material's neighbors, each carrying every relation that
+/// connects them. Deterministic: derived from catalog truth alone, with no
+/// history and no inference. Practice evidence is layered by the consumer that
+/// owns it, onto these same records.
+pub fn related_neighbors(selected_id: &str, limit: usize) -> Vec<RelatedNeighbor> {
+    relation_index()
         .get(selected_id)
         .into_iter()
         .flatten()
@@ -223,73 +464,192 @@ pub fn related_material(selected_id: &str, limit: usize) -> Vec<RelatedMaterial>
         .collect()
 }
 
-fn build_related_index() -> HashMap<String, Vec<RelatedMaterial>> {
-    let log = build_catalog_graph("woodshed:catalog:related");
-    let graph = log.graph();
-    let mut index: HashMap<String, Vec<RelatedMaterial>> = HashMap::new();
+/// Every relation between two materials, in display order. This is what
+/// selecting an edge should show: all applicable reasons, each with its own
+/// authority, rather than the one that happened to rank highest.
+pub fn relations_between(source_id: &str, target_id: &str) -> Vec<MaterialRelation> {
+    relation_index()
+        .get(source_id)
+        .into_iter()
+        .flatten()
+        .find(|neighbor| neighbor.id == target_id)
+        .map(|neighbor| neighbor.relations.clone())
+        .unwrap_or_default()
+}
 
-    for (source, source_node) in graph.nodes() {
-        let source_name = source_node
-            .title
-            .clone()
-            .unwrap_or_else(|| source_node.id.clone());
-        let Some(source_kind) = kind_of(source_node) else { continue };
-        for (_, target, edge) in graph.out_edges(source) {
-            let Some(target_node) = graph.node(target) else { continue };
-            let Some(target_kind) = kind_of(target_node) else { continue };
-            let target_name = target_node
-                .title
-                .clone()
-                .unwrap_or_else(|| target_node.id.clone());
-            let (forward_reason, reverse_reason, score) = match edge.class {
-                ref class if class == &RelationClass::app(FAMILY, CONTAINS) => {
-                    (
-                        format!("Used in {source_name}"),
-                        format!("Appears in {source_name}"),
-                        96,
-                    )
-                }
-                ref class if class == &RelationClass::app(FAMILY, FITS_IN_SCALE) => {
-                    (
-                        format!("{source_name} fits this scale"),
-                        format!("{source_name} fits {target_name}"),
-                        92,
-                    )
-                }
-                ref class if class == &RelationClass::app(FAMILY, REALIZES) => (
-                    format!("Arpeggiates {target_name}"),
-                    format!("Practice {source_name} as an arpeggio"),
-                    100,
-                ),
-                _ => continue,
-            };
-            index.entry(source_node.id.clone()).or_default().push(RelatedMaterial {
-                id: target_node.id.clone(),
-                name: target_name,
-                kind: target_kind,
-                reason: forward_reason,
-                score,
-            });
-            index.entry(target_node.id.clone()).or_default().push(RelatedMaterial {
-                id: source_node.id.clone(),
-                name: source_name.clone(),
-                kind: source_kind,
-                reason: reverse_reason,
-                score,
-            });
+/// A catalog object's display name, if it exists.
+pub fn material_name(id: &str) -> Option<String> {
+    node_names().get(id).cloned()
+}
+
+fn relation_index() -> &'static HashMap<String, Vec<RelatedNeighbor>> {
+    static INDEX: OnceLock<HashMap<String, Vec<RelatedNeighbor>>> = OnceLock::new();
+    INDEX.get_or_init(build_relation_index)
+}
+
+fn node_names() -> &'static HashMap<String, String> {
+    static NAMES: OnceLock<HashMap<String, String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        let log = build_catalog_graph("woodshed:catalog:names");
+        log.graph()
+            .nodes()
+            .map(|(_, node)| {
+                (
+                    node.id.clone(),
+                    node.title.clone().unwrap_or_else(|| node.id.clone()),
+                )
+            })
+            .collect()
+    })
+}
+
+/// Accumulates relation records per (source, target) pair before ranking, so a
+/// pair related four ways arrives at ranking as four records, not one.
+#[derive(Default)]
+struct RelationBuilder {
+    by_source: HashMap<String, HashMap<String, Vec<MaterialRelation>>>,
+}
+
+impl RelationBuilder {
+    /// Record `relation` and its inverse, so both ends see the pair.
+    fn add(&mut self, relation: MaterialRelation) {
+        let inverse = MaterialRelation {
+            source: relation.target.clone(),
+            target: relation.source.clone(),
+            kind: relation.kind.inverse(),
+            explanation: relation.explanation.clone(),
+            ..relation.clone()
+        };
+        for record in [relation, inverse] {
+            self.by_source
+                .entry(record.source.clone())
+                .or_default()
+                .entry(record.target.clone())
+                .or_default()
+                .push(record);
         }
     }
 
-    add_chord_affinities(&mut index);
-
-    for related in index.values_mut() {
-        related.sort_by(|a, b| {
-            (std::cmp::Reverse(a.score), a.kind, a.name.as_str())
-                .cmp(&(std::cmp::Reverse(b.score), b.kind, b.name.as_str()))
-        });
-        related.dedup_by(|a, b| a.id == b.id);
+    /// Record a relation whose two directions read differently.
+    fn add_directed(
+        &mut self,
+        source: &str,
+        target: &str,
+        kind: RelationKind,
+        weight: u16,
+        forward: String,
+        reverse: String,
+    ) {
+        let forward_record = MaterialRelation::new(source, target, kind, weight, forward);
+        let reverse_record =
+            MaterialRelation::new(target, source, kind.inverse(), weight, reverse);
+        for record in [forward_record, reverse_record] {
+            self.by_source
+                .entry(record.source.clone())
+                .or_default()
+                .entry(record.target.clone())
+                .or_default()
+                .push(record);
+        }
     }
-    index
+
+    fn finish(self, names: &HashMap<String, String>, kinds: &HashMap<String, CatalogKind>) -> HashMap<String, Vec<RelatedNeighbor>> {
+        let mut index: HashMap<String, Vec<RelatedNeighbor>> = HashMap::new();
+        for (source, targets) in self.by_source {
+            let mut neighbors: Vec<RelatedNeighbor> = targets
+                .into_iter()
+                .filter_map(|(target, mut relations)| {
+                    let kind = *kinds.get(&target)?;
+                    relations.sort_by(|a, b| {
+                        (std::cmp::Reverse(a.weight), a.kind)
+                            .cmp(&(std::cmp::Reverse(b.weight), b.kind))
+                    });
+                    relations.dedup_by(|a, b| a.kind == b.kind && a.explanation == b.explanation);
+                    let best = relations.first().map(|r| r.weight).unwrap_or_default();
+                    // Multiplicity is evidence of relevance, so it lifts the
+                    // rank a little. It never merges the relations: the bonus
+                    // is capped precisely so it cannot become a reason to keep
+                    // only one of them.
+                    let bonus = ((relations.len() as u16).saturating_sub(1) * 2).min(8);
+                    Some(RelatedNeighbor {
+                        name: names.get(&target).cloned().unwrap_or_else(|| target.clone()),
+                        id: target,
+                        kind,
+                        score: best.saturating_add(bonus).min(100),
+                        relations,
+                    })
+                })
+                .collect();
+            neighbors.sort_by(|a, b| {
+                (std::cmp::Reverse(a.score), a.kind, a.name.as_str())
+                    .cmp(&(std::cmp::Reverse(b.score), b.kind, b.name.as_str()))
+            });
+            index.insert(source, neighbors);
+        }
+        index
+    }
+}
+
+fn build_relation_index() -> HashMap<String, Vec<RelatedNeighbor>> {
+    let log = build_catalog_graph("woodshed:catalog:related");
+    let graph = log.graph();
+    let mut names: HashMap<String, String> = HashMap::new();
+    let mut kinds: HashMap<String, CatalogKind> = HashMap::new();
+    for (_, node) in graph.nodes() {
+        names.insert(
+            node.id.clone(),
+            node.title.clone().unwrap_or_else(|| node.id.clone()),
+        );
+        if let Some(kind) = kind_of(node) {
+            kinds.insert(node.id.clone(), kind);
+        }
+    }
+
+    let mut builder = RelationBuilder::default();
+
+    // The authored and computed edges the catalog graph already carries.
+    for (source, source_node) in graph.nodes() {
+        let source_name = names.get(&source_node.id).cloned().unwrap_or_default();
+        for (_, target, edge) in graph.out_edges(source) {
+            let Some(target_node) = graph.node(target) else { continue };
+            let target_name = names.get(&target_node.id).cloned().unwrap_or_default();
+            let (kind, weight, forward, reverse) = match &edge.class {
+                class if class == &RelationClass::app(FAMILY, CONTAINS) => (
+                    RelationKind::ContainsMaterial,
+                    96,
+                    format!("Calls for {target_name}"),
+                    format!("Appears in {source_name}"),
+                ),
+                class if class == &RelationClass::app(FAMILY, FITS_IN_SCALE) => (
+                    RelationKind::FitsInScale,
+                    92,
+                    format!("Fits {target_name}"),
+                    format!("Admits {source_name}"),
+                ),
+                class if class == &RelationClass::app(FAMILY, REALIZES) => (
+                    RelationKind::Realizes,
+                    100,
+                    format!("Arpeggiates {target_name}"),
+                    format!("Practice {source_name} as an arpeggio"),
+                ),
+                _ => continue,
+            };
+            builder.add_directed(
+                &source_node.id,
+                &target_node.id,
+                kind,
+                weight,
+                forward,
+                reverse,
+            );
+        }
+    }
+
+    add_chord_relations(&mut builder);
+    add_scale_relations(&mut builder);
+    add_progression_adjacency(&mut builder);
+
+    builder.finish(&names, &kinds)
 }
 
 fn circular_distance(a: i32, b: i32) -> i32 {
@@ -312,7 +672,10 @@ fn voice_leading_distance(a: &BTreeSet<i32>, b: &BTreeSet<i32>) -> f32 {
     (one_way(a, b) + one_way(b, a)) * 0.5
 }
 
-fn add_chord_affinities(index: &mut HashMap<String, Vec<RelatedMaterial>>) {
+/// Chord-to-chord relations. One pair may earn several of these at once, which
+/// is the whole point: `Major 7` both extends `Major` and shares three of its
+/// tones, and a player is owed both facts rather than the higher-scoring one.
+fn add_chord_relations(builder: &mut RelationBuilder) {
     let chords = chord::catalog();
     for (i, source) in chords.iter().enumerate() {
         let source_pcs = pitch_classes(source.intervals);
@@ -320,26 +683,149 @@ fn add_chord_affinities(index: &mut HashMap<String, Vec<RelatedMaterial>>) {
             let target_pcs = pitch_classes(target.intervals);
             let shared = source_pcs.intersection(&target_pcs).count();
             let motion = voice_leading_distance(&source_pcs, &target_pcs);
-            if shared == 0 && motion > 1.5 {
+            let (from_id, to_id) = (chord_id(source.name), chord_id(target.name));
+
+            // Containment: strictly more tones over the same core.
+            if source_pcs.len() < target_pcs.len() && source_pcs.is_subset(&target_pcs) {
+                let added = target_pcs.len() - source_pcs.len();
+                builder.add_directed(
+                    &from_id,
+                    &to_id,
+                    RelationKind::ExtendedBy,
+                    90,
+                    format!("{} extends it (+{added})", target.name),
+                    format!("Extends {} (+{added})", source.name),
+                );
+            } else if target_pcs.len() < source_pcs.len() && target_pcs.is_subset(&source_pcs) {
+                let added = source_pcs.len() - target_pcs.len();
+                builder.add_directed(
+                    &to_id,
+                    &from_id,
+                    RelationKind::ExtendedBy,
+                    90,
+                    format!("{} extends it (+{added})", source.name),
+                    format!("Extends {} (+{added})", target.name),
+                );
+            }
+
+            // Alteration: same size, one tone moved.
+            if source_pcs.len() == target_pcs.len() && source_pcs.len().saturating_sub(shared) == 1
+            {
+                builder.add(
+                    MaterialRelation::new(
+                        &from_id,
+                        &to_id,
+                        RelationKind::Alters,
+                        76,
+                        "One tone apart".to_string(),
+                    )
+                    .with_shared_tones(shared),
+                );
+            }
+
+            // Shared tones and voice-leading are distinct facts about the same
+            // pair, so they are distinct records, not one blended score.
+            if shared > 0 {
+                let weight = (44 + shared * 11).min(88) as u16;
+                builder.add(
+                    MaterialRelation::new(
+                        &from_id,
+                        &to_id,
+                        RelationKind::SharesTones,
+                        weight,
+                        format!("Shares {shared} tone{}", if shared == 1 { "" } else { "s" }),
+                    )
+                    .with_shared_tones(shared),
+                );
+            }
+            if motion <= 1.5 {
+                let weight = (86.0 - motion * 20.0).round().clamp(0.0, 86.0) as u16;
+                builder.add(
+                    MaterialRelation::new(
+                        &from_id,
+                        &to_id,
+                        RelationKind::VoiceLeadsTo,
+                        weight,
+                        format!("Voice-leading {motion:.1}"),
+                    )
+                    .with_distance(motion),
+                );
+            }
+        }
+    }
+}
+
+/// The rotations of an interval set, as normalized pitch-class sets. Two scales
+/// are modes of each other when one appears among the other's rotations.
+fn rotations(pcs: &BTreeSet<i32>) -> Vec<BTreeSet<i32>> {
+    pcs.iter()
+        .map(|root| {
+            pcs.iter()
+                .map(|pc| (pc - root).rem_euclid(12))
+                .collect::<BTreeSet<i32>>()
+        })
+        .collect()
+}
+
+/// Scale-to-scale relations: modes of one another, or one tone apart.
+fn add_scale_relations(builder: &mut RelationBuilder) {
+    let scales = scale::catalog();
+    for (i, source) in scales.iter().enumerate() {
+        let source_pcs = pitch_classes(source.intervals);
+        for target in scales.iter().skip(i + 1) {
+            let target_pcs = pitch_classes(target.intervals);
+            let (from_id, to_id) = (scale_id(source.name), scale_id(target.name));
+
+            if source_pcs.len() == target_pcs.len() && rotations(&source_pcs).contains(&target_pcs)
+            {
+                builder.add(MaterialRelation::new(
+                    &from_id,
+                    &to_id,
+                    RelationKind::ModeOf,
+                    88,
+                    "Same tones, different centre".to_string(),
+                ));
                 continue;
             }
-            let score = (38.0 + shared as f32 * 12.0 + (3.0 - motion).max(0.0) * 7.0)
-                .round()
-                .clamp(0.0, 88.0) as u16;
-            let reason = format!(
-                "Shares {shared} tone{} · voice-leading {:.1}",
-                if shared == 1 { "" } else { "s" },
-                motion
-            );
-            for (from, to) in [(source, target), (target, source)] {
-                index.entry(chord_id(from.name)).or_default().push(RelatedMaterial {
-                    id: chord_id(to.name),
-                    name: to.name.to_string(),
-                    kind: CatalogKind::Chord,
-                    reason: reason.clone(),
-                    score,
-                });
+
+            let shared = source_pcs.intersection(&target_pcs).count();
+            if source_pcs.len() == target_pcs.len() && source_pcs.len().saturating_sub(shared) == 1
+            {
+                builder.add(
+                    MaterialRelation::new(
+                        &from_id,
+                        &to_id,
+                        RelationKind::ScaleNeighbor,
+                        70,
+                        "One degree apart".to_string(),
+                    )
+                    .with_shared_tones(shared),
+                );
             }
+        }
+    }
+}
+
+/// Chords the catalog itself puts next to each other. Authored, not computed:
+/// this is a progression saying these two follow one another in practice, which
+/// is a different claim from any tone-counting rule and stays a separate record.
+fn add_progression_adjacency(builder: &mut RelationBuilder) {
+    for progression in progression::catalog() {
+        for pair in progression.roles.windows(2) {
+            let (a, b) = (
+                pair[0].quality.chord_formula_name(),
+                pair[1].quality.chord_formula_name(),
+            );
+            if a == b {
+                continue;
+            }
+            builder.add(MaterialRelation::new(
+                chord_id(a),
+                chord_id(b),
+                RelationKind::UsedTogether,
+                84,
+                format!("Adjacent in {}", progression.name),
+            ));
         }
     }
 }
@@ -409,12 +895,15 @@ mod tests {
 
         // A user forks the shared catalog into their own graph and adds a chord.
         let mut mine = catalog.fork(LogId::new("mark:private"));
+        let author = Author::new("mark");
         mine.insert_node(
+            &author,
             Container::new(chord_id("Mark's Cluster"))
                 .with_title("Mark's Cluster")
                 .with_tag("chord"),
         );
         mine.connect(
+            &author,
             &chord_id("Mark's Cluster"),
             &scale_id("Chromatic"),
             relation(FITS_IN_SCALE),
@@ -484,45 +973,133 @@ mod tests {
     }
 
     #[test]
-    fn related_material_explains_both_directions() {
-        let chord = related_material(&chord_id("Major 7"), 64);
-        assert!(chord.iter().any(|item| {
-            item.id == scale_id("Major") && item.reason.contains("fits this scale")
-        }));
-        assert!(chord.iter().any(|item| {
-            item.id == progression_id("ii-V-I (Jazz)")
-                && item.reason.contains("Appears in")
-        }));
+    fn a_neighbor_explains_both_directions() {
+        let chord = related_neighbors(&chord_id("Major 7"), 64);
+        let scale = chord
+            .iter()
+            .find(|n| n.id == scale_id("Major"))
+            .expect("the chord fits the major scale");
+        assert!(scale.kinds().contains(&RelationKind::FitsInScale));
 
-        let scale = related_material(&scale_id("Major"), 64);
-        assert!(scale.iter().any(|item| {
-            item.id == chord_id("Major 7") && item.reason.contains("fits Major")
-        }));
+        let progression = chord
+            .iter()
+            .find(|n| n.id == progression_id("ii-V-I (Jazz)"))
+            .expect("the chord appears in the progression");
+        assert!(progression.kinds().contains(&RelationKind::AppearsIn));
+
+        // The same fact from the scale's end names the inverse kind.
+        let from_scale = related_neighbors(&scale_id("Major"), 64);
+        let back = from_scale
+            .iter()
+            .find(|n| n.id == chord_id("Major 7"))
+            .expect("the scale admits the chord");
+        assert!(back.kinds().contains(&RelationKind::ScaleAdmits));
     }
 
     #[test]
     fn chord_and_arpeggio_are_distinct_related_identities() {
-        let chord = related_material(&chord_id("Minor 7"), 64);
+        let chord = related_neighbors(&chord_id("Minor 7"), 64);
         let arpeggio = chord
             .iter()
-            .find(|item| item.id == arpeggio_id("Minor 7"))
+            .find(|n| n.id == arpeggio_id("Minor 7"))
             .expect("chord offers its arpeggio realization");
         assert_eq!(arpeggio.kind, CatalogKind::Arpeggio);
-        assert_eq!(arpeggio.score, 100);
+        assert!(arpeggio.kinds().contains(&RelationKind::RealizedBy));
 
-        let reverse = related_material(&arpeggio_id("Minor 7"), 64);
-        assert!(reverse.iter().any(|item| item.id == chord_id("Minor 7")));
+        let reverse = related_neighbors(&arpeggio_id("Minor 7"), 64);
+        let source = reverse
+            .iter()
+            .find(|n| n.id == chord_id("Minor 7"))
+            .expect("the arpeggio points back at its chord");
+        assert!(source.kinds().contains(&RelationKind::Realizes));
     }
 
     #[test]
-    fn chord_affinity_scores_shared_tones_and_voice_leading() {
-        let related = related_material(&chord_id("Major"), 64);
-        let major_7 = related
+    fn one_pair_keeps_every_applicable_relation() {
+        // Major and Major 7 are related several ways at once. Ranking picks the
+        // order; it must not pick a winner and drop the rest.
+        let relations = relations_between(&chord_id("Major"), &chord_id("Major 7"));
+        let kinds: Vec<RelationKind> = relations.iter().map(|r| r.kind).collect();
+        assert!(kinds.contains(&RelationKind::ExtendedBy), "{kinds:?}");
+        assert!(kinds.contains(&RelationKind::SharesTones), "{kinds:?}");
+        assert!(kinds.contains(&RelationKind::VoiceLeadsTo), "{kinds:?}");
+        assert!(
+            relations.len() >= 3,
+            "several relations survive ranking: {kinds:?}"
+        );
+
+        // Each carries its own measurement, rather than one blended score.
+        let shared = relations
             .iter()
-            .find(|item| item.id == chord_id("Major 7"))
+            .find(|r| r.kind == RelationKind::SharesTones)
+            .unwrap();
+        assert_eq!(shared.shared_tones, Some(3));
+        let motion = relations
+            .iter()
+            .find(|r| r.kind == RelationKind::VoiceLeadsTo)
+            .unwrap();
+        assert!(motion.distance.is_some());
+    }
+
+    #[test]
+    fn relations_carry_the_authority_that_produced_them() {
+        // Authored by a progression...
+        let together = relations_between(&chord_id("Minor 7"), &chord_id("Dominant 7"));
+        let authored = together
+            .iter()
+            .find(|r| r.kind == RelationKind::UsedTogether)
+            .expect("ii-V puts them next to each other");
+        assert_eq!(authored.authority, RelationAuthority::Catalog);
+        assert!(authored.explanation.starts_with("Adjacent in"));
+
+        // ...versus derived from the formulas.
+        let computed = relations_between(&chord_id("Major"), &chord_id("Major 7"));
+        assert!(
+            computed
+                .iter()
+                .filter(|r| r.kind != RelationKind::UsedTogether)
+                .all(|r| r.authority == RelationAuthority::Computed)
+        );
+    }
+
+    #[test]
+    fn modes_of_one_scale_relate_as_modes() {
+        let dorian = related_neighbors(&scale_id("Dorian"), 128);
+        let major = dorian
+            .iter()
+            .find(|n| n.id == scale_id("Major"))
+            .expect("Dorian is a rotation of the major scale");
+        assert!(major.kinds().contains(&RelationKind::ModeOf));
+        assert_eq!(major.primary().authority, RelationAuthority::Computed);
+    }
+
+    #[test]
+    fn ranking_prefers_multiplicity_without_merging_it() {
+        let neighbors = related_neighbors(&chord_id("Major"), 128);
+        let major_7 = neighbors
+            .iter()
+            .find(|n| n.id == chord_id("Major 7"))
             .expect("closely related chord");
         assert!(major_7.score > 60);
-        assert!(major_7.reason.contains("Shares 3 tones"));
-        assert!(major_7.reason.contains("voice-leading"));
+        assert!(major_7.relations.len() > 1, "multiplicity is retained");
+        // The score reflects the strongest relation plus a bounded bonus, so it
+        // can never exceed a scale of 100 or reorder by count alone.
+        let best = major_7.relations.iter().map(|r| r.weight).max().unwrap();
+        assert!(major_7.score >= best && major_7.score <= best.saturating_add(8));
+        // Neighbors arrive strongest-first.
+        assert!(neighbors.windows(2).all(|w| w[0].score >= w[1].score));
+    }
+
+    #[test]
+    fn deterministic_relations_need_no_history() {
+        // Nothing in this crate reads practice history: every relation it
+        // produces is Catalog or Computed. The Evidence kinds exist for the
+        // consumer that owns the history to add to the same records.
+        let neighbors = related_neighbors(&chord_id("Major 7"), 128);
+        assert!(!neighbors.is_empty());
+        assert!(neighbors.iter().flat_map(|n| &n.relations).all(|r| {
+            r.authority == RelationAuthority::Catalog || r.authority == RelationAuthority::Computed
+        }));
     }
 }
+

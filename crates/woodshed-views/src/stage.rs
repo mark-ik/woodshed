@@ -15,7 +15,7 @@ use woodshed_core::settings::{AppSettings, SettingsPage};
 use woodshed_core::song::SongDoc;
 use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, RelatedTarget, StageState, ROOT_NAMES};
-use woodshedding::rehearsal::{Card, FretWindow, Hold, MarkMode, Set, Touch};
+use woodshedding::rehearsal::{Card, CardId, FretWindow, Hold, MarkMode, Set, Touch};
 use cambium::{
     clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, GenetCtx,
     GenetElement, GraphCanvasEdge, GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch,
@@ -98,9 +98,16 @@ pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, 
 
 /// The current Set as a numbered, selectable graph. The ordered Set remains
 /// the source document; this adapter supplies bounded layout and applies the
-/// user's edge-visibility setting for the graph-canvas component.
-pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<usize, &'static str> {
-    let graph = ui.set.graph();
+/// user's relation-visibility setting for the graph-canvas component.
+///
+/// Nodes are keyed by [`CardId`], so selection, hover, and the DOM key survive
+/// reorder and removal. The visible number and the serpentine slot are read off
+/// current order and change freely under it.
+pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<CardId, &'static str> {
+    let graph = ui
+        .set
+        .graph()
+        .with_relations(&ui.app_settings.stage.visible_relations());
     let count = graph.nodes.len();
     let columns = count.clamp(1, 6);
     let rows = count.div_ceil(columns).max(1);
@@ -116,26 +123,25 @@ pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<usize, &'static str> 
                 columns - 1 - raw_column
             };
             GraphCanvasNode {
-                id: node.index,
+                id: node.id,
                 kind: node.kind,
                 position: (
                     (column as f32 + 0.5) / columns as f32,
                     (row as f32 + 0.5) / rows as f32,
                 ),
                 label: format!("{} · {}", node.number, node.label),
-                key: Some(format!("set-card-{}", node.index)),
+                key: Some(format!("set-card-{}", node.id.0)),
             }
         })
         .collect();
-    let edges = if ui.app_settings.stage.show_set_sequence_edges {
-        graph
-            .edges
-            .into_iter()
-            .map(|edge| GraphCanvasEdge { from: edge.from, to: edge.to })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let edges = graph
+        .edges
+        .into_iter()
+        .map(|edge| GraphCanvasEdge {
+            from: edge.from,
+            to: edge.to,
+        })
+        .collect();
     let mut swatch = GraphCanvasSwatch::new(
         SET_GRAPH_LEAF_KEY,
         GraphCanvasSubgraph { nodes, edges },
@@ -144,9 +150,11 @@ pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<usize, &'static str> 
     .with_label("Staged Set graph")
     .with_expand(false)
     .with_node_labels(true);
-    if !ui.set.cards.is_empty() {
-        swatch.selected = Some(ui.set.cursor.min(ui.set.cards.len() - 1));
-    }
+    swatch.selected = ui.set.cursor_id();
+    // Focus is the *native* focus reported back by the node buttons, not a
+    // mirror of selection: painting a ring where the keyboard is not would be
+    // a lie about where a keystroke lands.
+    swatch.focus = ui.set_graph_focus;
     swatch.hovered = ui.set_graph_hover;
     swatch
 }
@@ -363,8 +371,12 @@ pub struct UiState {
     pub song_clear_loop_requested: bool,
     /// Whether the document-bottom Set tray shows its Cards and editor.
     pub set_tray_expanded: bool,
-    /// The Set graph node under the pointer. Transient paint emphasis.
-    pub set_graph_hover: Option<usize>,
+    /// The Set graph node under the pointer, by occurrence identity. Transient
+    /// paint emphasis.
+    pub set_graph_hover: Option<CardId>,
+    /// The Set graph node holding native keyboard focus, by occurrence
+    /// identity, so focus survives reorder and removal.
+    pub set_graph_focus: Option<CardId>,
     /// Whether the selected graph node is expanded into the shared Card editor.
     pub set_graph_card_expanded: bool,
     /// Note markers the user has pinned as `(string_index, fret)` to keep their
@@ -433,6 +445,7 @@ impl UiState {
             song_clear_loop_requested: false,
             set_tray_expanded: true,
             set_graph_hover: None,
+            set_graph_focus: None,
             set_graph_card_expanded: true,
             pinned_markers: Vec::new(),
             hover_peek: None,
@@ -883,6 +896,12 @@ impl UiState {
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
         self.app_settings = session.settings.clone();
+        // The one bounded migration for sessions written before occurrence
+        // identity: Cards gain ids, the legacy single-boolean edge toggle
+        // becomes a relation set. Both persist on the next save, and both
+        // are idempotent for sessions written after.
+        self.set.ensure_card_ids();
+        self.app_settings.stage.adopt_legacy_relation_visibility();
         self.section = session.section;
         self.transport.bpm = session.settings.metronome.bpm.clamp(30.0, 300.0);
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);

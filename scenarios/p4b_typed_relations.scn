@@ -1,0 +1,38 @@
+# P4b receipt: one pair, several relations, none of them ranked away.
+#
+# The claim is that the Related frontier stopped flattening. So this drives to a
+# material whose neighbors are related more than one way, and asserts on the
+# relation records themselves — how many, of which kinds, under which authority
+# — rather than on a rendered string.
+#
+# Drive with testing/woodshed/run-scenario.ps1.
+
+log P4b: typed relations, multiplicity retained
+settle 3
+
+# Chords, where the deterministic vocabulary is richest.
+click .lens Chord
+settle 3
+assert snap lens == Chords
+
+# The frontier holds pairs related several ways at once. The top row need not
+# be one of them: an arpeggio realizes its chord and does only that, honestly.
+assert snap related-multi-count >= 1
+assert snap related-richest-relations >= 2
+assert snap related-richest-kinds ~ shares tones
+assert snap related-richest-kinds ~ voice-leads to
+capture 01_related_multiplicity
+
+# Every reason is deterministic here: no history has been recorded, so nothing
+# in the frontier claims evidence it does not have.
+assert snap related-richest-authorities ~ Computed
+log authorities: deterministic only, before any practice is recorded
+
+# Stage from the frontier: that records an engagement, which is what turns a
+# later run's reasons into evidence-plus-theory rather than either alone.
+click .related-stage
+settle 3
+assert snap set-cards == 1
+capture 02_staged_from_frontier
+
+log P4b receipt complete

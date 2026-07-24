@@ -1,8 +1,22 @@
-use woodshedding::rehearsal::{Hold, LoopMode, Recipe, Touch};
+use woodshedding::rehearsal::{CardId, Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
 use woodshed_core::storage::AppSection;
-use cambium::{clickable, el, graph_canvas_swatch, map_state, text, text_field};
+use cambium::{
+    clickable, el, graph_canvas_swatch_with_focus, map_state, text, text_field,
+};
 
 use super::{set_graph_swatch, UiChild, UiState};
+
+/// Label for one relation family's visibility toggle. The family is named, so
+/// adding the harmonic or evidence layer reads as another entry rather than a
+/// second unexplained switch.
+fn relation_toggle_label(ui: &UiState, kind: SetGraphEdgeKind) -> String {
+    let state = if ui.app_settings.stage.shows_relation(kind) {
+        "on"
+    } else {
+        "off"
+    };
+    format!("{} edges: {state}", kind.label())
+}
 
 fn hold_label(hold: &Hold) -> String {
     match hold {
@@ -166,18 +180,21 @@ pub(super) fn view(ui: &UiState) -> UiChild {
         } else {
             Box::new(el("div", ()))
         };
-        let graph = graph_canvas_swatch(
+        let graph = graph_canvas_swatch_with_focus(
             &swatch,
-            |ui: &mut UiState, index: usize| {
-                let was_selected = ui.set.cursor == index;
-                ui.set.cursor = index;
+            |ui: &mut UiState, id: CardId| {
+                let was_selected = ui.set.cursor_id() == Some(id);
+                if !ui.set.select_id(id) {
+                    return;
+                }
                 ui.set_graph_card_expanded = if was_selected {
                     !ui.set_graph_card_expanded
                 } else {
                     true
                 };
             },
-            |ui: &mut UiState, index: Option<usize>| ui.set_graph_hover = index,
+            |ui: &mut UiState, id: Option<CardId>| ui.set_graph_hover = id,
+            |ui: &mut UiState, id: Option<CardId>| ui.set_graph_focus = id,
             |_ui: &mut UiState| {},
         );
         Box::new(el(
@@ -188,21 +205,22 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     (
                         el("div", text("Set graph")).attr("class", "set-graph-heading"),
                         graph,
-                        clickable(
-                            el(
-                                "div",
-                                text(if ui.app_settings.stage.show_set_sequence_edges {
-                                    "Sequence edges: on"
-                                } else {
-                                    "Sequence edges: off"
-                                }),
-                            )
-                            .attr("class", "t-btn"),
-                            |ui: &mut UiState, _| {
-                                ui.app_settings.stage.show_set_sequence_edges =
-                                    !ui.app_settings.stage.show_set_sequence_edges;
-                            },
-                        ),
+                        el(
+                            "div",
+                            clickable(
+                                el(
+                                    "div",
+                                    text(relation_toggle_label(ui, SetGraphEdgeKind::Next)),
+                                )
+                                .attr("class", "t-btn"),
+                                |ui: &mut UiState, _| {
+                                    ui.app_settings
+                                        .stage
+                                        .toggle_relation(SetGraphEdgeKind::Next);
+                                },
+                            ),
+                        )
+                        .attr("class", "set-graph-controls"),
                     ),
                 )
                 .attr("class", "set-graph"),

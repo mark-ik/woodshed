@@ -311,6 +311,32 @@ mod tests {
     }
 
     #[test]
+    fn the_legacy_sequence_edge_toggle_becomes_a_relation_set() {
+        use woodshedding::rehearsal::SetGraphEdgeKind;
+
+        // A session written while Set-graph edge visibility was one boolean.
+        let mut off: PersistedSession =
+            serde_json::from_str(r#"{"show_set_sequence_edges":false}"#).unwrap();
+        assert!(
+            off.settings.stage.shows_relation(SetGraphEdgeKind::Next),
+            "the default set is unchanged until the legacy value is adopted"
+        );
+
+        off.settings.stage.adopt_legacy_relation_visibility();
+        assert!(!off.settings.stage.shows_relation(SetGraphEdgeKind::Next));
+
+        // The legacy key is consumed, so the next save writes only the set.
+        let json = serde_json::to_string(&off).unwrap();
+        assert!(!json.contains("show_set_sequence_edges"));
+        assert!(json.contains("visible_set_relations"));
+
+        // A session written after the migration is untouched by it.
+        let mut on: PersistedSession = serde_json::from_str(&json).unwrap();
+        on.settings.stage.adopt_legacy_relation_visibility();
+        assert!(!on.settings.stage.shows_relation(SetGraphEdgeKind::Next));
+    }
+
+    #[test]
     fn legacy_tabs_migrate_to_current_sections() {
         let practice: PersistedSession = serde_json::from_str(r#"{"tab":"Practice"}"#).unwrap();
         assert_eq!(practice.section, AppSection::Stage);

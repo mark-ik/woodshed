@@ -15,3 +15,8 @@ categories = ["multimedia::audio", "data-structures"]
 # Card/set vocabulary (the `rehearsal` module) derives serde so app and
 # future CLI/web shells share one persistable core. Pure data, no I/O.
 serde = { workspace = true }
+
+[dev-dependencies]
+# Tests only: Set round-trips and the legacy-session migration are claims
+# about the wire format, so they are checked against real JSON.
+serde_json = { workspace = true }

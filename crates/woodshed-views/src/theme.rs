@@ -346,6 +346,9 @@ pub fn stage_css(p: &Palette) -> String {
 .set-tray {{ margin-top: 14px; background-color: {surface}; border-radius: 10px; padding: 12px; }}
 .set-graph {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }}
 .set-graph-heading {{ color: {text_dim}; font-size: 10px; width: 100%; text-transform: uppercase; }}
+/* The swatch paints node labels past its own box, so a control beside it gets
+   overdrawn (seen in the P4a receipt). Give the controls their own row. */
+.set-graph-controls {{ width: 100%; display: flex; gap: 8px; }}
 .set-toolbar {{ display: flex; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }}
 .set-heading {{ color: {text}; font-size: 15px; font-weight: 700; margin-right: auto; padding-right: 10px; }}
 .set-cards {{ display: flex; flex-wrap: wrap; }}
@@ -369,6 +372,9 @@ pub fn stage_css(p: &Palette) -> String {
 .related-copy-text {{ min-width: 0; }}
 .related-name {{ color: {text}; font-size: 13px; }}
 .related-why {{ margin-top: 1px; }}
+/* The relations this pair carries beyond the one shown above. Quiet, because
+   it is a completeness cue rather than the headline. */
+.related-also {{ color: {tertiary}; font-size: 10px; margin-top: 1px; }}
 .related-actions {{ display: flex; align-items: center; margin-left: 6px; }}
 .related-stage {{ color: {tertiary}; font-size: 12px; padding: 4px 7px; border-radius: 5px; cursor: pointer; }}
 .related-hide {{ color: {text_dim}; font-size: 14px; padding: 2px 7px; cursor: pointer; }}

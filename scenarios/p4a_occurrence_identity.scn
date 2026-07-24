@@ -1,0 +1,55 @@
+# P4a receipt: a staged Card occurrence has an identity of its own.
+#
+# The claim under test is not "the graph draws": it is that a node is addressed
+# by who it is, not where it sits. So every step targets identity — the DOM key
+# the node carries, the id the snapshot reports — and the reorder step exists to
+# make position and identity disagree on purpose.
+#
+# Drive with testing/woodshed/run-scenario.ps1.
+
+log P4a: occurrence identity in the Set graph
+settle 3
+
+# One catalog material, staged three times. Same label, three occurrences.
+click .t-btn Stage
+click .t-btn Stage
+click .t-btn Stage
+settle 2
+assert snap set-cards == 3
+assert event set-size 3
+
+# Open the tray's graph projection: three nodes, two derived Next edges.
+click .t-btn Expand
+settle 3
+assert snap tray-expanded == true
+assert snap graph-nodes == 3
+assert snap graph-edges == 2
+capture 01_three_occurrences
+
+# Select the second occurrence through the identity the DOM carries, not by
+# position and not by its (duplicated) label.
+click .graph-canvas-swatch-node @data-key=set-card-2
+settle 2
+assert snap cursor-id == 2
+assert snap cursor-number == 2
+assert snap card-expanded == true
+capture 02_selected_by_identity
+
+# Reorder it. The visible number follows order; the identity does not move.
+act move-selected-down
+settle 3
+assert snap cursor-id == 2
+assert snap cursor-number == 3
+assert event set-cursor id=2 number=3
+capture 03_reordered_same_identity
+
+# Relation visibility is a view state: the edges go, the occurrences stay.
+click .t-btn Sequence edges
+settle 3
+assert snap graph-edges == 0
+assert snap graph-nodes == 3
+assert snap set-cards == 3
+assert snap relations == none
+capture 04_relations_hidden
+
+log P4a receipt complete

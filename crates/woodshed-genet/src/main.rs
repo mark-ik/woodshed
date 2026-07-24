@@ -15,11 +15,13 @@
 
 mod audio;
 mod midi;
+mod scenario;
 mod storage;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,6 +44,8 @@ use genet_layout::{
 use genet_scripted_dom::{NodeId, ScriptedDom};
 use cambium_winit::{key_event_from_winit, modifiers_from_winit, wheel_axes, A11yHost, ScrollbarFade};
 use genet_winit_host::SurfaceHost;
+
+use crate::scenario::{Observed, ScenarioLane};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -166,6 +170,23 @@ struct App {
     /// Auto-hide clock for overlay scrollbars (shared cambium-winit policy):
     /// wheel activity wakes the scrolled target's bar, which holds then fades.
     scrollbar_fade: ScrollbarFade<ScrollTarget<NodeId>>,
+    /// The self-drive lane (`WOODSHED_SCENARIO`); `None` for an ordinary run.
+    scenario: Option<ScenarioLane>,
+    /// Where a scenario's captures and sentinel go (`WOODSHED_CAPTURE_DIR`).
+    /// On the app rather than the lane: the lane is moved out during a tick.
+    capture_dir: Option<PathBuf>,
+    /// A `capture` step's target, performed by the next frame's redraw while
+    /// the rasterized view is still alive.
+    pending_capture: Option<PathBuf>,
+    /// Semantic transitions since the driver last drained them.
+    events: Vec<String>,
+    /// The last sampled observation, for diffing into `events`.
+    observed: Observed,
+}
+
+/// A logical window dimension from the environment, for reproducible receipts.
+fn env_size(key: &str) -> Option<f64> {
+    std::env::var(key).ok()?.parse::<f64>().ok().filter(|v| *v > 0.0)
 }
 
 /// Resolve a MIDI port dropdown selection to a connect target: index 0
@@ -799,6 +820,13 @@ impl App {
             ExternalTexturePlacement::new([0.0, 0.0, pw as f32, ph as f32]),
         );
         frame.present();
+        // A `capture` step armed by the previous frame: compose the view this
+        // frame rasterized into an owned target and read it back.
+        if let Some(path) = self.pending_capture.take() {
+            if !scenario::capture_view(host, &view, pw, ph, &path) {
+                eprintln!("[woodshed-genet] capture failed: {}", path.display());
+            }
+        }
         if tuner_live || anim_active {
             window.request_redraw();
         }
@@ -1143,8 +1171,12 @@ impl ApplicationHandler for App {
                 let pos = monitor.position();
                 let logical_w = size.width as f64 / scale;
                 let logical_h = size.height as f64 / scale;
-                let width = 1_100.0_f64.min((logical_w - 48.0).max(480.0));
-                let height = 664.0_f64.min((logical_h - 48.0).max(360.0));
+                // A scenario run asks for a deterministic window: a receipt
+                // captured at a different size is a different layout.
+                let want_w = env_size("WOODSHED_WIDTH").unwrap_or(1_100.0);
+                let want_h = env_size("WOODSHED_HEIGHT").unwrap_or(664.0);
+                let width = want_w.min((logical_w - 48.0).max(480.0));
+                let height = want_h.min((logical_h - 48.0).max(360.0));
                 let x = pos.x as f64 / scale + ((logical_w - width) / 2.0).max(8.0);
                 let y = pos.y as f64 / scale + ((logical_h - height) / 2.0).max(8.0);
                 (
@@ -1337,6 +1369,10 @@ impl ApplicationHandler for App {
                 // After the frame is laid out and presented, refresh the
                 // accessibility tree and drain any screen-reader actions.
                 self.sync_a11y();
+                // Then pump the scenario, if one is driving: one step per
+                // presented frame, so every assertion reads a state that was
+                // actually rendered.
+                self.drive_scenario();
             }
             _ => {}
         }
@@ -1382,6 +1418,11 @@ fn main() {
         reduce_motion: false,
         text_scale: "Normal".into(),
         scrollbar_fade: ScrollbarFade::new(),
+        scenario: ScenarioLane::from_env(),
+        capture_dir: ScenarioLane::capture_dir_from_env(),
+        pending_capture: None,
+        events: Vec::new(),
+        observed: Observed::default(),
     };
     event_loop.run_app(&mut app).expect("run app");
 }
