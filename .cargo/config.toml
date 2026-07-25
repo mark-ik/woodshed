@@ -25,9 +25,6 @@ rustflags = ["-C", "link-arg=/DEBUG:LongSymbolTruncate"]
 # stylo_taffy adapter. Cargo does not chain a second patch through the
 # committed crates.io -> Genet Git redirect.
 [patch.crates-io]
-cambium = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium" }
-cambium-winit = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit" }
-sprigging = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/sprigging" }
 layout-dom-api = { path = "C:/Users/mark_/Code/repos/genet/components/shared/layout-dom" }
 genet-scripted-dom = { path = "C:/Users/mark_/Code/repos/genet/components/genet-scripted-dom" }
 
@@ -42,7 +39,11 @@ netfetcher = { path = "C:/Users/mark_/Code/repos/genet/components/netfetcher" }
 cambium = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium" }
 "cambium-winit" = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit" }
 sprigging = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/sprigging" }
-[patch."https://github.com/mark-ik/tinct"]
+# tinct is a genet component too (2026-07-23), so its redirect belongs in THIS
+# table. It sat under [patch."https://github.com/mark-ik/tinct"] until
+# 2026-07-24, which matched nothing: the local checkout was quietly unused and
+# the build took genet.git's remote copy. Same silent-bypass shape as the
+# cambium version mismatch, and only the "patch was not used" warning said so.
 tinct = { path = "C:/Users/mark_/Code/repos/genet/components/tinct" }
 
 [patch."https://github.com/mark-ik/netrender.git"]

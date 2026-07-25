@@ -676,10 +676,21 @@ receipts are recorded before those platforms are advertised.
   sweep moved the family to cambium 0.3.1 / cambium-winit 0.3.0 / sprigging
   0.2.1, which silently stopped matching this workspace's 0.2.0 pins, so the
   local `[patch]` entries went unused and the host built against the published
-  0.2.0 API without `graph_canvas_swatch` or `on_hover`. Pins bumped to the
-  current family. cambium 0.3.1 and sprigging 0.2.1 are on crates.io;
-  **cambium-winit 0.3.0 is not published**, so the desktop host currently
-  resolves it only through the local patch. No headed receipt yet: the changed
+  0.2.0 API without `graph_canvas_swatch` or `on_hover`, while looking green.
+  Resolved by taking all three from **genet.git by branch**, not from crates.io
+  (Mark, 2026-07-24: cambium-winit will never be published, and the
+  consolidation rewired it onto crates inheriting genet's `publish = false`;
+  hocket reached the same conclusion the same day off a clean Linux checkout).
+  One source for the family is not a preference: `cambium-winit` path-deps
+  cambium and sprigging inside the genet repo, so a git `cambium-winit` beside a
+  registry `cambium` puts two copies of the same types in one graph, and the
+  published cambium/sprigging carry the crates.io `paint_list_api` while the
+  rest of the stack git-deps netrender's. Two dead `[patch.crates-io]` entries
+  removed, and `tinct`'s redirect moved into the genet.git table where it can
+  actually match: it had been keyed to its retired standalone repo, so the local
+  checkout was silently unused. **The lesson generalizes**: every one of these
+  announced itself only as a "patch was not used" warning, which is the one
+  cargo message this workspace must never scroll past. No headed receipt yet: the changed
   surfaces (node selection, the relation toggle's label) want one before P4a is
   called finished.
 

@@ -5350,7 +5350,6 @@ dependencies = [
 [[package]]
 name = "tinct"
 version = "0.1.2"
-source = "git+https://github.com/mark-ik/genet.git?branch=main#890c4e866127ee8f837d37b27f70060c74390d80"
 dependencies = [
  "serde",
 ]
@@ -7110,8 +7109,8 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "tinct"
-version = "0.1.2"
+name = "netfetcher"
+version = "0.1.1"
 
 [[patch.unused]]
 name = "armillary"
@@ -7147,15 +7146,15 @@ version = "0.0.3"
 
 [[patch.unused]]
 name = "sceno"
-version = "0.0.2"
+version = "0.0.3"
 
 [[patch.unused]]
 name = "scenomise"
-version = "0.0.2"
+version = "0.0.3"
 
 [[patch.unused]]
 name = "scenotime"
-version = "0.0.2"
+version = "0.0.3"
 
 [[patch.unused]]
 name = "seiche"
@@ -7171,8 +7170,4 @@ version = "0.1.1"
 
 [[patch.unused]]
 name = "vates"
-version = "0.1.1"
-
-[[patch.unused]]
-name = "netfetcher"
 version = "0.1.1"
