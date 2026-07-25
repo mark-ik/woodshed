@@ -56,7 +56,13 @@ before any other doc in this directory.
   as numbered Card-occurrence nodes with `Next` order, typed theory/history
   layers, configurable relationship views, and node-to-Card semantic zoom.
   Retires Practice as a top-level section and replaces Song/DAW framing with
-  Set-derived looping.
+  Set-derived looping. **Scene-contract gate lifted 2026-07-24:** the
+  scenograph family froze and published at 0.0.3, so Stage's projection work
+  can proceed. Its multi-reason relation requirement needs no upstream change
+  (a pair related four ways is four routed relations), picking and per-item
+  emphasis channels arrive for free, and the fixed-layout arrangements
+  (circle of fifths, interval map) start as `Placement::Coordinate` in a
+  Woodshed-owned `Space` rather than waiting on an upstream arrangement.
 - [2026-07-04_genet_host_cross_platform_plan.md](2026-07-04_genet_host_cross_platform_plan.md)
   — **The delivery architecture.** The move to the Genet desktop host is
   complete: one DOM-shaped `xilem_serval` view tree rendered by Genet. The

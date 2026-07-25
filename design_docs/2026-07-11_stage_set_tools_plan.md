@@ -173,20 +173,58 @@ graphshell consumes `scenotime`'s snapshot/diff pair for remote replay. The
 family also moved: `sceno`/`scenomise`/`scenotime` 0.0.2 now live in mere at
 `crates/scenograph`, not a standalone repo.
 
-What remains is the freeze, not the proof. The live items are listed in that
-family's scene contract note: whether action intents belong in the contract or
-stay in graphshell's protocol, whether the unconsumed `measure` module earns
-its place, per-item emphasis channels, and where hit resolution lives. Two
+**The freeze landed 2026-07-24**, published as `sceno` / `scenomise` /
+`scenotime` / `scenograph` 0.0.3 on crates.io. The gate on scene-contract
+consumption is lifted; Woodshed can adopt against a stated contract. The four
+questions and their rulings, with what each means here:
+
+- **Action intents stay out of `sceno`, permanently.** They live in the
+  consuming protocol, bound to an instance id plus the epoch and revision it
+  was observed at. Woodshed's gesture story is therefore its own to define,
+  and it inherits no vocabulary it would have to agree with.
+- **`measure` is deleted.** Hosts stamp the measured extent on
+  `ScoreItem.footprint`, which is where `StageGraphSnapshot` should put a
+  note's or fingering's size. There is no separate measurement map to fill.
+- **Per-item emphasis channels landed** as an open `Vec<(String, f32)>` on
+  `ProjectedItem`. Practice recency is exactly this shape: a per-note or
+  per-card scalar the view shades by, carried inside the scene rather than
+  read back out of Woodshed's store.
+- **Picking landed in `scenotime`**, resolving a point to the topmost
+  instance through the space chain. This is directly the fretboard case: a
+  `Space` mapping (string, fret) to screen means a click resolves to a note
+  instance without Woodshed writing hit-testing at all.
+
+**The multi-reason requirement is satisfied with no contract change**, which
+was the open worry. A chord pair carrying diatonic, shared-tone,
+voice-leading, and practiced-after is **four `RoutedRelation`s**, not one
+relation with four reasons. Relations deliberately did not get a channel map,
+because mere had already ruled that multi-edge is truth and collapsing to one
+line is an experience setting. Selecting an edge exposing every applicable
+reason and its authority, the requirement stated above, is the fanned form
+rendered without dedup.
+
+Two
 consequences for this plan. First, `scenomise::relax` (2026-07-23) is
 dependency-free relaxation aimed squarely at swatch-scale surfaces, which is
 exactly what `related_swatch` is, so the retirement named above has a landed
-mechanism waiting for it. Second, the shipped arrangements are `Spiral`,
-`Board`, and `Geographic`; Woodshed's circle-of-fifths and interval maps are
-fixed semantic layouts that no shipped arrangement covers, so P4e either
-contributes a new arrangement upstream or places through `Placement::Coordinate`
-in a Woodshed-owned frame. That choice is the first real design question
-Woodshed puts to the contract, and it is worth asking before the freeze rather
-than after.
+mechanism waiting for it.
+
+Second, the arrangement question is **not** answered by the freeze, and that
+is deliberate rather than an oversight. The shipped arrangements remain
+`Spiral`, `Board`, and `Geographic`; a circle of fifths and an interval map
+are fixed semantic layouts none of them covers. The freeze settled the
+contract's *shape* questions, not the arrangement catalog, which is a growth
+axis: `Arrangement` is a closed enum, so adding a variant is a routine break
+at `0.0.x` and remains available whenever it is earned.
+
+The recommendation is to start with `Placement::Coordinate` inside a
+Woodshed-owned `Space`, which needs no upstream change at all and is the
+usage the contract note already blesses (a fretboard *is* a `Space`; a
+Tonnetz or circle is a second fixed-layout frame). Promote a shared
+arrangement upstream only when a second consumer wants the same layout,
+which is the same "decide when a consumer forces it" standard the family
+applied to every question it just closed. Woodshed proving the fixed-layout
+case locally is the evidence that would justify promoting it.
 
 ### Replace the Song model
 
