@@ -150,6 +150,7 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
     let recent: Vec<UiChild> = ui
         .practice_history
         .recent(4)
+        .into_iter()
         .map(|event| {
             let title = event
                 .subject_id

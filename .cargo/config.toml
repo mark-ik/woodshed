@@ -38,6 +38,7 @@ genet-scripted-dom = { path = "C:/Users/mark_/Code/repos/genet/components/genet-
 netfetcher = { path = "C:/Users/mark_/Code/repos/genet/components/netfetcher" }
 cambium = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium" }
 "cambium-winit" = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit" }
+"cambium-winit-a11y" = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/cambium-winit-a11y" }
 sprigging = { path = "C:/Users/mark_/Code/repos/genet/components/cambium/sprigging" }
 # tinct is a genet component too (2026-07-23), so its redirect belongs in THIS
 # table. It sat under [patch."https://github.com/mark-ik/tinct"] until

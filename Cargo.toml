@@ -48,10 +48,14 @@ winit = "0.30"
 # after a clean Linux checkout caught it. Two reasons, and both only show up
 # away from a dev machine whose gitignored [patch] file hides them:
 #
-#   1. `cambium-winit` can never be published. The consolidation rewired it
-#      onto genet-layout and genet-winit-host, which inherit genet's
-#      `publish = false`, so the 0.3.0 this pinned does not exist and cannot
-#      be made to. Only a yanked 0.2.0 and an ancient 0.1.0 are on crates.io.
+#   1. ~~`cambium-winit` can never be published.~~ **Fixed 2026-07-26 by
+#      splitting it.** The consolidation had rewired it onto genet-layout and
+#      genet-winit-host, which inherit genet's `publish = false`. Those two are
+#      needed by the a11y host alone, which now lives in `cambium-winit-a11y`;
+#      the thin `cambium-winit` depends on `cambium` + `winit` only and
+#      dry-run-publishes clean. Reason 2 still stands on its own, and Mark ruled
+#      git-first for the whole family on 2026-07-26 regardless, so nothing here
+#      moves to the registry.
 #   2. The published cambium/sprigging depend on the crates.io `paint_list_api`
 #      while we (and the rest of the genet stack) git-dep netrender's, so a
 #      `sprigging::PaintCmd` is not a `paint_list_api::PaintCmd`.
@@ -59,6 +63,11 @@ winit = "0.30"
 #      dependency; taking all three from the source everything else uses does.
 cambium = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 cambium-winit = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# The AccessKit host, split out of cambium-winit 2026-07-26. This is the half
+# that genuinely cannot be published (it needs genet-layout and
+# genet-winit-host); the thin cambium-winit above now can be, though woodshed
+# keeps taking it from git for reason 2 below.
+cambium-winit-a11y = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 sprigging = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }

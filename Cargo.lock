@@ -810,6 +810,7 @@ dependencies = [
 name = "cambium"
 version = "0.3.2"
 dependencies = [
+ "genet-host-api",
  "genet-scripted-dom",
  "layout-dom-api",
  "meristem",
@@ -821,8 +822,15 @@ dependencies = [
 name = "cambium-winit"
 version = "0.3.0"
 dependencies = [
- "accesskit",
  "cambium",
+ "winit",
+]
+
+[[package]]
+name = "cambium-winit-a11y"
+version = "0.3.0"
+dependencies = [
+ "accesskit",
  "genet-layout",
  "genet-scripted-dom",
  "genet-winit-host",
@@ -887,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "chartulary"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "codicil",
  "muniment",
@@ -1894,6 +1902,10 @@ dependencies = [
  "typenum",
  "version_check",
 ]
+
+[[package]]
+name = "genet-host-api"
+version = "0.1.0"
 
 [[package]]
 name = "genet-layout"
@@ -6664,6 +6676,7 @@ dependencies = [
 name = "woodshed-core"
 version = "0.1.0"
 dependencies = [
+ "chartulary",
  "hex",
  "personae",
  "serde",
@@ -6678,6 +6691,7 @@ version = "0.1.0"
 dependencies = [
  "cambium",
  "cambium-winit",
+ "cambium-winit-a11y",
  "directories",
  "genet-layout",
  "genet-probe",

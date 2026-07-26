@@ -2427,9 +2427,11 @@ mod tests {
         s.select_scale(dorian);
         let mut history = history::PracticeHistory::default();
         history.record(
+            Some(1_000),
             woodshed_graph::chord_id("Minor 7"),
             history::EngagementKind::Staged,
             Some(woodshed_graph::scale_id("Dorian")),
+            None,
         );
         let ranked = s.related_material_with_history(&history, 5);
         assert_eq!(ranked[0].title, "Minor 7");
@@ -2460,9 +2462,11 @@ mod tests {
         s.select_scale(dorian);
         let mut history = history::PracticeHistory::default();
         history.record(
+            Some(1_000),
             woodshed_graph::chord_id("Minor 7"),
             history::EngagementKind::Staged,
             Some(woodshed_graph::scale_id("Dorian")),
+            None,
         );
         let settings = storage::RelatedSettings {
             use_history: false,

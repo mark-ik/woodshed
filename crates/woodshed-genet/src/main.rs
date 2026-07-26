@@ -42,7 +42,10 @@ use genet_layout::{
     SourceNodeId,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use cambium_winit::{key_event_from_winit, modifiers_from_winit, wheel_axes, A11yHost, ScrollbarFade};
+use cambium_winit::{key_event_from_winit, modifiers_from_winit, wheel_axes, ScrollbarFade};
+// The a11y host is a separate crate as of 2026-07-26, so `cambium-winit` can
+// stay publishable; a host that wants both simply takes both.
+use cambium_winit_a11y::A11yHost;
 use genet_winit_host::SurfaceHost;
 
 use crate::scenario::{Observed, ScenarioLane};
@@ -580,11 +583,22 @@ impl App {
         let mut clock_out_enabled = false;
         let mut clock_out_playing = false;
         let mut clock_out_bpm = 120.0_f32;
+        // Wall clock for the practice history. The core and the view layer read
+        // no clock of their own, so the host dates every engagement: this is
+        // refreshed once per frame, which leaves a click's event at most one
+        // frame stale — irrelevant at the granularity practice history means,
+        // and the alternative (a clock inside a portable crate) is what a
+        // browser host could not honour.
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|since| since.as_millis() as u64);
         if let (Some(runner), Some(backend)) = (self.runner.as_mut(), self.backend.as_mut()) {
             let now = std::time::Instant::now();
             let last_arp = &mut self.last_arp_step;
             let last_rehearsal = &mut self.last_rehearsal_step;
             runner.update(|ui| {
+                ui.now_ms = now_ms;
                 if ui.tuner.enabled {
                     ui.tuner.reading = backend.tuner_reading();
                     animating = true;

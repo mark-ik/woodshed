@@ -150,7 +150,7 @@ facts, not seven hand-built swatches, and the current `related_swatch` radial
 placement is the first thing the contract retires.
 
 Woodshed is the source-model sanity check for that contract. Every other
-consumer (merecat, hocket, isometry) authors or generates content before the
+consumer (turnstone, hocket, isometry) authors or generates content before the
 engine has anything to project; music theory hands Woodshed a dense,
 deterministic, multi-relational fixture on day one, where one chord pair carries
 diatonic, shared-tone, voice-leading, and practiced-after relations at once with
@@ -662,6 +662,104 @@ receipts are recorded before those platforms are advertised.
   pairs sat at rank 10. Added a display-side family interleave (documented as a
   display policy that deletes nothing) and a test pinning it. Recorded but not
   fixed: the panel's own height leaves about two rows visible.
+
+- **2026-07-26, the evidence layer adopted stemma.** Asked whether the clock work
+  should generalize to mere first; the investigation inverted the question. **Mere
+  already had the general thing and woodshed had built a second one**:
+  `chartulary::stemma`, already a dependency through `woodshed-graph`, maintains
+  per-subject `first_seen_at_ms` / `last_seen_at_ms` / `visit_count` and
+  aggregates per-pair traversals with their own recency — the exact inputs a
+  decayed strength model needs and exactly what the local log did not keep. Its
+  `context: X` is a generic per-visit payload, and `StemmaSnapshot` is serde, so
+  it rides woodshed's existing String-moving `Storage` seam with no new
+  persistence lane. **Adopted rather than deferred** (Mark: unification is worth
+  work up front, rather than growing two implementations of one idea) — and the
+  deferral had been incoherent anyway, since the trigger I named was the strength
+  model, which is the next task.
+  `PracticeHistory` keeps its name, vocabulary, and every consumer; only the store
+  beneath it moved. Woodshed still owns the musical judgment (`EngagementKind`,
+  `is_practice`), the substrate owns the structure — the same line P4b drew.
+  **Three mappings decided by the code, not by preference.** The engagement kind
+  rides the visit `context`, not stemma's `TransitionKind`, whose variants answer
+  "how did you get here" and map one-to-one onto a browsing trace (recorded on
+  that type in chartulary, which had "generalize TransitionKind" as a declared
+  open decision; the finding is that if it is ever generalized it wants a type
+  parameter, preserving `Copy`/`Hash`/rkyv, not an open string tail). Datedness
+  rides the context too, since `visit_entry` takes a `u64` and not an `Option`, so
+  an undated engagement is `at_ms = 0` plus `dated: false` and no reader may read
+  it as 1970. And **the stated reason is not the walked path**: a test failure
+  caught that discarding `from_id` in favour of stemma's parent edge silently lost
+  provenance — a first engagement has no parent yet can still name its source — so
+  `from_id` lives in the context as the player's claim while the lineage keeps the
+  path actually walked. Both are now queryable and distinct:
+  `related_transition_count` (the stated reason, ranking a suggestion the player
+  has taken before) and `traversals` (the lineage's own count plus its recency,
+  which is what the strength model will decay).
+  Gained for free: `engagement_count` maintained upstream, per-pair recency, and a
+  class of bug deleted rather than fixed — the sequence counter that could collide
+  on a legacy load no longer exists, because the lineage has no counter.
+  One bounded migration: a session written as the flat log replays into the
+  lineage on load and persists as a lineage from then on, with each engagement's
+  kind, time, and span preserved exactly. Verified: 8 history tests including the
+  flat-log replay and the stated-reason/walked-path separation, 53 core + 14 graph
+  + 6 views + 167 woodshedding green, host builds, and both headed receipts re-run
+  `RESULT ok`.
+  **Next, on the substrate that now supports it**: the strength function
+  (recency-decayed, kind-weighted, emitting both `PracticedBefore`/`PracticedAfter`
+  plus subject-level strength) replacing core's `weight = 90 + count.min(10)`.
+  Retention stays after that, and stemma does not solve it either — `delete_owner`
+  collects ownerless branches, not old visits — so the Alembic/Athanor forgetting
+  pass remains the answer, with `codicil` as the append-only home a growing
+  lineage wants.
+
+- **2026-07-26, the evidence layer gets a clock and a stopwatch:** The layer
+  the plan defines as "observed practice transitions and engagement strength,
+  with event kind and observation time retained" was failing its own spec:
+  `PracticeEvent` carried only a `sequence` counter, with a comment admitting a
+  host could enrich it "when history gains calendar views". Everything downstream
+  wanted that field — strength is inherently time-weighted (twenty reps last year
+  is not strength today), retention cannot evict what it cannot date, and the
+  ranking fudge in core was `weight = 90 + count.min(10)` standing in for a
+  model. So: `PracticeEvent.at_ms` (Unix epoch millis) and `practiced_ms` (the
+  measured span, where an event has one), `record` now takes the time positionally
+  so no call site can forget it silently and returns `&mut PracticeEvent` so a
+  caller with a span attaches it (one door, optional enrichment, rather than a
+  second timed variant to pick wrong). Reads that make the data mean something:
+  `total_practiced_ms`, `last_seen_ms`, `has_times`.
+  **The clock belongs to the host.** Core and views read none of their own — a
+  browser host has a different clock and the portable core has no clock at all —
+  so `UiState.now_ms` is refreshed once per frame by `woodshed-genet` and every
+  engagement is dated from there. `None` means *unknown*, never epoch zero, or
+  every legacy event would silently become maximally ancient.
+  **Elapsed practice is now measured, not counted.** `record_rehearsal_cursor`
+  opens a span when a card becomes active; `complete_rehearsal_cursor` closes it,
+  and completing one card opens the next one's, so spans neither overlap nor
+  restart from the run's beginning. A `checked_sub` means a system-time change
+  mid-session yields no measurement rather than a wrapped one. This is the
+  difference the plan already asserted and could not previously honour: preview
+  and staging are evidence of *interest*, completed practice time is evidence of
+  practice.
+  **Found while writing the legacy test**: `next_sequence` is serialized but
+  defaults to 0, so a session missing it would have minted duplicate sequences
+  over its own events. Same shape as the `CardId` mint, fixed the same way (the
+  mint continues past the highest stored event, not merely past the counter).
+  Verified: 5 new `history` tests (supplied time retained, measured practice
+  outweighing a pile of previews, spans accumulating, the legacy-session
+  migration and its collision), 4 new view tests (the real span, no clock, a
+  backwards clock, consecutive cards), 50 core + 6 views + 167 woodshedding + 14
+  graph green, desktop host builds. No wire migration code needed: both fields are
+  `#[serde(default)]`, so old sessions load as undated and persist dated on the
+  next save.
+  **Still open, in dependency order** (the chain this slice unblocks): a strength
+  model to replace the count fudge (recency-decayed, kind-weighted, emitting both
+  `PracticedBefore`/`PracticedAfter` and a subject-level strength the
+  practice-strength overlay needs), then retention — the real wall, since
+  `events` grows forever inside the sealed session JSON rewritten on every save.
+  Retention is where mere's **Alembic/Athanor** pattern is the answer rather than
+  an analogy: raw events as the short layer, distilled per-subject and per-pair
+  strength as the long layer, a forgetting pass evicting raw events without
+  losing the strength they contributed, and `codicil` as the append-only home a
+  growing event log actually wants.
 
 - **2026-07-24, P4a receipt — woodshed drives itself:** Woodshed had no
   self-drive lane, so its receipts were SendKeys plus a desktop grab, which the

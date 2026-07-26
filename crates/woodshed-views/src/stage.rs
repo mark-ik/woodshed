@@ -371,6 +371,16 @@ pub struct UiState {
     pub song_clear_loop_requested: bool,
     /// Whether the document-bottom Set tray shows its Cards and editor.
     pub set_tray_expanded: bool,
+    /// Wall-clock now, Unix epoch milliseconds, refreshed by the host each
+    /// frame. The view layer reads no clock of its own (a browser host has a
+    /// different one, and the portable core has none), so every practice event
+    /// is dated from here. `None` on a host that supplies no clock, which dates
+    /// its events as unknown rather than as 1970.
+    pub now_ms: Option<u64>,
+    /// When the rehearsal's active card became active. The span between this and
+    /// the completion is the measured practice the evidence layer rests on, so
+    /// it is a real elapsed measurement, not a per-card guess.
+    pub card_started_ms: Option<u64>,
     /// The Set graph node under the pointer, by occurrence identity. Transient
     /// paint emphasis.
     pub set_graph_hover: Option<CardId>,
@@ -444,6 +454,8 @@ impl UiState {
             song_record_toggle_requested: false,
             song_clear_loop_requested: false,
             set_tray_expanded: true,
+            now_ms: None,
+            card_started_ms: None,
             set_graph_hover: None,
             set_graph_focus: None,
             set_graph_card_expanded: true,
@@ -829,7 +841,7 @@ impl UiState {
         };
         if let Some(subject_id) = subject_id {
             self.practice_history
-                .record(subject_id, EngagementKind::Previewed, None);
+                .record(self.now_ms, subject_id, EngagementKind::Previewed, None, None);
         }
         self.preview_requested = true;
     }
@@ -840,7 +852,7 @@ impl UiState {
             self.set.push(card);
             if let Some(subject_id) = subject_id {
                 self.practice_history
-                    .record(subject_id, EngagementKind::Staged, from_id);
+                    .record(self.now_ms, subject_id, EngagementKind::Staged, from_id, None);
             }
         }
     }
@@ -858,10 +870,13 @@ impl UiState {
         if self.set.cards.is_empty() {
             return;
         }
+        // The card is now the one being played, so this is where its practice
+        // span opens; `complete_rehearsal_cursor` closes it.
+        self.card_started_ms = self.now_ms;
         let cursor = self.set.cursor.min(self.set.cards.len() - 1);
         if let Some(id) = catalog_id_for_card(&self.set.cards[cursor]) {
             self.practice_history
-                .record(id, EngagementKind::Rehearsed, None);
+                .record(self.now_ms, id, EngagementKind::Rehearsed, None, None);
         }
     }
 
@@ -869,10 +884,24 @@ impl UiState {
         if self.set.cards.is_empty() {
             return;
         }
+        // Close the span opened when this card became active. Both ends must be
+        // dated for the measurement to mean anything, and a clock that went
+        // backwards (a system time change mid-session) yields no measurement
+        // rather than a wrapped one.
+        let practiced_ms = match (self.now_ms, self.card_started_ms) {
+            (Some(now), Some(started)) => now.checked_sub(started),
+            _ => None,
+        };
+        self.card_started_ms = self.now_ms;
         let cursor = self.set.cursor.min(self.set.cards.len() - 1);
         if let Some(id) = catalog_id_for_card(&self.set.cards[cursor]) {
-            self.practice_history
-                .record(id, EngagementKind::Completed, None);
+            self.practice_history.record(
+                self.now_ms,
+                id,
+                EngagementKind::Completed,
+                None,
+                practiced_ms,
+            );
         }
     }
 
@@ -1854,4 +1883,83 @@ pub fn stage_root(ui: &UiState) -> UiChild {
             format!("root {} {}", ui.board_layout().class(), ui.viewport.class()),
         ),
     )
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+
+    fn staged_set() -> UiState {
+        let mut ui = UiState::new();
+        ui.stage_current(None);
+        ui
+    }
+
+    #[test]
+    fn a_rehearsed_card_records_the_span_it_was_actually_played_for() {
+        let mut ui = staged_set();
+        ui.now_ms = Some(1_000);
+        ui.record_rehearsal_cursor();
+        // Nine seconds of playing, per the host's clock.
+        ui.now_ms = Some(10_000);
+        ui.complete_rehearsal_cursor();
+
+        let subject = catalog_id_for_card(&ui.set.cards[0]).expect("catalog subject");
+        assert_eq!(
+            ui.practice_history.total_practiced_ms(&subject),
+            9_000,
+            "the measurement is the span between becoming active and completing"
+        );
+        assert_eq!(ui.practice_history.last_seen_ms(&subject), Some(10_000));
+    }
+
+    #[test]
+    fn a_host_with_no_clock_measures_nothing_rather_than_guessing() {
+        let mut ui = staged_set();
+        ui.now_ms = None;
+        ui.record_rehearsal_cursor();
+        ui.complete_rehearsal_cursor();
+
+        let subject = catalog_id_for_card(&ui.set.cards[0]).expect("catalog subject");
+        assert_eq!(ui.practice_history.total_practiced_ms(&subject), 0);
+        assert!(
+            !ui.practice_history.has_times(),
+            "undated events must not read as practised at epoch zero"
+        );
+    }
+
+    #[test]
+    fn a_backwards_clock_yields_no_measurement() {
+        // A system time change mid-session must not produce a wrapped span.
+        let mut ui = staged_set();
+        ui.now_ms = Some(10_000);
+        ui.record_rehearsal_cursor();
+        ui.now_ms = Some(1_000);
+        ui.complete_rehearsal_cursor();
+
+        let subject = catalog_id_for_card(&ui.set.cards[0]).expect("catalog subject");
+        assert_eq!(ui.practice_history.total_practiced_ms(&subject), 0);
+    }
+
+    #[test]
+    fn completing_one_card_opens_the_next_cards_span() {
+        // The rehearsal advance completes a card and makes the next one active
+        // in the same beat, so the second span must start at the completion,
+        // not at whenever the run began.
+        let mut ui = staged_set();
+        ui.now_ms = Some(1_000);
+        ui.record_rehearsal_cursor();
+        ui.now_ms = Some(5_000);
+        ui.complete_rehearsal_cursor();
+        assert_eq!(ui.card_started_ms, Some(5_000));
+        ui.now_ms = Some(6_500);
+        ui.complete_rehearsal_cursor();
+
+        let subject = catalog_id_for_card(&ui.set.cards[0]).expect("catalog subject");
+        assert_eq!(
+            ui.practice_history.total_practiced_ms(&subject),
+            4_000 + 1_500,
+            "each span measures its own card, and they do not overlap"
+        );
+    }
 }

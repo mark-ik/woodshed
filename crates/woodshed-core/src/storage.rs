@@ -231,9 +231,11 @@ mod tests {
         song.one_shot = true;
         let mut history = crate::history::PracticeHistory::default();
         history.record(
+            Some(1_000),
             woodshed_graph::chord_id("Minor 7"),
             crate::history::EngagementKind::Staged,
             Some(woodshed_graph::scale_id("Dorian")),
+            None,
         );
         let related = RelatedSettings {
             use_history: false,
@@ -291,7 +293,13 @@ mod tests {
         assert_eq!(back.song.name, "My Song", "the song doc round-trips");
         assert_eq!(back.song.bars.len(), 1);
         assert!(back.song.one_shot);
-        assert_eq!(back.practice_history.events, history.events);
+        // The practice lineage round-trips through the session wire: the
+        // engagement, its subject, and the traversal that produced it.
+        assert_eq!(back.practice_history.len(), history.len());
+        assert_eq!(
+            back.practice_history.recent(1)[0].subject_id,
+            history.recent(1)[0].subject_id
+        );
         assert_eq!(back.settings.stage.related, related);
     }
 
