@@ -496,7 +496,11 @@ fn node_names() -> &'static HashMap<String, String> {
             .map(|(_, node)| {
                 (
                     node.id.clone(),
-                    node.title.clone().unwrap_or_else(|| node.id.clone()),
+                    if node.title.is_empty() {
+                        node.id.clone()
+                    } else {
+                        node.title.clone()
+                    },
                 )
             })
             .collect()
@@ -598,7 +602,11 @@ fn build_relation_index() -> HashMap<String, Vec<RelatedNeighbor>> {
     for (_, node) in graph.nodes() {
         names.insert(
             node.id.clone(),
-            node.title.clone().unwrap_or_else(|| node.id.clone()),
+            if node.title.is_empty() {
+                node.id.clone()
+            } else {
+                node.title.clone()
+            },
         );
         if let Some(kind) = kind_of(node) {
             kinds.insert(node.id.clone(), kind);
@@ -1102,4 +1110,3 @@ mod tests {
         }));
     }
 }
-

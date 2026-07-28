@@ -34,21 +34,27 @@ use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::storage::Storage as _;
 use woodshed_views::theme::ThemeMode;
 
-use layout_dom_api::{DomMutation, LayoutDomMut as _};
-use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
-use paint_list_api::{DeviceIntSize, PaintList as _};
+use cambium_winit::{
+    ime_event_from_winit, key_event_from_winit, modifiers_from_winit, wheel_axes, ScrollbarFade,
+};
 use genet_layout::{
     Applied, IncrementalLayout, InteractionState, LeafPaintSource, ScrollOffsets, ScrollTarget,
-    SourceNodeId,
+    SourceNodeId, VisualAffinity, VisualCaret, VisualMovement, VisualSelection,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
-use cambium_winit::{key_event_from_winit, modifiers_from_winit, wheel_axes, ScrollbarFade};
+use layout_dom_api::{DomMutation, LayoutDom as _, LayoutDomMut as _, LocalName, Namespace};
+use netrender::{ColorLoad, ExternalTexturePlacement, NetrenderOptions};
+use paint_list_api::{ColorF, DeviceIntSize, PaintList as _};
 // The a11y host is a separate crate as of 2026-07-26, so `cambium-winit` can
 // stay publishable; a host that wants both simply takes both.
 use cambium_winit_a11y::A11yHost;
 use genet_winit_host::SurfaceHost;
 
 use crate::scenario::{Observed, ScenarioLane};
+use cambium::{
+    clickable, el, text, CaretPosition, CaretSelection, GenetAppRunner, HoverEvent, HoverPhase,
+    PointerClick, Propagation, TextCommand, TextInput,
+};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent as WinitKeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -58,11 +64,79 @@ use woodshed_views::stage::{
     stage_root, UiChild, UiState, NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY,
 };
 use woodshed_views::theme::slate_stage_css;
-use cambium::{
-    GenetAppRunner, HoverEvent, HoverPhase, PointerClick, Propagation, clickable, el, text,
-};
 
 type Runner = GenetAppRunner<UiState, fn(&UiState) -> UiChild, UiChild>;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FocusedText {
+    Search,
+    CardRename,
+}
+
+fn text_input(ui: &UiState, target: FocusedText) -> &TextInput {
+    match target {
+        FocusedText::Search => &ui.search,
+        FocusedText::CardRename => &ui.card_rename,
+    }
+}
+
+fn text_input_mut(ui: &mut UiState, target: FocusedText) -> &mut TextInput {
+    match target {
+        FocusedText::Search => &mut ui.search,
+        FocusedText::CardRename => &mut ui.card_rename,
+    }
+}
+
+fn to_visual_caret(caret: CaretPosition) -> VisualCaret {
+    VisualCaret {
+        byte: caret.byte,
+        affinity: match caret.affinity {
+            cambium::CaretAffinity::Downstream => VisualAffinity::Downstream,
+            cambium::CaretAffinity::Upstream => VisualAffinity::Upstream,
+        },
+    }
+}
+
+fn from_visual_caret(caret: VisualCaret) -> CaretPosition {
+    CaretPosition {
+        byte: caret.byte,
+        affinity: match caret.affinity {
+            VisualAffinity::Downstream => cambium::CaretAffinity::Downstream,
+            VisualAffinity::Upstream => cambium::CaretAffinity::Upstream,
+        },
+    }
+}
+
+fn to_visual_selection(selection: CaretSelection) -> VisualSelection {
+    VisualSelection {
+        anchor: to_visual_caret(selection.anchor),
+        focus: to_visual_caret(selection.focus),
+    }
+}
+
+fn from_visual_selection(selection: VisualSelection) -> CaretSelection {
+    CaretSelection {
+        anchor: from_visual_caret(selection.anchor),
+        focus: from_visual_caret(selection.focus),
+    }
+}
+
+fn focused_text(runner: &Runner) -> Option<(NodeId, FocusedText)> {
+    let node = runner.focus()?;
+    let dom = runner.dom();
+    let dom = dom.borrow();
+    if dom.element_name(node)?.local.as_ref() != "input" {
+        return None;
+    }
+    let parent = dom.parent(node)?;
+    let class = dom.attribute(parent, &Namespace::from(""), &LocalName::from("class"))?;
+    let target = match class {
+        "search-wrap" => FocusedText::Search,
+        "card-rename" => FocusedText::CardRename,
+        _ => return None,
+    };
+    Some((node, target))
+}
 
 struct SpriggingSource<'a>(&'a sprigging::RenderedLeaves);
 
@@ -126,6 +200,8 @@ struct App {
     sheet: String,
     /// Cursor position in logical coordinates.
     cursor: (f32, f32),
+    /// The field whose fixed selection anchor is active during a pointer drag.
+    text_drag: Option<FocusedText>,
     modifiers: ModifiersState,
     /// The W0.1 audio seam: cpal on desktop, Web Audio on the web host.
     backend: Option<CpalBackend>,
@@ -782,6 +858,28 @@ impl App {
                 }
             }
             let layout = self.layout.as_ref().expect("layout just ensured");
+            let focused_overlay = focused_text(runner).map(|(node, target)| {
+                let input = text_input(runner.state(), target);
+                let mut caret = to_visual_caret(input.caret_position());
+                caret.byte = input.caret_byte_in_render();
+                let selection = if input.composition().is_none() && input.has_selection() {
+                    Some(input.selection_bytes())
+                } else {
+                    None
+                };
+                (node, caret, selection)
+            });
+            if let Some((node, caret, _)) = focused_overlay {
+                if let Some(rect) = layout.caret_rect_for_position(&*dom_ref, node, caret, 2.0) {
+                    window.set_ime_cursor_area(
+                        winit::dpi::LogicalPosition::new(rect.x as f64, rect.y as f64),
+                        winit::dpi::LogicalSize::new(
+                            rect.width.max(2.0) as f64,
+                            rect.height.max(1.0) as f64,
+                        ),
+                    );
+                }
+            }
             let anim_active = layout.has_active_animations();
             let sizes: HashMap<u64, (f32, f32)> =
                 layout.custom_leaf_boxes().into_iter().collect();
@@ -800,6 +898,43 @@ impl App {
                 DeviceIntSize::new(lw as i32, lh as i32),
                 &source,
             );
+            if let Some((node, caret, selection)) = focused_overlay {
+                if let Some((start, end)) = selection {
+                    let rects = layout.selection_rects(&*dom_ref, node, start, end);
+                    let color = layout
+                        .selection_style(&*dom_ref, node)
+                        .map(|(bg, _)| ColorF {
+                            r: bg[0],
+                            g: bg[1],
+                            b: bg[2],
+                            a: bg[3],
+                        })
+                        .unwrap_or(ColorF {
+                            r: 0.20,
+                            g: 0.45,
+                            b: 0.90,
+                            a: 0.35,
+                        });
+                    list.push_selection(&rects, color);
+                }
+                if let Some(rect) = layout.caret_rect_for_position(&*dom_ref, node, caret, 2.0) {
+                    let color = layout
+                        .caret_color(&*dom_ref, node)
+                        .map(|rgba| ColorF {
+                            r: rgba[0],
+                            g: rgba[1],
+                            b: rgba[2],
+                            a: rgba[3],
+                        })
+                        .unwrap_or(ColorF {
+                            r: 0.92,
+                            g: 0.94,
+                            b: 0.98,
+                            a: 1.0,
+                        });
+                    list.push_caret(rect, color);
+                }
+            }
             // Overlay scrollbar thumbs for whatever is mid-hold/mid-fade (the
             // engine draws the geometry; the shared fade clock supplies alpha).
             let now = std::time::Instant::now();
@@ -1044,6 +1179,11 @@ impl App {
             self.storage.save(&json);
         }
         if let Some(window) = self.window.as_ref() {
+            window.set_ime_allowed(
+                self.runner
+                    .as_ref()
+                    .is_some_and(|runner| focused_text(runner).is_some()),
+            );
             window.request_redraw();
         }
     }
@@ -1119,6 +1259,7 @@ impl App {
     }
 
     fn click(&mut self) {
+        self.text_drag = None;
         let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
             return;
         };
@@ -1136,11 +1277,107 @@ impl App {
                 prop: Propagation::new(),
             },
         );
+        let focused = focused_text(runner);
+        if let Some((focused_node, target)) = focused {
+            let caret = {
+                let dom = runner.dom();
+                let dom = dom.borrow();
+                layout.caret_position_at_point(&*dom, focused_node, x, y)
+            };
+            if let Some(caret) = caret {
+                runner.update(|ui| {
+                    let input = text_input_mut(ui, target);
+                    let position = from_visual_caret(caret);
+                    input.apply(TextCommand::SetSelection(CaretSelection {
+                        anchor: position,
+                        focus: position,
+                    }));
+                });
+                self.text_drag = Some(target);
+            }
+        }
         self.after_dispatch();
+    }
+
+    fn drag_text_selection(&mut self) {
+        let Some(target) = self.text_drag else {
+            return;
+        };
+        let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
+            return;
+        };
+        let Some((node, current_target)) = focused_text(runner) else {
+            self.text_drag = None;
+            return;
+        };
+        if current_target != target {
+            self.text_drag = None;
+            return;
+        }
+        let (x, y) = self.cursor;
+        let caret = {
+            let dom = runner.dom();
+            let dom = dom.borrow();
+            layout.caret_position_at_point(&*dom, node, x, y)
+        };
+        let Some(caret) = caret else {
+            return;
+        };
+        runner.update(|ui| {
+            let input = text_input_mut(ui, target);
+            let anchor = input.caret_selection().anchor;
+            input.apply(TextCommand::SetSelection(CaretSelection {
+                anchor,
+                focus: from_visual_caret(caret),
+            }));
+        });
+        self.after_dispatch();
+    }
+
+    fn move_focused_text_visual(&mut self, event: &WinitKeyEvent) -> bool {
+        let WinitKey::Named(named) = &event.logical_key else {
+            return false;
+        };
+        let word = self.modifiers.control_key() || self.modifiers.alt_key();
+        let movement = match named {
+            WinitNamedKey::ArrowLeft if word => VisualMovement::PreviousWord,
+            WinitNamedKey::ArrowLeft => VisualMovement::PreviousCluster,
+            WinitNamedKey::ArrowRight if word => VisualMovement::NextWord,
+            WinitNamedKey::ArrowRight => VisualMovement::NextCluster,
+            WinitNamedKey::ArrowUp => VisualMovement::PreviousLine,
+            WinitNamedKey::ArrowDown => VisualMovement::NextLine,
+            WinitNamedKey::Home => VisualMovement::LineStart,
+            WinitNamedKey::End => VisualMovement::LineEnd,
+            _ => return false,
+        };
+        let (Some(runner), Some(layout)) = (self.runner.as_mut(), self.layout.as_ref()) else {
+            return false;
+        };
+        let Some((node, target)) = focused_text(runner) else {
+            return false;
+        };
+        let selection = to_visual_selection(text_input(runner.state(), target).caret_selection());
+        let Some(moved) = layout.selection_visual_move::<ScriptedDom>(
+            node,
+            selection,
+            movement,
+            self.modifiers.shift_key(),
+        ) else {
+            return false;
+        };
+        runner.update(|ui| {
+            text_input_mut(ui, target)
+                .apply(TextCommand::SetSelection(from_visual_selection(moved)));
+        });
+        self.after_dispatch();
+        true
     }
 
     fn key(&mut self, event: &WinitKeyEvent) {
         if event.state != ElementState::Pressed {
+            return;
+        }
+        if self.move_focused_text_visual(event) {
             return;
         }
         let Some(runner) = self.runner.as_mut() else {
@@ -1166,6 +1403,17 @@ impl App {
             runner.dispatch_key(kev);
             self.after_dispatch();
         }
+    }
+
+    fn ime(&mut self, ime: &winit::event::Ime) {
+        let Some(runner) = self.runner.as_mut() else {
+            return;
+        };
+        if focused_text(runner).is_none() {
+            return;
+        }
+        runner.dispatch_key(ime_event_from_winit(ime));
+        self.after_dispatch();
     }
 }
 
@@ -1322,6 +1570,7 @@ impl ApplicationHandler for App {
                 self.update_resize_cursor();
                 self.hover();
                 self.hover_dispatch();
+                self.drag_text_selection();
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -1351,6 +1600,13 @@ impl ApplicationHandler for App {
                     None => self.click(),
                 }
             }
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                self.text_drag = None;
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel scrolls the nearest overflow container under the
                 // cursor (the engine hit-tests, clamps, and chains).
@@ -1377,6 +1633,7 @@ impl ApplicationHandler for App {
                     }
                 }
             }
+            WindowEvent::Ime(ime) => self.ime(&ime),
             WindowEvent::KeyboardInput { event, .. } => self.key(&event),
             WindowEvent::RedrawRequested => {
                 self.redraw();
@@ -1413,6 +1670,7 @@ fn main() {
         rehearsal_fretboard_sig: 0,
         sheet: slate_stage_css(),
         cursor: (0.0, 0.0),
+        text_drag: None,
         modifiers: ModifiersState::empty(),
         backend: None,
         midi: MidiHost::new(),
