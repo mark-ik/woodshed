@@ -38,22 +38,12 @@ for the wider project record.
 <table>
   <tr>
     <td width="50%">
-      <img src="assets/screenshots/arpeggio.png" alt="The Arpeggio lens with its transport deck stepping through a chord shape, the current note highlighted"><br>
-      <sub>Arpeggios: step or run a chord shape; the sounding note lights up as it plays.</sub>
+      <img src="assets/screenshots/current-occurrence-identity.png" alt="Woodshed Stage with a pentatonic pattern, related material, and a practice Set"><br>
+      <sub>Stage: pair a pentatonic pattern with related material and the ordered practice Set.</sub>
     </td>
     <td width="50%">
-      <img src="assets/screenshots/progression.png" alt="The Progression lens showing Roman-numeral chord cards above the chord tones on the neck"><br>
-      <sub>Progressions: Roman-numeral chord cards, with the picked chord's tones on the neck.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="assets/screenshots/rehearsal.png" alt="The Rehearsal view: a row of practice cards with per-card touch treatments"><br>
-      <sub>Rehearsal: stage material into an ordered Set and stream it as guided practice.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/screenshots/exercise.png" alt="The Exercise lens running a chromatic 1-2-3-4 finger drill with a fading trail"><br>
-      <sub>Exercises: finger drills like the chromatic 1-2-3-4, with a fading trail behind the step.</sub>
+      <img src="assets/screenshots/current-typed-relations.png" alt="Woodshed Arpeggio stage with typed related material and a practice Set"><br>
+      <sub>Arpeggio: choose related material and stage it directly into practice.</sub>
     </td>
   </tr>
 </table>
