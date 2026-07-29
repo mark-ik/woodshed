@@ -1,5 +1,6 @@
 /target
 /dist
+/.cargo/config.toml
 .idea/
 .vscode/
 *.swp
