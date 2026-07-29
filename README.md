@@ -15,8 +15,8 @@ DOM-shaped Xilem view tree is laid out and painted by Genet/netrender, with a
 winit desktop host today and a browser host planned from the same view layer.
 
 <p align="center">
-  <img src="assets/screenshots/fretboard.png" alt="The Stage view: an A Major Blues scale laid out across the painted fretboard, root notes highlighted" width="880"><br>
-  <sub>Stage: any scale, chord, arpeggio, progression, or exercise laid out on the painted neck.</sub>
+  <img src="assets/screenshots/stage-related-chord.png" alt="Woodshed Stage showing a dominant seventh chord, its fretboard, and related material" width="880"><br>
+  <sub>Stage: inspect a playable chord across the neck, then stage related practice material.</sub>
 </p>
 
 **Made with AI**
