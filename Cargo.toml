@@ -61,19 +61,19 @@ winit = "0.30"
 #      `sprigging::PaintCmd` is not a `paint_list_api::PaintCmd`.
 #      `[patch.crates-io]` does not redirect a published crate's own registry
 #      dependency; taking all three from the source everything else uses does.
-cambium = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-cambium-winit = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+cambium-winit = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # The AccessKit host, split out of cambium-winit 2026-07-26. This is the half
 # that genuinely cannot be published (it needs genet-layout and
 # genet-winit-host); the thin cambium-winit above now can be, though woodshed
 # keeps taking it from git for reason 2 below.
-cambium-winit-a11y = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-sprigging = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
-genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-genet-probe = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+cambium-winit-a11y = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+sprigging = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 paint_list_api = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
@@ -87,7 +87,7 @@ wgpu = { version = "29", default-features = false, features = ["std"] }
 # (`components/tinct`); the standalone mirror repo retires with the
 # 2026-07-23 consolidation. genet.git is already a source here, so this
 # costs no extra checkout.
-tinct = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+tinct = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 
 # Audio
 cpal = "0.18"
@@ -122,8 +122,8 @@ serde_json = "1.0"
 # taffy + ipc-channel are vendored inside the genet repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
-layout-dom-api = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # NO stylo/stylo_atoms patch (2026-07-12, mirroring genet's ring-3 rename):
 # the fork is now the RENAMED `genet-stylo` family, and a `[patch]` cannot
 # rename its target. Genet's crates git-dep genet-stylo by package rename, so

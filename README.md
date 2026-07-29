@@ -10,7 +10,7 @@ practice environment.
 The theory model supports arbitrary string counts and tunings, so bass,
 ukulele, banjo, and custom instruments are first-class rather than afterthoughts.
 
-Built in Rust on [Genet](https://github.com/mark-ik/genet): a shared
+Built in Rust on [Genet](https://github.com/merely-made/genet): a shared
 DOM-shaped Xilem view tree is laid out and painted by Genet/netrender, with a
 winit desktop host today and a browser host planned from the same view layer.
 

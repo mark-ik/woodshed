@@ -562,7 +562,7 @@ workspace and the smoke already models it.
   long-inert xilem-woodshed `paths` override was also fixed: it sat below
   a `[target]` header and parsed as a key of that table). Committed patch
   mirror: stylo/stylo_atoms (servo/stylo rev), taffy + ipc-channel via
-  mark-ik/genet. Verified by screenshot: window renders the sheet on
+  merely-made/genet. Verified by screenshot: window renders the sheet on
   Windows, colors matching the browser receipt.
   - **Finding: sRGB surfaces double-encode the genet scene.** vello
     writes display-referred bytes; `genet-winit-host::create_surface`

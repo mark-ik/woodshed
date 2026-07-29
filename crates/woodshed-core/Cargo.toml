@@ -14,12 +14,12 @@ serde = { workspace = true }
 # Persona-keyed encrypt-at-rest for the private practice session — the woodshed
 # pole of the personae suite adoption (one persona, many devices, sealed state).
 # Sibling repo, like woodshed-graph's chartulary path dep.
-personae = { git = "https://github.com/mark-ik/mere.git", branch = "main" }
+personae = { git = "https://github.com/merely-made/mere.git", branch = "main" }
 # The lineage model the practice history is stored as (adopted 2026-07-26):
 # dated, branching engagements over stable catalog ids, with per-subject recency
 # and frequency maintained upstream. Already in the workspace through
 # woodshed-graph's catalog graph; the same sibling-repo git dep.
-chartulary = { git = "https://github.com/mark-ik/mere.git", branch = "main" }
+chartulary = { git = "https://github.com/merely-made/mere.git", branch = "main" }
 hex = "0.4"
 
 [dev-dependencies]
