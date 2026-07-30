@@ -48,7 +48,7 @@ This is a portable ZIP, not an installer. Windows SmartScreen may warn because
 the binary is not code-signed yet.
 
 The source, project licenses, and Cargo.lock dependency inventory are included
-in the repository: https://github.com/mark-ik/woodshed
+in the repository: https://github.com/merely-made/woodshed
 "@ | Set-Content -LiteralPath (Join-Path $stage "RELEASE-README.txt") -NoNewline
 
 Compress-Archive -Path $stage -DestinationPath $archive -Force

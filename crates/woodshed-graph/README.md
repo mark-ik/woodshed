@@ -37,4 +37,4 @@ consumer-recorded, not by coupling the graph spine to the lineage.
 Depends on the pure `woodshedding` theory crate (no UI, audio, or genet), plus
 chartulary and stemma. See [`design_docs/`](design_docs/).
 
-Part of the [woodshed](https://github.com/mark-ik/woodshed) workspace; dual MIT OR Apache-2.0.
+Part of the [woodshed](https://github.com/merely-made/woodshed) workspace; dual MIT OR Apache-2.0.
