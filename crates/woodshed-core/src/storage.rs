@@ -23,6 +23,14 @@ pub trait Storage {
     fn save(&self, contents: &str);
 }
 
+/// The product-owned application-preference persistence lane. It is separate
+/// from [`Storage`] because a practice session contains artifact state while
+/// `AppSettings` contains install/persona-facing preferences.
+pub trait SettingsStorage {
+    fn load_settings(&self) -> Option<String>;
+    fn save_settings(&self, contents: &str);
+}
+
 /// The top-level product section. Legacy Practice and Song values migrate at
 /// deserialization into Stage and Looper respectively.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -57,9 +65,9 @@ impl AppSection {
     }
 }
 
-/// Everything that survives a restart. Mirrors woodshed-xilem's persisted
-/// subset: selections and dials persist, transport cursors and playing
-/// flags do not.
+/// The artifact/session state that survives a restart. Application preferences
+/// are stored through [`SettingsStorage`] instead of being flattened here.
+/// `decode_session` still exposes legacy flattened settings for migration.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PersistedSession {
@@ -77,8 +85,6 @@ pub struct PersistedSession {
     pub progression_expanded: usize,
     pub exercise_idx: usize,
     pub exercise_starting_fret: u8,
-    #[serde(flatten)]
-    pub settings: AppSettings,
     /// The rehearsal set (cards + cursor + loop mode).
     pub set: woodshedding::rehearsal::Set,
     /// The song lane: bars + song-level flags.
@@ -93,7 +99,6 @@ impl Default for PersistedSession {
         Self::capture(
             &StageState::new(),
             AppSection::Stage,
-            &AppSettings::default(),
             &woodshedding::rehearsal::Set::default(),
             &crate::song::SongDoc::default(),
             &crate::history::PracticeHistory::default(),
@@ -106,13 +111,11 @@ impl PersistedSession {
     pub fn capture(
         stage: &StageState,
         section: AppSection,
-        settings: &AppSettings,
         set: &woodshedding::rehearsal::Set,
         song: &crate::song::SongDoc,
         practice_history: &crate::history::PracticeHistory,
     ) -> Self {
         Self {
-            settings: settings.clone(),
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
@@ -135,9 +138,9 @@ impl PersistedSession {
     /// Restore the persisted subset onto a fresh state. Indices route
     /// through the clamping setters so a session written against a larger
     /// future catalog degrades instead of panicking.
-    pub fn restore(&self, stage: &mut StageState) {
+    pub fn restore(&self, stage: &mut StageState, settings: &AppSettings) {
         stage.set_lens(self.lens);
-        stage.set_tuning(self.settings.tuning.tuning_idx);
+        stage.set_tuning(settings.tuning.tuning_idx);
         stage.set_root(self.root_idx);
         stage.select_scale(self.scale_idx);
         stage.select_chord(self.chord_idx);
@@ -152,6 +155,40 @@ impl PersistedSession {
         stage.select_exercise(self.exercise_idx);
         stage.exercise_starting_fret = self.exercise_starting_fret;
     }
+}
+
+/// The result of reading a session file. New files contain only
+/// [`PersistedSession`]; old flat files may also return application settings so
+/// a host can migrate them to its separate settings file on the next save.
+#[derive(Debug)]
+pub struct SessionLoad {
+    pub session: PersistedSession,
+    pub legacy_settings: Option<AppSettings>,
+}
+
+/// Decode the current session format and detect the pre-C5 flattened settings
+/// payload without making those fields part of the new session type.
+pub fn decode_session(contents: &str) -> Result<SessionLoad, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(contents)?;
+    let session = serde_json::from_value(value.clone())?;
+    let has_legacy_settings = [
+        "theme",
+        "tuning_idx",
+        "bpm",
+        "settings_page",
+        "reduce_motion",
+        "board_layout",
+        "show_set_sequence_edges",
+    ]
+    .iter()
+    .any(|key| value.get(key).is_some());
+    let legacy_settings = has_legacy_settings
+        .then(|| serde_json::from_value(value))
+        .transpose()?;
+    Ok(SessionLoad {
+        session,
+        legacy_settings,
+    })
 }
 
 /// Associated-data + persona-derivation context binding woodshed's sealed session
@@ -260,24 +297,28 @@ mod tests {
             metronome: crate::settings::MetronomeSettings { bpm: 96.0 },
             ..AppSettings::default()
         };
-        let snap =
-            PersistedSession::capture(
-                &stage,
-                AppSection::Settings,
-                &settings,
-                &set,
-                &song,
-                &history,
-            );
+        let snap = PersistedSession::capture(
+            &stage,
+            AppSection::Settings,
+            &set,
+            &song,
+            &history,
+        );
         let json = serde_json::to_string(&snap).unwrap();
         let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert!(wire.get("settings").is_none(), "settings stay flat on the wire");
-        assert_eq!(wire["theme"], "Ember");
-        assert_eq!(wire["tuning_idx"], 3);
-        assert_eq!(wire["bpm"], 96.0);
+        assert!(
+            wire.get("theme").is_none(),
+            "application settings leave the session wire"
+        );
+        assert!(wire.get("tuning_idx").is_none());
+        let settings_json = serde_json::to_string(&settings).unwrap();
+        let settings_wire: serde_json::Value = serde_json::from_str(&settings_json).unwrap();
+        assert_eq!(settings_wire["theme"], "Ember");
+        assert_eq!(settings_wire["tuning_idx"], 3);
+        assert_eq!(settings_wire["bpm"], 96.0);
         let back: PersistedSession = serde_json::from_str(&json).unwrap();
         let mut restored = StageState::new();
-        back.restore(&mut restored);
+        back.restore(&mut restored, &settings);
         assert_eq!(restored.lens, Lens::Arpeggios);
         assert_eq!(restored.tuning_idx, 3);
         assert_eq!(restored.root_idx, 3);
@@ -285,9 +326,6 @@ mod tests {
         assert_eq!(restored.arpeggio_inversion, 2);
         assert_eq!(restored.progression_idx, Some(1));
         assert_eq!(back.section, AppSection::Settings);
-        assert_eq!(back.settings.page, crate::settings::SettingsPage::Tuning);
-        assert_eq!(back.settings.metronome.bpm, 96.0);
-        assert_eq!(back.settings.appearance.theme, "Ember");
         assert_eq!(back.set.cards.len(), 1, "the rehearsal set round-trips");
         assert_eq!(back.set.cards[0].label, "Csus4 arpeggio");
         assert_eq!(back.song.name, "My Song", "the song doc round-trips");
@@ -300,21 +338,20 @@ mod tests {
             back.practice_history.recent(1)[0].subject_id,
             history.recent(1)[0].subject_id
         );
-        assert_eq!(back.settings.stage.related, related);
+        assert_eq!(settings.stage.related, related);
     }
 
     #[test]
     fn unknown_fields_and_missing_fields_tolerated() {
-        let back: PersistedSession =
-            serde_json::from_str(r#"{"lens":"Chords","bpm":88.0}"#).unwrap();
-        assert_eq!(back.lens, Lens::Chords);
-        assert_eq!(back.settings.metronome.bpm, 88.0);
-        assert_eq!(back.section, AppSection::Stage, "missing fields default");
+        let loaded = decode_session(r#"{"lens":"Chords","bpm":88.0}"#).unwrap();
+        assert_eq!(loaded.session.lens, Lens::Chords);
+        assert_eq!(loaded.legacy_settings.as_ref().unwrap().metronome.bpm, 88.0);
+        assert_eq!(loaded.session.section, AppSection::Stage, "missing fields default");
         // Out-of-range indices clamp through the setters.
         let huge: PersistedSession =
             serde_json::from_str(r#"{"scale_idx":99999}"#).unwrap();
         let mut s = StageState::new();
-        huge.restore(&mut s);
+        huge.restore(&mut s, &AppSettings::default());
         assert!(s.scale_idx < s.scales().len());
     }
 
@@ -323,15 +360,15 @@ mod tests {
         use woodshedding::rehearsal::SetGraphEdgeKind;
 
         // A session written while Set-graph edge visibility was one boolean.
-        let mut off: PersistedSession =
+        let mut off: AppSettings =
             serde_json::from_str(r#"{"show_set_sequence_edges":false}"#).unwrap();
         assert!(
-            off.settings.stage.shows_relation(SetGraphEdgeKind::Next),
+            off.stage.shows_relation(SetGraphEdgeKind::Next),
             "the default set is unchanged until the legacy value is adopted"
         );
 
-        off.settings.stage.adopt_legacy_relation_visibility();
-        assert!(!off.settings.stage.shows_relation(SetGraphEdgeKind::Next));
+        off.stage.adopt_legacy_relation_visibility();
+        assert!(!off.stage.shows_relation(SetGraphEdgeKind::Next));
 
         // The legacy key is consumed, so the next save writes only the set.
         let json = serde_json::to_string(&off).unwrap();
@@ -339,9 +376,9 @@ mod tests {
         assert!(json.contains("visible_set_relations"));
 
         // A session written after the migration is untouched by it.
-        let mut on: PersistedSession = serde_json::from_str(&json).unwrap();
-        on.settings.stage.adopt_legacy_relation_visibility();
-        assert!(!on.settings.stage.shows_relation(SetGraphEdgeKind::Next));
+        let mut on: AppSettings = serde_json::from_str(&json).unwrap();
+        on.stage.adopt_legacy_relation_visibility();
+        assert!(!on.stage.shows_relation(SetGraphEdgeKind::Next));
     }
 
     #[test]

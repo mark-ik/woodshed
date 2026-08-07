@@ -910,7 +910,6 @@ impl UiState {
         PersistedSession::capture(
             &self.stage,
             self.section,
-            &self.app_settings,
             &self.set,
             &self.song,
             &self.practice_history,
@@ -919,12 +918,16 @@ impl UiState {
 
     /// Restore a persisted session (indices clamp; unknown theme names
     /// fall back to the default).
-    pub fn apply_persisted(&mut self, session: &PersistedSession) {
-        session.restore(&mut self.stage);
+    pub fn apply_persisted(
+        &mut self,
+        session: &PersistedSession,
+        app_settings: AppSettings,
+    ) {
+        session.restore(&mut self.stage, &app_settings);
         self.set = session.set.clone();
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
-        self.app_settings = session.settings.clone();
+        self.app_settings = app_settings;
         // The one bounded migration for sessions written before occurrence
         // identity: Cards gain ids, the legacy single-boolean edge toggle
         // becomes a relation set. Both persist on the next save, and both
@@ -932,7 +935,7 @@ impl UiState {
         self.set.ensure_card_ids();
         self.app_settings.stage.adopt_legacy_relation_visibility();
         self.section = session.section;
-        self.transport.bpm = session.settings.metronome.bpm.clamp(30.0, 300.0);
+        self.transport.bpm = self.app_settings.metronome.bpm.clamp(30.0, 300.0);
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
     }

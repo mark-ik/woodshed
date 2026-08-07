@@ -13,6 +13,16 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-08-06_settings_persistence_split_plan.md](2026-08-06_settings_persistence_split_plan.md)
+  — **LANDED.** Application preferences leave the practice artifact. `AppSettings`
+  no longer flattens into `PersistedSession`; it persists through a separate
+  `SettingsStorage` lane (`genet-settings.json` beside `genet-state.json`), and
+  `decode_session` still returns legacy flattened settings so an old session file
+  migrates once on the next save. `WOODSHED_SETTINGS` overrides the settings path
+  for isolated runs. Woodshed's slice of Mere's cross-product
+  [configuration ownership umbrella](../../mere/design_docs/mere_docs/implementation_strategy/2026-08-06_configuration_ownership_settings_projection_plan.md)
+  (its C5), whose four-axis taxonomy the `WoodshedSettingsProvider` describes
+  settings under.
 - [2026-07-18_accessibility_semantic_surface.md](2026-07-18_accessibility_semantic_surface.md)
   — **One semantic surface, three readers.** The ARIA-attributed cambium DOM
   serves a screen reader (AccessKit), a driver/test (genet-probe), and an agent

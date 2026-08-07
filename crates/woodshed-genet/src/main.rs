@@ -31,7 +31,7 @@ use midi::MidiHost;
 use storage::FsStorage;
 use woodshed_core::audio::{AudioBackend, CalibrationStatus};
 use woodshed_core::midi::MidiBackend as _;
-use woodshed_core::storage::Storage as _;
+use woodshed_core::storage::{SettingsStorage as _, Storage as _};
 use woodshed_views::theme::ThemeMode;
 
 use cambium_winit::{
@@ -1043,6 +1043,7 @@ impl App {
         let mut a11y_reduce = self.reduce_motion;
         let mut a11y_scale = self.text_scale.clone();
         let mut persisted: Option<String> = None;
+        let mut persisted_settings: Option<String> = None;
         if let Some(runner) = self.runner.as_mut() {
             let backend = self.backend.as_mut();
             let last_song = &mut self.last_song;
@@ -1113,6 +1114,7 @@ impl App {
                 a11y_reduce = ui.app_settings.accessibility.reduce_motion;
                 a11y_scale = ui.app_settings.accessibility.text_scale.clone();
                 persisted = serde_json::to_string(&ui.to_persisted()).ok();
+                persisted_settings = serde_json::to_string(&ui.app_settings).ok();
             });
         }
         // Window-chrome requests (CSD). drag_window must run while the
@@ -1177,6 +1179,9 @@ impl App {
         }
         if let Some(json) = persisted {
             self.storage.save(&json);
+        }
+        if let Some(json) = persisted_settings {
+            self.storage.save_settings(&json);
         }
         if let Some(window) = self.window.as_ref() {
             window.set_ime_allowed(
@@ -1485,10 +1490,30 @@ impl ApplicationHandler for App {
         ui.set_viewport_width(size.width as f32 / boot_scale);
         ui.set_viewport_height(size.height as f32 / boot_scale);
         ui.audio_error = backend.error().map(String::from);
-        // Restore the previous session (W0.2): selections, tempo, theme, tab.
+        // Restore the artifact session and the separate application settings.
+        // A legacy flat session migrates its settings when no split settings
+        // file exists yet.
+        let mut app_settings = self
+            .storage
+            .load_settings()
+            .and_then(|json| match serde_json::from_str(&json) {
+                Ok(settings) => Some(settings),
+                Err(error) => {
+                    eprintln!("[woodshed-genet] ignoring corrupt application settings: {error}");
+                    None
+                }
+            })
+            .unwrap_or_default();
         if let Some(json) = self.storage.load() {
-            match serde_json::from_str(&json) {
-                Ok(session) => ui.apply_persisted(&session),
+            match woodshed_core::storage::decode_session(&json) {
+                Ok(loaded) => {
+                    if self.storage.load_settings().is_none() {
+                        if let Some(legacy) = loaded.legacy_settings {
+                            app_settings = legacy;
+                        }
+                    }
+                    ui.apply_persisted(&loaded.session, app_settings);
+                }
                 Err(e) => eprintln!("[woodshed-genet] ignoring corrupt session: {e}"),
             }
         }

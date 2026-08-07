@@ -9,6 +9,7 @@ description = "Woodshed's Cambium view layer: view fns + CSS sheets for the Gene
 
 [dependencies]
 woodshed-core = { workspace = true }
+genet-host-api = { workspace = true }
 woodshedding = { workspace = true }
 cambium = { workspace = true }
 sprigging = { workspace = true }

@@ -11,6 +11,7 @@ description = "Woodshed's portable state/logic core: app state over the woodshed
 woodshedding = { workspace = true }
 woodshed-graph = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 # Persona-keyed encrypt-at-rest for the private practice session — the woodshed
 # pole of the personae suite adoption (one persona, many devices, sealed state).
 # Sibling repo, like woodshed-graph's chartulary path dep.

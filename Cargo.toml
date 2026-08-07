@@ -26,6 +26,7 @@ woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
 woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 woodshed-graph = { path = "crates/woodshed-graph", version = "0.1.0" }
+genet-host-api = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # Shared pure-DSP primitives (click synth, onset/tempo, latency) — the
 # `audio-primitives` extraction. Pure std; consumed by woodshed-audio
 # here and cross-repo by strophe-engine via path-dep.

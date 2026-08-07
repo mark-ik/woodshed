@@ -1,9 +1,13 @@
+use cambium::{clickable, el, map_state, select, text};
+use genet_host_api::settings::{
+    SettingControl, SettingValue, SettingsProjection, SettingsProvider,
+};
+use genet_host_api::tile::SettingsRef;
 use woodshed_core::audio::CalibrationStatus;
 use woodshedding::rehearsal::SetGraphEdgeKind;
-use cambium::{clickable, el, map_state, select, text};
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
-use crate::theme::ThemeMode;
+use crate::settings_provider::{APPEARANCE_REFERENCE, WoodshedSettingsProvider};
 
 /// MIDI device panel (audio-depth slice 13): port pickers, clock-slave /
 /// clock-master toggles, and a live status + event readout. The host
@@ -197,20 +201,53 @@ fn general_page(ui: &UiState) -> UiChild {
 }
 
 fn appearance_page(ui: &UiState) -> UiChild {
-    let themes: Vec<UiChild> = ThemeMode::ALL
+    let provider = WoodshedSettingsProvider::new(ui.app_settings.clone());
+    let reference = SettingsRef(APPEARANCE_REFERENCE.into());
+    let specs = SettingsProjection::resolve(&provider, &reference)
+        .map(|projection| projection.specs)
+        .unwrap_or_default();
+    let themes = specs
         .iter()
-        .map(|&mode| {
-            let class = if mode == ui.theme() {
-                "side-item side-active"
-            } else {
-                "side-item"
-            };
-            Box::new(clickable(
-                el("div", text(mode.label())).attr("class", class),
-                move |ui: &mut UiState, _| ui.set_theme(mode),
-            )) as UiChild
+        .find(|spec| spec.id == "appearance.theme")
+        .and_then(|spec| match &spec.control {
+            SettingControl::Choice { options } => Some((spec, options.clone())),
+            _ => None,
         })
-        .collect();
+        .map(|(spec, options)| {
+            options
+                .into_iter()
+                .map(|option| {
+                    let active = matches!(
+                        &spec.value,
+                        SettingValue::Text(value) if value == &option.value
+                    );
+                    let class = if active {
+                        "side-item side-active"
+                    } else {
+                        "side-item"
+                    };
+                    let value = option.value.clone();
+                    Box::new(clickable(
+                        el("div", text(option.label)).attr("class", class),
+                        move |ui: &mut UiState, _| {
+                            let mut provider =
+                                WoodshedSettingsProvider::new(ui.app_settings.clone());
+                            if provider
+                                .apply(
+                                    &SettingsRef(APPEARANCE_REFERENCE.into()),
+                                    "appearance.theme",
+                                    SettingValue::Text(value.clone()),
+                                )
+                                .is_ok()
+                            {
+                                ui.app_settings = provider.into_settings();
+                            }
+                        },
+                    )) as UiChild
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     Box::new(
         el(
             "div",
