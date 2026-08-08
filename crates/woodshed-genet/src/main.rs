@@ -28,10 +28,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use audio::CpalBackend;
 use midi::MidiHost;
-use storage::FsStorage;
+use storage::FsBackend;
+use woodshed_core::storage::SessionStore;
 use woodshed_core::audio::{AudioBackend, CalibrationStatus};
 use woodshed_core::midi::MidiBackend as _;
-use woodshed_core::storage::{SettingsStorage as _, Storage as _};
 use woodshed_views::theme::ThemeMode;
 
 use cambium_winit::{
@@ -212,8 +212,9 @@ struct App {
     last_arp_step: Option<std::time::Instant>,
     /// Last rehearsal dwell-advance instant.
     last_rehearsal_step: Option<std::time::Instant>,
-    /// The W0.2 storage seam: fs on desktop, OPFS on the web host.
-    storage: FsStorage,
+    /// Named slots over a host backend: files on desktop, OPFS on the web
+    /// host. Sealing composes in at the backend, and is not wired here.
+    storage: SessionStore<FsBackend>,
     /// Theme the current sheet was generated from; a change re-skins.
     theme: ThemeMode,
     /// The hovered node's opaque id, for `:hover` restyles on target
@@ -1701,7 +1702,7 @@ fn main() {
         midi: MidiHost::new(),
         last_arp_step: None,
         last_rehearsal_step: None,
-        storage: FsStorage::new(),
+        storage: SessionStore::new(FsBackend::new()),
         theme: ThemeMode::default(),
         last_hover: None,
         last_hover_hit: None,

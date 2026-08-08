@@ -1,21 +1,28 @@
-//! The desktop [`Storage`]: `genet-state.json` in the same config dir the
-//! xilem app uses (`ProjectDirs dev/Woodshed/Woodshed`), under its own
-//! filename so the two apps never clobber each other during the migration.
-//! The web host implements the same trait over OPFS.
+//! The desktop backend: files in the config dir the xilem app uses
+//! (`ProjectDirs dev/Woodshed/Woodshed`), under their own filenames so the two
+//! apps never clobber each other during the migration.
+//!
+//! A [`muniment::Backend`] rather than woodshed's own storage trait, so the
+//! store, the sealing, and the slot naming above it are all muniment's and this
+//! file is only the platform half: which directory, which filename per slot.
+//! The web host realizes the same trait over OPFS.
 
 use std::path::PathBuf;
 
+use async_trait::async_trait;
 use directories::ProjectDirs;
-use woodshed_core::storage::{SettingsStorage, Storage};
+use muniment::backend::WriteOp;
+use muniment::{Backend, StoreError};
 
-pub struct FsStorage {
-    /// `None` when the platform exposes no config dir — persistence
-    /// silently disabled, matching woodshed-xilem's posture.
-    path: Option<PathBuf>,
-    settings_path: Option<PathBuf>,
+pub struct FsBackend {
+    /// `None` when the platform exposes no config dir. Persistence is silently
+    /// disabled, matching woodshed-xilem's posture: a machine without a config
+    /// dir still practices, it just does not remember.
+    session: Option<PathBuf>,
+    settings: Option<PathBuf>,
 }
 
-impl FsStorage {
+impl FsBackend {
     pub fn new() -> Self {
         // `WOODSHED_STATE` points the session at another file. A scenario run
         // sets it to a scratch profile: without it, an automated run would read
@@ -24,13 +31,13 @@ impl FsStorage {
         if let Ok(path) = std::env::var("WOODSHED_STATE") {
             let state_path = PathBuf::from(path);
             return Self {
-                settings_path: settings_override
+                settings: settings_override
                     .map(PathBuf::from)
                     .or_else(|| Some(state_path.with_extension("settings.json"))),
-                path: Some(state_path),
+                session: Some(state_path),
             };
         }
-        let (path, default_settings) = ProjectDirs::from("dev", "Woodshed", "Woodshed")
+        let (session, default_settings) = ProjectDirs::from("dev", "Woodshed", "Woodshed")
             .map(|dirs| {
                 (
                     dirs.config_dir().join("genet-state.json"),
@@ -39,44 +46,96 @@ impl FsStorage {
             })
             .unzip();
         Self {
-            path,
-            settings_path: settings_override.map(PathBuf::from).or(default_settings),
+            session,
+            settings: settings_override.map(PathBuf::from).or(default_settings),
+        }
+    }
+
+    /// Which file a slot lives in. Slot names are muniment's; the mapping to
+    /// filenames is this host's, which is why an unknown slot has no file rather
+    /// than a derived one: a typo should lose data loudly, not write somewhere
+    /// nobody looks.
+    fn path(&self, key: &str) -> Option<&PathBuf> {
+        match key {
+            "session" => self.session.as_ref(),
+            "settings" => self.settings.as_ref(),
+            _ => None,
         }
     }
 }
 
-impl SettingsStorage for FsStorage {
-    fn load_settings(&self) -> Option<String> {
-        std::fs::read_to_string(self.settings_path.as_ref()?).ok()
-    }
-
-    fn save_settings(&self, contents: &str) {
-        let Some(path) = self.settings_path.as_ref() else {
-            return;
-        };
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(error) = std::fs::write(path, contents) {
-            eprintln!("[woodshed-genet] failed to persist application settings: {error}");
-        }
+impl Default for FsBackend {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl Storage for FsStorage {
-    fn load(&self) -> Option<String> {
-        std::fs::read_to_string(self.path.as_ref()?).ok()
+#[async_trait]
+impl Backend for FsBackend {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, StoreError> {
+        let Some(path) = self.path(key) else {
+            return Ok(None);
+        };
+        match std::fs::read(path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(StoreError::Backend(error.to_string())),
+        }
     }
 
-    fn save(&self, contents: &str) {
-        let Some(path) = self.path.as_ref() else {
-            return;
+    async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
+        let Some(path) = self.path(key) else {
+            return Ok(());
         };
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if let Err(e) = std::fs::write(path, contents) {
-            eprintln!("[woodshed-genet] failed to persist session: {e}");
+        std::fs::write(path, bytes).map_err(|error| StoreError::Backend(error.to_string()))
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), StoreError> {
+        let Some(path) = self.path(key) else {
+            return Ok(());
+        };
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(StoreError::Backend(error.to_string())),
         }
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<String>, StoreError> {
+        let mut keys = Vec::new();
+        for key in ["session", "settings"] {
+            if key.starts_with(prefix)
+                && self.path(key).is_some_and(|path| path.exists())
+            {
+                keys.push(key.to_string());
+            }
+        }
+        Ok(keys)
+    }
+
+    async fn scan(&self, start: &str, end: &str) -> Result<Vec<String>, StoreError> {
+        let mut keys = self.list("").await?;
+        keys.retain(|key| key.as_str() >= start && key.as_str() < end);
+        keys.sort();
+        Ok(keys)
+    }
+
+    /// Two files, written in order.
+    ///
+    /// Not atomic, and it does not pretend to be: this host has a fixed two-slot
+    /// key space and nothing here writes a pair that must land together. A
+    /// backend whose consumers need real batches wants redb, which muniment
+    /// already ships.
+    async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError> {
+        for op in ops {
+            match op {
+                WriteOp::Put { key, value } => self.put(key, value).await?,
+                WriteOp::Delete { key } => self.delete(key).await?,
+            }
+        }
+        Ok(())
     }
 }

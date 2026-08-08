@@ -16,6 +16,15 @@ serde_json = { workspace = true }
 # pole of the personae suite adoption (one persona, many devices, sealed state).
 # Sibling repo, like woodshed-graph's chartulary path dep.
 personae = { git = "https://github.com/merely-made/mere.git", branch = "main" }
+# The portable persistence seam. woodshed's own Storage/SettingsStorage traits
+# were a two-slot, String-shaped restatement of muniment's SlotStore, with one
+# filesystem realization against muniment's shipped redb/zip/IndexedDB/memory.
+muniment = { git = "https://github.com/merely-made/mere.git", branch = "main" }
+async-trait = "0.1"
+# muniment's Backend is async so a browser can await OPFS; woodshed's save path
+# is the sync event loop, and a filesystem backend returns ready futures, so
+# driving them to completion costs a poll.
+pollster = "0.4"
 # The lineage model the practice history is stored as (adopted 2026-07-26):
 # dated, branching engagements over stable catalog ids, with per-subject recency
 # and frequency maintained upstream. Already in the workspace through
@@ -25,3 +34,4 @@ hex = "0.4"
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt"] }

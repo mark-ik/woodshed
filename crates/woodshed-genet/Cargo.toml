@@ -8,6 +8,10 @@ repository.workspace = true
 description = "Woodshed's genet desktop host: winit window + netrender present over the woodshed-views view layer. Genet-host plan S0+."
 
 [dependencies]
+# The desktop realization of muniment's Backend. woodshed-core names the slots;
+# this crate only decides which file each one lives in.
+muniment = { git = "https://github.com/merely-made/mere.git", branch = "main" }
+async-trait = "0.1"
 woodshed-core = { workspace = true }
 woodshed-audio = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }

@@ -5,7 +5,7 @@
 //! desktop, OPFS in the browser. Every field is `#[serde(default)]`-safe
 //! so old files keep loading as the struct grows.
 
-use personae::{IdentityProvider, seal_bytes, unseal_bytes};
+use muniment::Backend;
 use serde::{Deserialize, Serialize};
 
 use crate::arpeggio::ArpeggioDirection;
@@ -13,22 +13,72 @@ pub use crate::settings::RelatedSettings;
 use crate::settings::AppSettings;
 use crate::{Lens, StageState};
 
-/// The host-supplied persistence realization.
-pub trait Storage {
-    /// The serialized session from the previous run, if any.
-    fn load(&self) -> Option<String>;
-    /// Persist the serialized session. Failures should be logged by the
-    /// implementation, not surfaced as app errors — a broken disk must
-    /// not strand practice.
-    fn save(&self, contents: &str);
+/// The two things woodshed keeps between runs, as named slots on a
+/// [`muniment::Backend`].
+///
+/// This used to be two traits, `Storage` and `SettingsStorage`, each a single
+/// hardcoded slot moving a `String`. That was a restatement of what muniment
+/// already provides, and its lack of a key space is why a second thing to store
+/// needed a second trait rather than a second name. A third needs neither now.
+///
+/// The host supplies the backend, which is where the platform split lives:
+/// filesystem on desktop, OPFS or IndexedDB in the browser, redb or zip where a
+/// real store is wanted. Sealing is [`crate::sealed_backend::SealedBackend`],
+/// composed in by the host rather than known about here.
+pub struct SessionStore<B> {
+    backend: B,
 }
 
-/// The product-owned application-preference persistence lane. It is separate
-/// from [`Storage`] because a practice session contains artifact state while
-/// `AppSettings` contains install/persona-facing preferences.
-pub trait SettingsStorage {
-    fn load_settings(&self) -> Option<String>;
-    fn save_settings(&self, contents: &str);
+/// The session slot: artifact state, what the practitioner was doing.
+const SESSION_SLOT: &str = "session";
+/// The settings slot: install and persona-facing preferences. Separate from the
+/// session because they answer different questions and are written at different
+/// times, which is the distinction the two old traits were really drawing.
+const SETTINGS_SLOT: &str = "settings";
+
+impl<B: Backend> SessionStore<B> {
+    pub fn new(backend: B) -> Self {
+        Self { backend }
+    }
+
+    /// The backend, for a host that also drives it directly.
+    pub fn backend(&self) -> &B {
+        &self.backend
+    }
+
+    pub fn load(&self) -> Option<String> {
+        self.read(SESSION_SLOT)
+    }
+
+    pub fn save(&self, contents: &str) {
+        self.write(SESSION_SLOT, contents);
+    }
+
+    pub fn load_settings(&self) -> Option<String> {
+        self.read(SETTINGS_SLOT)
+    }
+
+    pub fn save_settings(&self, contents: &str) {
+        self.write(SETTINGS_SLOT, contents);
+    }
+
+    /// Read one slot, treating every failure as absence.
+    ///
+    /// A backend error, non-UTF-8 bytes, and a seal that will not open all mean
+    /// the same thing to the app: there is no previous session, start fresh. The
+    /// alternative is stranding practice behind an error the user cannot act on.
+    fn read(&self, slot: &str) -> Option<String> {
+        let bytes = pollster::block_on(self.backend.get(slot)).ok()??;
+        String::from_utf8(bytes).ok()
+    }
+
+    /// Write one slot, logging rather than surfacing failure, because a broken
+    /// disk must not strand practice.
+    fn write(&self, slot: &str, contents: &str) {
+        if let Err(error) = pollster::block_on(self.backend.put(slot, contents.as_bytes())) {
+            eprintln!("[woodshed] could not persist {slot}: {error}");
+        }
+    }
 }
 
 /// The top-level product section. Legacy Practice and Song values migrate at
@@ -194,58 +244,7 @@ pub fn decode_session(contents: &str) -> Result<SessionLoad, serde_json::Error> 
 /// Associated-data + persona-derivation context binding woodshed's sealed session
 /// to its purpose. Also the salt the sealing key derives under, so the key is
 /// specific to this use.
-const WOODSHED_SEAL_CONTEXT: &[u8] = b"woodshed.practice-session.seal.v1";
-
-/// A [`Storage`] that seals the practice session at rest under a persona-derived
-/// key — the woodshed pole of the personae suite adoption (one persona, encrypt
-/// at rest, carry-ready).
-///
-/// Wraps an inner host [`Storage`] that moves a `String`. The session is sealed
-/// to XChaCha20-Poly1305 bytes and hex-encoded to fit that String seam, so the
-/// host's filesystem / OPFS realization is unchanged. Build it with
-/// [`SealedStorage::for_provider`] so the key derives from the user's personae
-/// identity: any device holding the persona seed re-derives it and reads the
-/// state, while anyone without it gets `None` (a fresh session) rather than the
-/// plaintext.
-pub struct SealedStorage<S: Storage> {
-    inner: S,
-    key: [u8; 32],
-}
-
-impl<S: Storage> SealedStorage<S> {
-    /// Seal under an explicit 32-byte key (the primitive; a host that already
-    /// holds the key, and the tests, use this).
-    pub fn new(inner: S, key: [u8; 32]) -> Self {
-        Self { inner, key }
-    }
-
-    /// Derive the sealing key from the user's personae identity, so the sealed
-    /// session is readable on any device that carries the persona seed.
-    pub fn for_provider(
-        inner: S,
-        provider: &dyn IdentityProvider,
-    ) -> Result<Self, personae::IdentityError> {
-        let key = provider.derive_keypair(WOODSHED_SEAL_CONTEXT)?.to_seed();
-        Ok(Self::new(inner, key))
-    }
-}
-
-impl<S: Storage> Storage for SealedStorage<S> {
-    fn load(&self) -> Option<String> {
-        let hexed = self.inner.load()?;
-        let sealed = hex::decode(hexed.trim()).ok()?;
-        let plain = unseal_bytes(&self.key, WOODSHED_SEAL_CONTEXT, &sealed).ok()?;
-        String::from_utf8(plain).ok()
-    }
-
-    fn save(&self, contents: &str) {
-        // A broken seal must not strand practice: on failure, skip the write so
-        // the prior sealed session stays, matching the Storage contract.
-        if let Ok(sealed) = seal_bytes(&self.key, WOODSHED_SEAL_CONTEXT, contents.as_bytes()) {
-            self.inner.save(&hex::encode(sealed));
-        }
-    }
-}
+pub(crate) const WOODSHED_SEAL_CONTEXT: &[u8] = b"woodshed.practice-session.seal.v1";
 
 #[cfg(test)]
 mod tests {
@@ -389,65 +388,4 @@ mod tests {
         assert_eq!(song.section, AppSection::Looper);
     }
 
-    // A mock host Storage holding one String (what SealedStorage wraps; a real
-    // host writes it to disk / OPFS). Shared cell so a test can peek at rest.
-    #[derive(Clone, Default)]
-    struct MemStorage(std::rc::Rc<std::cell::RefCell<Option<String>>>);
-    impl Storage for MemStorage {
-        fn load(&self) -> Option<String> {
-            self.0.borrow().clone()
-        }
-        fn save(&self, contents: &str) {
-            *self.0.borrow_mut() = Some(contents.to_string());
-        }
-    }
-
-    #[test]
-    fn sealed_session_is_encrypted_at_rest_and_round_trips() {
-        let backing = MemStorage::default();
-        let sealed = SealedStorage::new(backing.clone(), [9u8; 32]);
-
-        let json = serde_json::to_string(&PersistedSession::default()).unwrap();
-        sealed.save(&json);
-
-        // At rest it is not the plaintext session.
-        let at_rest = backing.load().unwrap();
-        assert_ne!(at_rest, json);
-        assert!(
-            !at_rest.contains("\"bpm\""),
-            "no plaintext session fields at rest"
-        );
-        // Reading back through the sealed storage recovers the session.
-        assert_eq!(sealed.load().unwrap(), json);
-    }
-
-    #[test]
-    fn a_wrong_key_reads_no_session_rather_than_crashing() {
-        let backing = MemStorage::default();
-        SealedStorage::new(backing.clone(), [1u8; 32]).save("a session");
-        assert!(SealedStorage::new(backing, [2u8; 32]).load().is_none());
-    }
-
-    #[test]
-    fn a_second_device_with_the_same_persona_reads_the_sealed_session() {
-        use personae::InMemoryProvider;
-        let backing = MemStorage::default();
-        let seed = [3u8; 32];
-
-        // Device A seals under its persona.
-        SealedStorage::for_provider(backing.clone(), &InMemoryProvider::from_seed(seed))
-            .unwrap()
-            .save("my practice state");
-
-        // Device B, same persona seed (paired via the wallet), re-derives the key
-        // and reads it — the carry property.
-        let device_b =
-            SealedStorage::for_provider(backing.clone(), &InMemoryProvider::from_seed(seed)).unwrap();
-        assert_eq!(device_b.load().unwrap(), "my practice state");
-
-        // A different persona cannot read it.
-        let other =
-            SealedStorage::for_provider(backing, &InMemoryProvider::from_seed([4u8; 32])).unwrap();
-        assert!(other.load().is_none());
-    }
 }
