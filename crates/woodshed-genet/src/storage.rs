@@ -13,6 +13,60 @@ use async_trait::async_trait;
 use directories::ProjectDirs;
 use muniment::backend::WriteOp;
 use muniment::{Backend, StoreError};
+use personae::bootstrap::Unlock;
+use personae::roster;
+use woodshed_core::sealed_backend::SealedBackend;
+use woodshed_core::storage::SessionStore;
+
+/// Open the practice store, sealed to the chosen persona when the family
+/// vault opens and plain files when it does not.
+///
+/// **Sealing is not a gate.** Woodshed practiced without an identity before
+/// sealing existed, and a machine with no vault backend — no DPAPI, no
+/// `PERSONAE_PASSPHRASE` — still has to be able to open a tuner. So a vault
+/// that will not open is said out loud and stepped over, never raised.
+///
+/// The key derives from the persona chosen in the shared personae vault
+/// ([`roster::open_shared`]), which is what makes a session sealed on one
+/// machine readable on another carrying the same persona, and what makes
+/// switching personas switch practice sessions.
+pub fn open_store() -> SessionStore<HostBackend> {
+    SessionStore::new(open_backend())
+}
+
+/// The store woodshed practices over, decided at startup.
+pub type HostBackend = Box<dyn Backend + Send + Sync>;
+
+fn open_backend() -> HostBackend {
+    let files = FsBackend::new();
+    let opened = match roster::open_shared(Unlock::from_env()) {
+        Ok(opened) => opened,
+        Err(error) => {
+            eprintln!("[woodshed] no identity vault ({error}); practice will be stored unsealed");
+            return Box::new(files);
+        }
+    };
+    match SealedBackend::for_provider(files, &opened.vault) {
+        // Adopting plaintext is the migration: a session written before sealing
+        // was switched on is read once as it stands, and the next save seals it.
+        // Nothing to run, and nothing to run in the right order.
+        Ok(sealed) => {
+            eprintln!(
+                "[woodshed] practice sealed to persona {:?} ({})",
+                opened.profile.0, opened.description
+            );
+            Box::new(sealed.adopting_plaintext())
+        }
+        Err(error) => {
+            eprintln!(
+                "[woodshed] could not derive a sealing key from persona {:?}: {error}; \
+                 practice will be stored unsealed",
+                opened.profile.0
+            );
+            Box::new(FsBackend::new())
+        }
+    }
+}
 
 pub struct FsBackend {
     /// `None` when the platform exposes no config dir. Persistence is silently

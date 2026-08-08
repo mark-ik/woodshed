@@ -6756,6 +6756,7 @@ dependencies = [
  "netrender",
  "paint_list_api",
  "paint_list_render",
+ "personae",
  "serde_json",
  "sprigging",
  "wgpu",
@@ -7178,6 +7179,10 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
+
+[[patch.unused]]
 name = "armillary"
 version = "0.1.1"
 
@@ -7235,8 +7240,4 @@ version = "0.1.1"
 
 [[patch.unused]]
 name = "vates"
-version = "0.1.1"
-
-[[patch.unused]]
-name = "netfetcher"
 version = "0.1.1"

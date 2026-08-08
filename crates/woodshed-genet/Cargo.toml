@@ -11,6 +11,10 @@ description = "Woodshed's genet desktop host: winit window + netrender present o
 # The desktop realization of muniment's Backend. woodshed-core names the slots;
 # this crate only decides which file each one lives in.
 muniment = { git = "https://github.com/merely-made/mere.git", branch = "main" }
+# The family-shared identity vault: which persona this machine practices as,
+# and the key its practice session is sealed under. Desktop-only, which is why
+# it is declared here rather than in the portable core.
+personae = { git = "https://github.com/merely-made/mere.git", branch = "main" }
 async-trait = "0.1"
 woodshed-core = { workspace = true }
 woodshed-audio = { workspace = true }

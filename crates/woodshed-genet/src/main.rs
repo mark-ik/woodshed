@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use audio::CpalBackend;
 use midi::MidiHost;
-use storage::FsBackend;
+use storage::{HostBackend, open_store};
 use woodshed_core::storage::SessionStore;
 use woodshed_core::audio::{AudioBackend, CalibrationStatus};
 use woodshed_core::midi::MidiBackend as _;
@@ -213,8 +213,10 @@ struct App {
     /// Last rehearsal dwell-advance instant.
     last_rehearsal_step: Option<std::time::Instant>,
     /// Named slots over a host backend: files on desktop, OPFS on the web
-    /// host. Sealing composes in at the backend, and is not wired here.
-    storage: SessionStore<FsBackend>,
+    /// host. Which backend is decided at startup by [`open_store`] — sealed to
+    /// the chosen persona when the family vault opens, plain files otherwise —
+    /// so everything above it is the same store either way.
+    storage: SessionStore<HostBackend>,
     /// Theme the current sheet was generated from; a change re-skins.
     theme: ThemeMode,
     /// The hovered node's opaque id, for `:hover` restyles on target
@@ -1702,7 +1704,7 @@ fn main() {
         midi: MidiHost::new(),
         last_arp_step: None,
         last_rehearsal_step: None,
-        storage: SessionStore::new(FsBackend::new()),
+        storage: open_store(),
         theme: ThemeMode::default(),
         last_hover: None,
         last_hover_hit: None,
