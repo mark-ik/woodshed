@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Woodshed's genet desktop host: winit window + netrender present over the woodshed-views view layer. Genet-host plan S0+."
+description = "Woodshed's desktop application over the shared Cambium desktop host: state, views, backends, and the self-drive lane. The native host itself is genet's."
 
 [dependencies]
 # The desktop realization of muniment's Backend. woodshed-core names the slots;
@@ -20,19 +20,21 @@ woodshed-core = { workspace = true }
 woodshed-audio = { workspace = true }
 woodshed-views = { path = "../woodshed-views" }
 cambium = { workspace = true }
-cambium-winit = { workspace = true }
-cambium-winit-a11y = { workspace = true }
+# The shared single-root Cambium desktop host (genet G1). It owns the winit
+# lifecycle, the surface, layout, paint, hit testing, input routing, and the
+# AccessKit sync woodshed used to assemble by hand — so the direct deps that
+# assembly needed (genet-layout, genet-winit-host, cambium-winit,
+# cambium-winit-a11y, netrender, paint_list_*) are gone from this manifest.
+# Woodshed is now the first consumer of that boundary rather than its donor.
+cambium-genet-winit-host = { workspace = true }
 sprigging = { workspace = true }
 layout-dom-api = { workspace = true }
 genet-scripted-dom = { workspace = true }
-genet-layout = { workspace = true }
 # The shared automatability substrate: selector resolution + the scenario
 # driver, so woodshed's self-drive lane is the genet one, not a private copy.
 genet-probe = { workspace = true }
-genet-winit-host = { workspace = true }
-netrender = { workspace = true }
-paint_list_api = { workspace = true }
-paint_list_render = { workspace = true }
+# Still needed by the scenario lane's capture: the host hands back a readback,
+# and the winit types the window-chrome requests speak.
 wgpu = { workspace = true }
 winit = { workspace = true }
 directories = "5"

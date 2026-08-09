@@ -6,8 +6,12 @@
 //! window. This lane replaces both. The generic half (parsing, the verb loop,
 //! selector resolution, assertions) is [`genet_probe`]; what lives here is only
 //! what is woodshed's: which surfaces it has, what it can be asked to observe,
-//! its named commands, how a delivered point routes, and how a frame is
-//! captured.
+//! its named commands, and how a frame becomes a PNG.
+//!
+//! Since the host extraction it no longer owns *routing*. A delivered point is
+//! queued as a [`HostPointer`] and the host runs it through the same hit test,
+//! capture, and dispatch a real mouse takes — so a receipt exercises the
+//! shipping path rather than an app-local imitation of it.
 //!
 //! Two env vars turn it on:
 //!
@@ -24,19 +28,23 @@
 //! without it the run would read, and then overwrite, the real practice
 //! session.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
+use cambium_genet_winit_host::{Frame, HostPointer, read_frame};
 use genet_probe::{Automatable, Driveable, ProbeSnapshot, ProbeSurface, Progress, Scenario};
 use woodshed_views::stage::UiState;
 
-use crate::App;
+use crate::shared::Shared;
+use crate::sync::Ctx;
 
-/// A running scenario. Where its receipts go lives on the app, not here: the
-/// lane is moved out of the app for the duration of a tick (so the driver can
-/// hold `&mut App`), which would otherwise make the capture directory
+/// A running scenario. Where its receipts go lives on [`Shared`], not here: the
+/// scenario is moved out of the lane for the duration of a tick (so the driver
+/// can hold everything else), which would otherwise make the capture directory
 /// unreachable from inside a `capture` step.
 pub struct ScenarioLane {
-    scenario: Scenario,
+    scenario: Option<Scenario>,
     /// Set once the outcome has been written, so the sentinel is written once.
     finished: bool,
 }
@@ -61,7 +69,7 @@ impl ScenarioLane {
         };
         eprintln!("[woodshed-genet] scenario lane armed: {path}");
         Some(Self {
-            scenario,
+            scenario: Some(scenario),
             finished: false,
         })
     }
@@ -74,12 +82,11 @@ impl ScenarioLane {
     }
 
     /// Write the `scenario.done` sentinel the harness waits on.
-    fn write_outcome(&mut self, capture_dir: Option<&Path>) {
+    fn write_outcome(&mut self, outcome: genet_probe::Outcome, capture_dir: Option<&Path>) {
         if self.finished {
             return;
         }
         self.finished = true;
-        let outcome = self.scenario.finish();
         let result = if outcome.ok { "RESULT ok" } else { "RESULT fail" };
         let body = std::iter::once(result.to_string())
             .chain(outcome.log.iter().cloned())
@@ -139,86 +146,142 @@ fn relation_summary(ui: &UiState) -> String {
         .join(",")
 }
 
-impl App {
-    /// Sample the observed state and emit an event for anything that moved.
-    /// Events are the app's own transitions, not the driver's intentions, so a
-    /// scenario asserting one is asserting that the app really did it.
-    pub(crate) fn note_events(&mut self) {
-        let Some(runner) = self.runner.as_ref() else {
-            return;
-        };
-        let now = Observed::read(runner.state());
-        let before = std::mem::replace(&mut self.observed, now.clone());
-        if before == now {
-            return;
-        }
-        if before.cards != now.cards {
-            self.events.push(format!("set-size {}", now.cards));
-        }
-        if before.cursor_id != now.cursor_id || before.cursor_number != now.cursor_number {
-            self.events.push(format!(
-                "set-cursor id={} number={}",
-                now.cursor_id, now.cursor_number
-            ));
-        }
-        if before.relations != now.relations {
-            self.events
-                .push(format!("relations-visible {}", now.relations));
-        }
-        if before.edges != now.edges {
-            self.events.push(format!("graph-edges {}", now.edges));
-        }
+/// Sample the observed state and emit an event for anything that moved. Events
+/// are the app's own transitions, not the driver's intentions, so a scenario
+/// asserting one is asserting that the app really did it.
+pub fn note_events(shared: &mut Shared, ui: &UiState) {
+    let now = Observed::read(ui);
+    let before = std::mem::replace(&mut shared.observed, now.clone());
+    if before == now {
+        return;
     }
-
-    /// Pump the scenario one step, after a presented frame. The lane is moved
-    /// out for the tick so the driver can hold `&mut self`.
-    pub(crate) fn drive_scenario(&mut self) {
-        let Some(mut lane) = self.scenario.take() else {
-            return;
-        };
-        let progress = lane.scenario.tick(self);
-        if progress == Progress::Done {
-            lane.write_outcome(self.capture_dir.as_deref());
-            self.close_requested = true;
-        }
-        self.scenario = Some(lane);
-        if let Some(window) = self.window.as_ref() {
-            // A scenario run must keep frames coming: every step is pumped by
-            // one, and an idle app would stall the run rather than finish it.
-            window.request_redraw();
-        }
+    if before.cards != now.cards {
+        shared.events.push(format!("set-size {}", now.cards));
     }
-
-    /// Perform a capture requested by the previous frame's `capture` step, using
-    /// the view this frame rasterized. Called from `redraw` after present, so
-    /// the pixels are exactly what was shown.
-    pub(crate) fn take_pending_capture(&mut self) -> Option<PathBuf> {
-        self.pending_capture.take()
+    if before.cursor_id != now.cursor_id || before.cursor_number != now.cursor_number {
+        shared.events.push(format!(
+            "set-cursor id={} number={}",
+            now.cursor_id, now.cursor_number
+        ));
+    }
+    if before.relations != now.relations {
+        shared
+            .events
+            .push(format!("relations-visible {}", now.relations));
+    }
+    if before.edges != now.edges {
+        shared.events.push(format!("graph-edges {}", now.edges));
     }
 }
 
-impl Automatable for App {
+thread_local! {
+    /// The capture armed for the next presented frame: where it goes and the
+    /// readback the host will drop into it. A thread-local because the capture
+    /// closure outlives the tick that armed it, and the whole application runs
+    /// on one thread.
+    static PENDING: RefCell<Option<(PathBuf, Rc<RefCell<Option<Frame>>>)>> =
+        const { RefCell::new(None) };
+}
+
+/// Pump the scenario one step, after a presented frame. Called from the host's
+/// `after_frame` hook, so every assertion reads a state that was actually
+/// rendered.
+pub fn drive(shared: &mut Shared, ctx: &mut Ctx<'_>) {
+    if shared.scenario.is_none() {
+        return;
+    }
+    write_pending_capture();
+    note_events(shared, ctx.runner.state());
+    let Some(mut scenario) = shared.scenario.as_mut().and_then(|l| l.scenario.take()) else {
+        return;
+    };
+    let progress = {
+        let mut probe = Probe { ctx, shared };
+        scenario.tick(&mut probe)
+    };
+    // Hold the sentinel until every armed capture has actually been written, or
+    // the receipt would claim a screenshot that does not exist.
+    if progress == Progress::Done && PENDING.with(|p| p.borrow().is_none()) {
+        let outcome = scenario.finish();
+        let capture_dir = shared.capture_dir.clone();
+        if let Some(lane) = shared.scenario.as_mut() {
+            lane.write_outcome(outcome, capture_dir.as_deref());
+        }
+        *ctx.close = true;
+    }
+    if let Some(lane) = shared.scenario.as_mut() {
+        lane.scenario = Some(scenario);
+    }
+    // A scenario run must keep frames coming: every step is pumped by one, and
+    // an idle app would stall the run rather than finish it.
+    if let Some(window) = ctx.window {
+        window.request_redraw();
+    }
+}
+
+/// Encode whatever readback the last armed capture produced.
+fn write_pending_capture() {
+    let taken = PENDING.with(|p| p.borrow_mut().take());
+    let Some((path, sink)) = taken else { return };
+    let frame = sink.borrow_mut().take();
+    match frame {
+        Some(frame) => {
+            if !write_png(&frame, &path) {
+                eprintln!("[woodshed-genet] capture failed: {}", path.display());
+            }
+        }
+        // Not presented yet: put it back and try again next frame.
+        None => PENDING.with(|p| *p.borrow_mut() = Some((path, sink))),
+    }
+}
+
+/// Write a read-back frame as a PNG. The same pixels the frame presented, so the
+/// receipt is the frame.
+fn write_png(frame: &Frame, path: &Path) -> bool {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let Ok(file) = std::fs::File::create(path) else {
+        return false;
+    };
+    use image::ImageEncoder;
+    image::codecs::png::PngEncoder::new(file)
+        .write_image(
+            &frame.rgba,
+            frame.width,
+            frame.height,
+            image::ExtendedColorType::Rgba8,
+        )
+        .is_ok()
+}
+
+/// The `Automatable` view of woodshed, borrowed for the duration of one tick.
+///
+/// The host owns the runner, so the application cannot hold a long-lived `&mut`
+/// to it; it borrows the hook's context for exactly as long as the driver needs
+/// and queues pointer delivery back through the host.
+struct Probe<'a, 'c> {
+    ctx: &'a mut Ctx<'c>,
+    shared: &'a mut Shared,
+}
+
+impl Automatable for Probe<'_, '_> {
     fn with_surfaces<R>(&self, f: impl FnOnce(&[ProbeSurface<'_>]) -> R) -> R {
-        let Some(runner) = self.runner.as_ref() else {
-            return f(&[]);
-        };
-        let dom = runner.dom();
+        let dom = self.ctx.runner.dom();
         let dom_ref = dom.borrow();
+        let (w, h) = self.ctx.logical_size;
         f(&[ProbeSurface {
             name: "woodshed",
             dom: &dom_ref,
             // One runner covers the window, and the probe resolves in the same
             // logical coordinates the layout and the cursor use.
-            rect: [0.0, 0.0, self.layout_size.0, self.layout_size.1],
-            sheet: &self.sheet,
+            rect: [0.0, 0.0, w, h],
+            sheet: &self.shared.accessible_sheet(),
         }])
     }
 
     fn snapshot(&self) -> ProbeSnapshot {
-        let Some(runner) = self.runner.as_ref() else {
-            return ProbeSnapshot::default();
-        };
-        let ui = runner.state();
+        let ui = self.ctx.runner.state();
         let observed = Observed::read(ui);
         let cursor_label = ui
             .set
@@ -275,14 +338,16 @@ impl Automatable for App {
                         .join(","),
                 );
         }
-        snap = snap.with_field("related-count", related.len().to_string()).with_field(
-            "related-multi-count",
-            related
-                .iter()
-                .filter(|neighbor| neighbor.relation_count() > 1)
-                .count()
-                .to_string(),
-        );
+        snap = snap
+            .with_field("related-count", related.len().to_string())
+            .with_field(
+                "related-multi-count",
+                related
+                    .iter()
+                    .filter(|neighbor| neighbor.relation_count() > 1)
+                    .count()
+                    .to_string(),
+            );
         // The richest pair on the frontier: the one carrying the most relations
         // at once. A single top row can honestly have one reason (an arpeggio
         // realizes its chord, and that is all it does), so multiplicity is
@@ -323,15 +388,12 @@ impl Automatable for App {
     }
 
     fn drain_events(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.events)
+        std::mem::take(&mut self.shared.events)
     }
 
     fn act(&mut self, label: &str) -> bool {
-        let Some(runner) = self.runner.as_mut() else {
-            return false;
-        };
         let mut known = true;
-        runner.update(|ui| match label {
+        self.ctx.runner.update(|ui| match label {
             "stage-current" => ui.stage_current(None),
             "expand-tray" => ui.set_tray_expanded = true,
             "collapse-tray" => ui.set_tray_expanded = false,
@@ -354,27 +416,26 @@ impl Automatable for App {
             _ => known = false,
         });
         if known {
-            self.after_dispatch();
-            self.note_events();
+            crate::sync::after_dispatch(self.shared, self.ctx);
+            note_events(self.shared, self.ctx.runner.state());
         }
         known
     }
 
     fn press(&mut self, x: f32, y: f32) {
-        // Woodshed dispatches on press, through the same hit-test path a real
-        // pointer takes; `release` is where a real click ends, not where it
-        // acts, so this is the honest routing rather than a shortcut.
-        self.cursor = (x, y);
-        self.click();
-        self.note_events();
+        // Routed by the host: the same hit test, capture, and dispatch a real
+        // pointer takes. Delivered once this hook returns, and observed by the
+        // next frame's tick — which is where the scenario asserts anyway.
+        self.ctx.pointer.push(HostPointer::Press(x, y));
     }
 
     fn moved(&mut self, x: f32, y: f32) {
-        self.cursor = (x, y);
-        self.hover();
+        self.ctx.pointer.push(HostPointer::Moved(x, y));
     }
 
-    fn release(&mut self, _x: f32, _y: f32) {}
+    fn release(&mut self, x: f32, y: f32) {
+        self.ctx.pointer.push(HostPointer::Release(x, y));
+    }
 
     fn busy(&mut self) -> Option<bool> {
         // Woodshed has no fetch or actor round-trip in this lane: a step's
@@ -384,9 +445,10 @@ impl Automatable for App {
     }
 }
 
-impl Driveable for App {
+impl Driveable for Probe<'_, '_> {
     fn capture(&mut self, name: &str) -> bool {
         let Some(path) = self
+            .shared
             .capture_dir
             .as_ref()
             .map(|dir| dir.join(format!("{name}.png")))
@@ -396,130 +458,15 @@ impl Driveable for App {
             eprintln!("[woodshed-genet] capture '{name}' skipped: no WOODSHED_CAPTURE_DIR");
             return true;
         };
-        // The capture runs in the next frame's redraw, where the rasterized
-        // view still exists. Nothing between now and then changes the state:
-        // the scenario pumps one step per frame.
-        self.pending_capture = Some(path);
-        if let Some(window) = self.window.as_ref() {
+        let sink = Rc::new(RefCell::new(None::<Frame>));
+        let out = sink.clone();
+        *self.ctx.capture = Some(Box::new(move |surface, view, w, h| {
+            *out.borrow_mut() = read_frame(surface, view, w, h);
+        }));
+        PENDING.with(|p| *p.borrow_mut() = Some((path, sink)));
+        if let Some(window) = self.ctx.window {
             window.request_redraw();
         }
         true
     }
-}
-
-/// Compose `view` into an owned `COPY_SRC` target, read it back, and write a
-/// PNG. The same view the frame presented, so the receipt is the frame.
-pub(crate) fn capture_view(
-    host: &genet_winit_host::SurfaceHost,
-    view: &wgpu::TextureView,
-    width: u32,
-    height: u32,
-    path: &Path,
-) -> bool {
-    use netrender::ExternalTexturePlacement;
-
-    let target = host.device().create_texture(&wgpu::TextureDescriptor {
-        label: Some("woodshed scenario capture"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
-    host.renderer().compose_external_texture(
-        view,
-        &target_view,
-        wgpu::TextureFormat::Rgba8Unorm,
-        width,
-        height,
-        ExternalTexturePlacement::new([0.0, 0.0, width as f32, height as f32]),
-    );
-    let rgba = read_texture_rgba(host.device(), host.queue(), &target, width, height);
-    if rgba.is_empty() {
-        return false;
-    }
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let Ok(file) = std::fs::File::create(path) else {
-        return false;
-    };
-    use image::ImageEncoder;
-    image::codecs::png::PngEncoder::new(file)
-        .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
-        .is_ok()
-}
-
-/// Read a texture back as tightly packed RGBA8 (empty on failure). Standard
-/// wgpu readback: copy into a row-aligned buffer, map it, strip the padding
-/// each row carries.
-fn read_texture_rgba(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
-    width: u32,
-    height: u32,
-) -> Vec<u8> {
-    let unpadded = width * 4;
-    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let padded = unpadded.div_ceil(align) * align;
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("woodshed capture readback"),
-        size: (padded * height) as u64,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("woodshed capture readback"),
-    });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-    );
-    queue.submit(Some(encoder.finish()));
-    let slice = buffer.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |_| {});
-    if device
-        .poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })
-        .is_err()
-    {
-        eprintln!("[woodshed-genet] capture readback poll failed");
-        return Vec::new();
-    }
-    let data = slice.get_mapped_range();
-    let mut out = Vec::with_capacity((unpadded * height) as usize);
-    for row in 0..height {
-        let start = (row * padded) as usize;
-        out.extend_from_slice(&data[start..start + unpadded as usize]);
-    }
-    drop(data);
-    buffer.unmap();
-    out
 }
