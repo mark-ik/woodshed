@@ -52,22 +52,40 @@ fn desktop_chrome(_ui: &UiState) -> UiChild {
             "div",
             (
                 el("div", text_node("Woodshed")).attr("class", "chrome-title"),
+                // The drag surface is a mouse affordance with no keyboard
+                // equivalent, so it is hidden from the accessibility tree
+                // rather than left as a focus stop that announces "group" and
+                // does nothing.
                 clickable(
-                    el("div", ()).attr("class", "chrome-drag"),
+                    el("div", ())
+                        .attr("class", "chrome-drag")
+                        .attr("aria-hidden", "true"),
                     |ui: &mut UiState, _| {
                         ui.chrome_drag = true;
                     },
                 ),
+                // The glyphs are what the eye reads; `aria-label` is what the
+                // ear gets. Without them a screen reader announces these as
+                // "dash", "white square", and "multiplication sign".
                 clickable(
-                    el("div", text_node("–")).attr("class", "chrome-btn"),
+                    el("div", text_node("–"))
+                        .attr("class", "chrome-btn")
+                        .attr("role", "button")
+                        .attr("aria-label", "Minimize"),
                     |ui: &mut UiState, _| ui.chrome_minimize = true,
                 ),
                 clickable(
-                    el("div", text_node("□")).attr("class", "chrome-btn"),
+                    el("div", text_node("□"))
+                        .attr("class", "chrome-btn")
+                        .attr("role", "button")
+                        .attr("aria-label", "Maximize"),
                     |ui: &mut UiState, _| ui.chrome_maximize = true,
                 ),
                 clickable(
-                    el("div", text_node("×")).attr("class", "chrome-btn chrome-close"),
+                    el("div", text_node("×"))
+                        .attr("class", "chrome-btn chrome-close")
+                        .attr("role", "button")
+                        .attr("aria-label", "Close"),
                     |ui: &mut UiState, _| ui.chrome_close = true,
                 ),
             ),
