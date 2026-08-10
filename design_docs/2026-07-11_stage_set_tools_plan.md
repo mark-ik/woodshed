@@ -1,5 +1,13 @@
 # Stage, Set, Tools, Rehearsal, and Looper Plan
 
+> **2026-08-10 — the gate is open.** The scenograph scene contract this plan
+> gates on ("what remains is the freeze, not the proof") froze 2026-07-24 at
+> 0.0.3: emphasis channels and a default pick added, intents stay
+> protocol-side, `sceno::measure` deleted. Isometry and turnstone are
+> re-resolved against it. Adoption can begin; the expansion map, with
+> woodshed adoption as its L1 release gate, is mere's
+> `design_docs/mere_docs/research/2026-08-10_scenograph_expansion_brief.md`.
+
 ## Product model
 
 Woodshed is a practice app. Its organizing action is staging material for a
