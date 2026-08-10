@@ -324,10 +324,6 @@ pub struct UiState {
     /// the page; 0 until the host reports it (treated as "unbounded").
     pub viewport_h: f32,
     /// Window-chrome requests the host consumes after dispatch (CSD).
-    pub chrome_minimize: bool,
-    pub chrome_maximize: bool,
-    pub chrome_close: bool,
-    pub chrome_drag: bool,
     pub transport: TransportState,
     pub tuner: TunerState,
     /// A device/stream failure reported by the host's audio backend.
@@ -427,10 +423,6 @@ impl UiState {
             tool_page: ToolPage::default(),
             viewport: ViewportClass::default(),
             viewport_h: 0.0,
-            chrome_minimize: false,
-            chrome_maximize: false,
-            chrome_close: false,
-            chrome_drag: false,
             transport: TransportState::default(),
             tuner: TunerState::default(),
             audio_error: None,

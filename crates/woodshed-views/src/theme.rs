@@ -170,10 +170,15 @@ pub fn stage_css(p: &Palette) -> String {
                   padding: 8px 16px 0 16px; }}
 .desktop-frame .root {{ width: 100%; height: auto; min-height: 0; flex-grow: 1;
                         background-color: transparent; padding: 0 0 16px 0; }}
-.chrome {{ display: flex; margin-bottom: 10px; }}
+/* The title bar is a window-drag surface: the host reads `--app-region` off
+   the cascade, so the whole bar drags and no element needs a drag handler.
+   Double-click to maximize and the right-click system menu come with it. */
+.chrome {{ --app-region: drag; display: flex; margin-bottom: 10px; }}
 .chrome-title {{ color: {text_header}; font-size: 15px; font-weight: 700; padding: 4px 8px 4px 0; }}
+/* Spacer: pushes the buttons right and gives the bar its grabbable middle. */
 .chrome-drag {{ flex-grow: 1; height: 26px; }}
-.chrome-btn {{ color: {text_dim}; padding: 2px 12px; border-radius: 6px;
+/* The buttons sit inside the bar, so they carve themselves back out of it. */
+.chrome-btn {{ --app-region: no-drag; color: {text_dim}; padding: 2px 12px; border-radius: 6px;
               font-size: 15px; }}
 .chrome-btn:hover {{ background-color: {surface_2}; color: {text}; }}
 .chrome-close:hover {{ background-color: {danger}; color: {on_primary}; }}

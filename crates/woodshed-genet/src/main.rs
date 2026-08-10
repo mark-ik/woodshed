@@ -34,7 +34,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
-use cambium_genet_winit_host::{HostHooks, HostOptions, Init, run};
+use cambium_genet_winit_host::{HostHooks, HostOptions, Init, WindowCommands, run};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
@@ -44,49 +44,62 @@ use crate::audio::CpalBackend;
 use crate::shared::Shared;
 use crate::sync::{Ctx, Logic};
 
+/// One caption button. The glyph is what the eye reads; `aria-label` is what
+/// the ear gets — without it a screen reader announces these as "dash",
+/// "white square", and "multiplication sign".
+///
+/// The handler captures the window-verb handle rather than setting a flag on
+/// `UiState`: window control is a desktop concern, and the shared state is
+/// also the browser host's.
+fn caption(
+    glyph: &'static str,
+    name: &'static str,
+    class: &'static str,
+    commands: &WindowCommands,
+    verb: fn(&WindowCommands),
+) -> UiChild {
+    let commands = commands.clone();
+    Box::new(clickable(
+        el("div", text_node(glyph))
+            .attr("class", class)
+            .attr("role", "button")
+            .attr("aria-label", name),
+        move |_ui: &mut UiState, _| verb(&commands),
+    ))
+}
+
 /// Desktop-only frame. The shared Woodshed root deliberately contains product
 /// UI only, so a browser host does not inherit window controls it cannot use.
-fn desktop_chrome(_ui: &UiState) -> UiChild {
+///
+/// The bar itself carries `--app-region: drag` in the sheet, so moving the
+/// window, double-click-to-maximize, and the right-click system menu are the
+/// host's and need no handler here.
+fn desktop_chrome(commands: &WindowCommands) -> UiChild {
     Box::new(
         el(
             "div",
             (
                 el("div", text_node("Woodshed")).attr("class", "chrome-title"),
-                // The drag surface is a mouse affordance with no keyboard
-                // equivalent, so it is hidden from the accessibility tree
-                // rather than left as a focus stop that announces "group" and
-                // does nothing.
-                clickable(
-                    el("div", ())
-                        .attr("class", "chrome-drag")
-                        .attr("aria-hidden", "true"),
-                    |ui: &mut UiState, _| {
-                        ui.chrome_drag = true;
-                    },
+                // Spacer. Hidden from the accessibility tree: it is a
+                // grabbable gap, not a control, and would otherwise be a
+                // focus stop that announces "group" and does nothing.
+                el("div", ())
+                    .attr("class", "chrome-drag")
+                    .attr("aria-hidden", "true"),
+                caption("–", "Minimize", "chrome-btn", commands, WindowCommands::minimize),
+                caption(
+                    "□",
+                    "Maximize",
+                    "chrome-btn",
+                    commands,
+                    WindowCommands::toggle_maximize,
                 ),
-                // The glyphs are what the eye reads; `aria-label` is what the
-                // ear gets. Without them a screen reader announces these as
-                // "dash", "white square", and "multiplication sign".
-                clickable(
-                    el("div", text_node("–"))
-                        .attr("class", "chrome-btn")
-                        .attr("role", "button")
-                        .attr("aria-label", "Minimize"),
-                    |ui: &mut UiState, _| ui.chrome_minimize = true,
-                ),
-                clickable(
-                    el("div", text_node("□"))
-                        .attr("class", "chrome-btn")
-                        .attr("role", "button")
-                        .attr("aria-label", "Maximize"),
-                    |ui: &mut UiState, _| ui.chrome_maximize = true,
-                ),
-                clickable(
-                    el("div", text_node("×"))
-                        .attr("class", "chrome-btn chrome-close")
-                        .attr("role", "button")
-                        .attr("aria-label", "Close"),
-                    |ui: &mut UiState, _| ui.chrome_close = true,
+                caption(
+                    "×",
+                    "Close",
+                    "chrome-btn chrome-close",
+                    commands,
+                    WindowCommands::close,
                 ),
             ),
         )
@@ -94,14 +107,18 @@ fn desktop_chrome(_ui: &UiState) -> UiChild {
     )
 }
 
-fn desktop_root(ui: &UiState) -> UiChild {
-    Box::new(el("div", (desktop_chrome(ui), stage_root(ui))).attr("class", "desktop-frame"))
+fn desktop_root(ui: &UiState, commands: &WindowCommands) -> UiChild {
+    Box::new(el("div", (desktop_chrome(commands), stage_root(ui))).attr("class", "desktop-frame"))
 }
 
 /// Build the starting state: the audio backend, the restored session, and the
 /// application settings. Runs once, inside the host, after the window exists
 /// but before the first frame.
-fn boot_state(shared: &Rc<RefCell<Shared>>, window: &winit::window::Window) -> Init<UiState, Logic> {
+fn boot_state(
+    shared: &Rc<RefCell<Shared>>,
+    window: &winit::window::Window,
+    commands: &WindowCommands,
+) -> Init<UiState, Logic> {
     let mut shared = shared.borrow_mut();
     let backend = CpalBackend::new();
     let mut ui = UiState::new();
@@ -147,9 +164,10 @@ fn boot_state(shared: &Rc<RefCell<Shared>>, window: &winit::window::Window) -> I
     ui.midi.output_ports = shared.midi.output_ports();
     shared.backend = Some(backend);
 
+    let commands = commands.clone();
     Init {
         state: ui,
-        logic: desktop_root as Logic,
+        logic: Box::new(move |ui: &UiState| desktop_root(ui, &commands)) as Logic,
         sheet,
     }
 }
@@ -222,7 +240,7 @@ fn main() {
     };
     run(
         options,
-        move |window| boot_state(&init_shared, window),
+        move |window, commands| boot_state(&init_shared, window, commands),
         hooks(&shared),
     )
     .expect("run app");

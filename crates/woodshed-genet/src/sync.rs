@@ -13,7 +13,10 @@ use woodshed_views::stage::{UiChild, UiState};
 use crate::shared::Shared;
 
 /// The runner shape this application uses, spelled once.
-pub type Logic = fn(&UiState) -> UiChild;
+/// A boxed closure rather than a `fn` pointer: the desktop root captures the
+/// host's window-verb handle, so the caption buttons can invoke it without a
+/// flag on the shared (browser-portable) `UiState`.
+pub type Logic = Box<dyn FnMut(&UiState) -> UiChild>;
 /// The host context a woodshed hook receives.
 pub type Ctx<'a> = AppCtx<'a, UiState, Logic, UiChild>;
 
@@ -30,7 +33,9 @@ fn midi_port_at(ports: &[String], selected: usize) -> Option<String> {
 /// Everything woodshed does after an input dispatch.
 pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     push_backend(shared, ctx);
-    window_chrome(ctx);
+    // Window verbs used to be drained here from four `UiState` flags. The
+    // host owns them now: the caption buttons call `WindowCommands` directly
+    // and the title bar drags from its `--app-region` declaration.
     midi_devices(shared, ctx);
 }
 
@@ -124,38 +129,6 @@ fn push_backend(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     }
     if let Some(json) = persisted_settings {
         shared.storage.save_settings(&json);
-    }
-}
-
-/// Window-chrome requests (CSD). `drag_window` must run while the press that
-/// requested it is still down — dispatch happens on Pressed, so this is
-/// in-window. Under the headless harness there is no window, and the requests
-/// simply drain unhonoured rather than being an error.
-fn window_chrome(ctx: &mut Ctx<'_>) {
-    let mut minimize = false;
-    let mut maximize = false;
-    let mut close = false;
-    let mut drag = false;
-    ctx.runner.update(|ui| {
-        minimize = std::mem::take(&mut ui.chrome_minimize);
-        maximize = std::mem::take(&mut ui.chrome_maximize);
-        close = std::mem::take(&mut ui.chrome_close);
-        drag = std::mem::take(&mut ui.chrome_drag);
-    });
-    if close {
-        *ctx.close = true;
-    }
-    let Some(window) = ctx.window else {
-        return;
-    };
-    if minimize {
-        window.set_minimized(true);
-    }
-    if maximize {
-        window.set_maximized(!window.is_maximized());
-    }
-    if drag {
-        let _ = window.drag_window();
     }
 }
 
