@@ -20,9 +20,7 @@ enum Field {
 }
 
 /// Which field the focused node is, if it is one.
-pub fn focused_text(
-    runner: &Runner<UiState, Logic, UiChild>,
-) -> Option<FocusedTextSlot<UiState>> {
+pub fn focused_text(runner: &Runner<UiState, Logic, UiChild>) -> Option<FocusedTextSlot<UiState>> {
     let node = runner.focus()?;
     let field = {
         let dom = runner.dom();

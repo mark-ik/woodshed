@@ -161,9 +161,7 @@ impl Backend for FsBackend {
     async fn list(&self, prefix: &str) -> Result<Vec<String>, StoreError> {
         let mut keys = Vec::new();
         for key in ["session", "settings"] {
-            if key.starts_with(prefix)
-                && self.path(key).is_some_and(|path| path.exists())
-            {
+            if key.starts_with(prefix) && self.path(key).is_some_and(|path| path.exists()) {
                 keys.push(key.to_string());
             }
         }

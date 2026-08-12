@@ -7,14 +7,17 @@ it first when starting any session.
 
 ## Project Identity
 
-**Woodshed** is an open-source guitarist's toolkit: tuner, comprehensive
-theory libraries, exercises, chord/scale browsers, progression reference,
-metronome, and a Practice Mode that drives the user through rotations
-of musical material at tempo. The theory model generalizes across
-stringed instruments. Built in Rust with Xilem + Masonry (migrated from
-Iced on 2026-05-18; see `design_docs/2026-05-16_xilem_migration_plan.md`).
+**Woodshed** is an open-source practice toolkit for guitar and other
+fretted instruments: theory catalogs staged into an ordered practice Set,
+Rehearsal and Looper consuming that Set, plus a fretboard, tuner, metronome,
+and MIDI clock. The theory model generalizes across string counts and
+tunings. Built in Rust on the Genet engine; since 2026-08-09 the desktop
+assembly (event loop, surface, layout, paint, input, a11y) lives in the
+shared `cambium-genet-winit-host` crate in the genet repo. Woodshed was
+that host's donor and is its first consumer. The earlier Xilem + Masonry
+and Iced stacks are retired.
 
-The name comes from "woodshedding" — musicians' slang for focused,
+The name comes from "woodshedding", musicians' slang for focused,
 solitary practice.
 
 See `design_docs/PROJECT_DESCRIPTION.md` for the product description and
@@ -37,15 +40,28 @@ All authoritative design material lives in `design_docs/`. Read
 
 ```
 crates/
-  woodshedding/    Pure-Rust theory primitives. No I/O, no UI, no audio.
-  woodshed-audio/  Audio engine: tuner-grade pitch detection and the
-                   click/sequencer used by the metronome and practice mode.
-  woodshed-xilem/  Xilem + Masonry application. Depends on woodshedding
-                   + woodshed-audio. This is the application crate.
+  woodshedding/      Pure-Rust theory and playable-practice model. No I/O,
+                     no UI, no audio.
+  audio-primitives/  Pure-std DSP helpers (click synth, onset/tempo,
+                     latency, waveform projection, meter ballistics).
+                     Shared cross-repo with hocket.
+  woodshed-audio/    Real-time audio: cpal drivers, tuner-grade pitch
+                     detection, MIDI, looping, calibration.
+  woodshed-core/     Portable application state, persistence payloads, and
+                     host-facing seams. No windowing, no browser APIs.
+  woodshed-views/    Cambium product views and CSS themes. No window
+                     chrome, no audio drivers.
+  woodshed-genet/    The desktop application binary, composed on
+                     cambium-genet-winit-host.
+  woodshed-graph/    Theory catalog projected into the chartulary graph.
 ```
 
-Keep `woodshedding` pure: no `cpal`, no UI, no file I/O. UI- or
-audio-coupled code belongs in `woodshed-audio` or `woodshed-xilem`.
+Keep `woodshedding` and `audio-primitives` pure: no `cpal`, no UI, no file
+I/O. Audio-coupled code belongs in `woodshed-audio`, product composition in
+`woodshed-views`, host and native concerns in `woodshed-genet`. Do not
+re-add direct deps on genet-layout, genet-winit-host, netrender, or the
+paint-list crates; the shared host owns that assembly and they arrive
+transitively.
 
 ## General Guidelines
 

@@ -13,6 +13,13 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-08-12_persona_picker_plan.md](2026-08-12_persona_picker_plan.md)
+  — **Open.** Wire `mere-persona-picker` (finished cambium view-model over
+  `identity::roster`; the census's wire-now item) into woodshed: startup
+  pick when the vault holds several personas, live switch from settings
+  (sealed store swaps without restart), create flow. Sealing stays not a
+  gate; the silent convention path survives for sole-persona and no-vault
+  machines.
 - [2026-08-06_settings_persistence_split_plan.md](2026-08-06_settings_persistence_split_plan.md)
   — **LANDED.** Application preferences leave the practice artifact. `AppSettings`
   no longer flattens into `PersistedSession`; it persists through a separate

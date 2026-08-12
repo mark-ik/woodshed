@@ -10,8 +10,7 @@ use std::hash::{Hash, Hasher};
 
 use sprigging::LeafRegistry;
 use woodshed_views::fretboard_leaf::{
-    Dot, FRETBOARD_LEAF_KEY, FretboardLeaf, MarkerStyle, Orientation,
-    REHEARSAL_FRETBOARD_LEAF_KEY,
+    Dot, FRETBOARD_LEAF_KEY, FretboardLeaf, MarkerStyle, Orientation, REHEARSAL_FRETBOARD_LEAF_KEY,
 };
 use woodshed_views::stage::{NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY, UiState};
 
@@ -184,9 +183,10 @@ fn sync_fretboard_active(ui: &UiState, leaves: &mut LeafRegistry<u64>) {
     // the board's current position, which advances live as the transport steps,
     // so it is read here each frame rather than baked into the leaf.
     let active = match st.lens {
-        woodshed_core::Lens::Scales | woodshed_core::Lens::Chords => {
-            st.scale_run_playing.then_some(st.scale_run_active).flatten()
-        }
+        woodshed_core::Lens::Scales | woodshed_core::Lens::Chords => st
+            .scale_run_playing
+            .then_some(st.scale_run_active)
+            .flatten(),
         _ => st.lens_markers().1,
     };
     // Draw mode always shows the trail (you're editing it).

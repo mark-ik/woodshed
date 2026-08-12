@@ -87,7 +87,11 @@ impl ScenarioLane {
             return;
         }
         self.finished = true;
-        let result = if outcome.ok { "RESULT ok" } else { "RESULT fail" };
+        let result = if outcome.ok {
+            "RESULT ok"
+        } else {
+            "RESULT fail"
+        };
         let body = std::iter::once(result.to_string())
             .chain(outcome.log.iter().cloned())
             .collect::<Vec<_>>()

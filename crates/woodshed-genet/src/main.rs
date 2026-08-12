@@ -9,7 +9,7 @@
 //!
 //! What is left here is woodshed: which views to render, which state they run
 //! over, the audio and MIDI seams, persistence, the custom-paint leaves, and
-//! the self-drive lane. It reaches the host through five plain closures
+//! the self-drive lane. It reaches the host through seven plain closures
 //! ([`HostHooks`]) with its own state in their captured environment.
 //!
 //! | hook | woodshed's half |
@@ -17,6 +17,8 @@
 //! | `frame` | advance the transports and the tuner ([`drive`]), refresh the leaves ([`leaves`]) |
 //! | `after_dispatch` | push state through the backend, MIDI, chrome, and persistence seams ([`sync`]) |
 //! | `after_frame` | pump the scenario one step ([`scenario`]) |
+//! | `after_wake` | no worker channel to drain yet |
+//! | `close_request` | exit: Woodshed has no background operation to retain |
 //! | `focused_text` | which of the two text fields has the caret ([`text`]) |
 //! | `key_intercept` | Escape closes an open dropdown |
 
@@ -86,7 +88,13 @@ fn desktop_chrome(commands: &WindowCommands) -> UiChild {
                 el("div", ())
                     .attr("class", "chrome-drag")
                     .attr("aria-hidden", "true"),
-                caption("–", "Minimize", "chrome-btn", commands, WindowCommands::minimize),
+                caption(
+                    "–",
+                    "Minimize",
+                    "chrome-btn",
+                    commands,
+                    WindowCommands::minimize,
+                ),
                 caption(
                     "□",
                     "Maximize",
@@ -194,7 +202,8 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
             let mut shared = frame_shared.borrow_mut();
             sync_viewport(ctx);
             let mut animating = false;
-            ctx.runner.update(|ui| animating = drive::frame(&mut shared, ui));
+            ctx.runner
+                .update(|ui| animating = drive::frame(&mut shared, ui));
             let (out_enabled, out_playing, out_bpm) = drive::clock_out(ctx.runner.state());
             shared.midi.set_clock_out(out_enabled, out_playing, out_bpm);
             leaves::sync_all(&mut shared, ctx.runner.state(), ctx.leaves);
@@ -208,6 +217,8 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
             let mut shared = after_frame_shared.borrow_mut();
             scenario::drive(&mut shared, ctx);
         }),
+        after_wake: Box::new(|_ctx| {}),
+        close_request: Box::new(|_ctx, _request| cambium_genet_winit_host::CloseDisposition::Exit),
         focused_text: Box::new(text::focused_text),
         key_intercept: Box::new(|runner, press| {
             // Escape closes any open dropdown. Deliberately an intercept rather
@@ -240,7 +251,7 @@ fn main() {
     };
     run(
         options,
-        move |window, commands| boot_state(&init_shared, window, commands),
+        move |window, commands, _wake| boot_state(&init_shared, window, commands),
         hooks(&shared),
     )
     .expect("run app");

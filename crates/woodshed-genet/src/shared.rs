@@ -108,7 +108,9 @@ impl Shared {
         reduce_motion: bool,
         text_scale: String,
     ) -> Option<String> {
-        if theme == self.theme && reduce_motion == self.reduce_motion && text_scale == self.text_scale
+        if theme == self.theme
+            && reduce_motion == self.reduce_motion
+            && text_scale == self.text_scale
         {
             return None;
         }

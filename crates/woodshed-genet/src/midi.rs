@@ -9,11 +9,11 @@
 //! connection, so the `midir` handle never crosses a thread boundary.
 //! The web host implements the same trait over Web MIDI.
 
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use woodshed_audio::{list_midi_input_ports, list_midi_output_ports, MidiEvent, MidiIn, MidiOut};
+use woodshed_audio::{MidiEvent, MidiIn, MidiOut, list_midi_input_ports, list_midi_output_ports};
 use woodshed_core::midi::MidiBackend;
 
 /// Commands to the clock-out thread. The thread owns the output
