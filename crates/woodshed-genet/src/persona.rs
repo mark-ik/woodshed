@@ -335,9 +335,64 @@ mod tests {
         );
         assert!(
             harness
-                .resolve(&Selector::class("command-label").containing("work"))
+                .resolve(&Selector::class("command-item").with_attr("data-key", "work"))
                 .is_some(),
-            "each persona is addressable by the name it shows"
+            "each persona is addressable by its id, not by the name it shows"
+        );
+    }
+
+    #[test]
+    fn two_personas_sharing_a_name_are_still_told_apart() {
+        // Why the rows carry a key at all. Display names are the user's and
+        // need not be unique; the id is what `settle` opens the store on, so it
+        // is what a driver has to be able to aim at.
+        use personae::roster::RosterEntry;
+        let twins = Roster {
+            entries: vec![
+                RosterEntry {
+                    id: ProfileId("work-laptop".into()),
+                    display_name: "Work".into(),
+                    slot_count: 2,
+                    chosen: false,
+                },
+                RosterEntry {
+                    id: ProfileId("work-studio".into()),
+                    display_name: "Work".into(),
+                    slot_count: 1,
+                    chosen: false,
+                },
+            ],
+            chosen: ProfileId("work-laptop".into()),
+            description: "test vault".into(),
+        };
+
+        fn chose(harness: &Harness<UiState, crate::sync::Logic, UiChild>) -> Option<PickerEvent> {
+            harness
+                .state()
+                .persona
+                .as_ref()
+                .and_then(|pick| pick.outcome.clone())
+        }
+
+        // The route this replaces. Both twins answer to the same label, and a
+        // driver gets whichever one comes first: the other is unreachable.
+        let mut by_label = gated_harness(twins.clone());
+        assert!(by_label.click_on(&Selector::class("command-label").containing("Work")));
+        assert_eq!(
+            chose(&by_label),
+            Some(PickerEvent::Chose(ProfileId("work-laptop".into()))),
+            "by name, the second twin cannot be reached at all"
+        );
+
+        // By key, each one resolves on its own.
+        let mut by_key = gated_harness(twins);
+        assert!(
+            by_key.click_on(&Selector::class("command-item").with_attr("data-key", "work-studio"))
+        );
+        assert_eq!(
+            chose(&by_key),
+            Some(PickerEvent::Chose(ProfileId("work-studio".into()))),
+            "and it is the one that was asked for, not its namesake"
         );
     }
 
@@ -354,7 +409,7 @@ mod tests {
     fn clicking_a_persona_records_the_choice_the_host_acts_on() {
         let mut harness = gated_harness(two_persona_roster());
         assert!(
-            harness.click_on(&Selector::class("command-label").containing("work")),
+            harness.click_on(&Selector::class("command-item").with_attr("data-key", "work")),
             "the row must be clickable where the driver found it"
         );
         let pick = harness.state().persona.as_ref().expect("the gate is still up");
@@ -368,7 +423,11 @@ mod tests {
     #[test]
     fn asking_for_a_new_persona_keeps_the_gate_up_and_says_why() {
         let mut harness = gated_harness(two_persona_roster());
-        assert!(harness.click_on(&Selector::class("command-label").containing("New persona")));
+        // The create row's key is the picker's sentinel, which carries a NUL so
+        // no profile id can collide with it. Matched on the readable tail.
+        assert!(harness.click_on(
+            &Selector::class("command-item").with_attr("data-key", "persona-picker:create")
+        ));
         let pick = harness.state().persona.as_ref().expect("the gate stays up");
         assert!(pick.outcome.is_none(), "nothing for the host to settle");
         assert!(

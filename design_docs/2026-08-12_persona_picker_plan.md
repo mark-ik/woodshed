@@ -210,11 +210,16 @@ fails if the reset is ever removed.
   picker, so it discriminates. `escape_policy` keeps answering Escape before
   dispatch: declining is not worth making conditional on a focus request
   having landed.
-- **Command rows carry position, not identity.** `command_surface`'s DOM id
-  is `persona-picker-item-0`, so a driver targets a persona by its visible
-  label (`.command-label` containing the name). `graph_canvas` already sets
-  the precedent of a `data-key` on each node; the same on a command row
-  would make every picker in the family id-addressable.
+- **Command rows carried position, not identity. Fixed 2026-08-13.**
+  `command_surface`'s DOM id is `persona-picker-item-0`, which names where a
+  row sits rather than which row it is, so a driver had to target a persona
+  by its visible label. Display names are the user's and need not be unique:
+  two personas called "Work" answered the same selector and only the first
+  was reachable. `command_row` now emits the item's own id as `data-key`, the
+  twin of what `graph_canvas` already does for nodes, and the gate's tests
+  select `Selector::class("command-item").with_attr("data-key", ..)`.
+  `two_personas_sharing_a_name_are_still_told_apart` runs both routes side by
+  side so the old one's limit is shown rather than asserted.
 - **Settings without a session apply to nothing.** `restore` loads
   `genet-settings.json` and then drops it unless a session also decodes,
   because the derivations (transport bpm, the tuning and root dropdowns,
@@ -223,22 +228,22 @@ fails if the reset is ever removed.
 
 ## Receipts
 
-`cargo test --workspace` in woodshed: **443 passed, 0 failed** (with P2's).
+`cargo test --workspace` in woodshed: **444 passed, 0 failed** (with P2's).
 
-Nineteen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
+Twenty of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
 run against a real vault in a scratch directory: two personas and no choice
 asks; a sole persona, an empty vault, a remembered choice,
 `PERSONAE_PROFILE`, and a vault that will not unlock all stay silent; the
 roster carries the personas the vault actually holds, sorted; an open on a
 named persona loads it rather than re-minting it; and the convention open
-mints a third identity, which is why declining does not use it. Seven drive
+mints a third identity, which is why declining does not use it. Eight drive
 the real product root through `Harness`: the picker and its dialog resolve
 through genet-probe selectors, the product navigation does not render behind
 the gate, clicking a row records `Chose` by id, the create row keeps the gate
 up and puts its notice on screen, Escape dismisses on the first press, an
-arrow and Enter choose the second persona with no Tab in front of them, and a
-declined session reaches the product with the "not being saved" notice on
-screen. Six more in `woodshed-views/src/persona.rs` cover the outcome
+arrow and Enter choose the second persona with no Tab in front of them, two
+personas sharing a display name are still told apart by key, and a declined
+session reaches the product with the "not being saved" notice on screen. Six more in `woodshed-views/src/persona.rs` cover the outcome
 recording and the declined state directly.
 
 In personae: `roster::open_profile` (the named-persona open, factored so
