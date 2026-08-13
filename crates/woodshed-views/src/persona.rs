@@ -22,9 +22,23 @@ use persona_picker::{persona_picker, picker_state, PickerEvent};
 
 use crate::stage::{UiChild, UiState};
 
+/// Why the gate is up, which is what declining it means.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickPurpose {
+    /// Startup, with nothing loaded behind the gate. Declining practises as
+    /// the convention's persona, which is what opens the store.
+    Startup,
+    /// A deliberate switch from Settings, with a session already open and
+    /// sealed to somebody. Declining changes nothing at all.
+    Switch,
+}
+
 /// What the gate is waiting on: the roster to choose from, the picker's own
 /// interaction state, and the answer once there is one.
 pub struct PersonaPick {
+    /// Startup or a deliberate switch. The host reads it to know what a
+    /// dismissal means; the view reads it to say so on screen.
+    pub purpose: PickPurpose,
     /// The vault's personas, read before the store opened.
     pub roster: Roster,
     /// Selection and keyboard state for the shared picker.
@@ -38,13 +52,32 @@ pub struct PersonaPick {
 }
 
 impl PersonaPick {
+    /// The startup gate: asked once, before the store opens.
     pub fn new(roster: Roster) -> Self {
+        Self::for_purpose(roster, PickPurpose::Startup)
+    }
+
+    /// The switch gate, raised from Settings while a session is open.
+    pub fn switch(roster: Roster) -> Self {
+        Self::for_purpose(roster, PickPurpose::Switch)
+    }
+
+    fn for_purpose(roster: Roster, purpose: PickPurpose) -> Self {
         Self {
+            purpose,
             roster,
             picker: picker_state(),
             outcome: None,
             notice: None,
         }
+    }
+
+    /// Say something the gate could not do, and stay open. Used when the vault
+    /// itself will not answer, so the row that raised the gate does not read
+    /// as a dead control.
+    pub fn with_notice(mut self, notice: impl Into<String>) -> Self {
+        self.notice = Some(notice.into());
+        self
     }
 
     /// Record what the picker reported, for the host to act on.
@@ -127,7 +160,14 @@ pub fn persona_gate(pick: &PersonaPick) -> UiChild {
                     notice,
                     el(
                         "div",
-                        text("Escape practises as the usual persona without choosing."),
+                        text(match pick.purpose {
+                            PickPurpose::Startup => {
+                                "Escape practises as the usual persona without choosing."
+                            }
+                            // Nothing is pending behind a switch: the session
+                            // on screen belongs to somebody already.
+                            PickPurpose::Switch => "Escape keeps practising as the current persona.",
+                        }),
                     )
                     .attr("class", "persona-hint"),
                 ),
@@ -192,6 +232,25 @@ mod tests {
         pick.record(PickerEvent::CreateRequested);
         assert!(pick.outcome.is_none(), "the gate stays open");
         assert!(pick.notice.as_deref().is_some_and(|n| n.contains("personae-vault")));
+    }
+
+    #[test]
+    fn a_switch_gate_says_that_declining_keeps_the_current_persona() {
+        // The two gates mean different things by Escape, and the screen has to
+        // say which one it is: at startup nobody is chosen yet, during a switch
+        // somebody already is.
+        let entries = [("work", 2, true), ("alt", 0, false)];
+        let startup = PersonaPick::new(roster(&entries));
+        let switch = PersonaPick::switch(roster(&entries));
+        assert_eq!(startup.purpose, PickPurpose::Startup);
+        assert_eq!(switch.purpose, PickPurpose::Switch);
+    }
+
+    #[test]
+    fn a_vault_that_will_not_answer_still_puts_its_reason_on_the_gate() {
+        // The Settings row is a deliberate act; it cannot answer with nothing.
+        let pick = PersonaPick::switch(roster(&[])).with_notice("the vault would not open");
+        assert!(pick.notice.as_deref().is_some_and(|n| n.contains("would not open")));
     }
 
     #[test]

@@ -35,7 +35,7 @@ and it ships next).
   to it. On `Dismissed`: proceed on the convention choice, exactly as
   today — picking nobody must not block practice, the same doctrine as
   "sealing is not a gate."
-- **P2 — live switch.** A settings row reopens the picker at any time; a
+- **P2 — live switch. Landed.** A settings row reopens the picker at any time; a
   `Chose` swaps the sealed store live (close, reopen sealed to the new
   persona, reload the practice session). No restart: persona change is a
   live swap, per the ecosystem's live-switching rule.
@@ -108,6 +108,39 @@ Three decisions worth keeping:
 P1 answers it rather than dropping it: the gate stays open and says a
 persona comes from `personae-vault` today. A row that silently does nothing
 reads as a broken application.
+
+## P2 as built
+
+The Settings General page gains a Persona heading and a "Switch persona…"
+row. It sets `UiState::persona_switch_requested`; the host answers it,
+because reading the roster means opening the vault and a view does not do
+vault work. The same gate screen comes up, now carrying a `PickPurpose`.
+
+Two decisions, both about what a *second* gate means that the first did not:
+
+1. **Escape means the opposite thing.** At startup, declining opens the
+   store on the convention's persona — that is what starts the application.
+   During a switch, a store is already open and sealed to somebody, so
+   settling on the convention would quietly move the user off the persona
+   they are practising as. `PickPurpose::Switch` dismissal therefore takes
+   the gate down and touches nothing. The screen says which gate it is.
+2. **The switch resets `UiState` before restoring.** This is the hazard P1
+   could not have had. `session::restore` returns early on a store with no
+   session, and this host saves every dispatch — so switching into a persona
+   who has never practised would leave the *outgoing* persona's Set and
+   history standing, and the next frame would write them into the incoming
+   persona's store. `settle` replaces the state wholesale for a switch.
+   Host-fed fields (MIDI port lists, latency) refill on the next dispatch.
+
+A vault that will not open raises the gate anyway, carrying the error as its
+notice: the row is a deliberate act and cannot answer with silence, the same
+reasoning P1 used for the create row.
+
+**Receipts**: `cargo test --workspace` in woodshed, **437 passed, 0 failed**.
+Four are P2's. `switching_into_an_unused_persona_does_not_carry_the_last_one_in`
+asserts the hazard in both directions — restoring an empty store over live
+state keeps the outgoing song, and reset-then-restore does not — so the test
+fails if the reset is ever removed.
 
 ## Findings
 

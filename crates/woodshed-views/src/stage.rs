@@ -389,6 +389,10 @@ pub struct UiState {
     /// before the first frame and clears it when the choice is acted on. While
     /// it is set, [`stage_root`] renders the gate instead of the product.
     pub persona: Option<crate::persona::PersonaPick>,
+    /// Set by the Settings row that asks to practise as somebody else. The
+    /// host takes it, reads the vault, and puts the gate up; a view cannot,
+    /// because reading the roster is vault work.
+    pub persona_switch_requested: bool,
 }
 
 impl Default for UiState {
@@ -439,6 +443,7 @@ impl UiState {
             related_hover: None,
             related_expanded: false,
             persona: None,
+            persona_switch_requested: false,
             stage,
         }
     }

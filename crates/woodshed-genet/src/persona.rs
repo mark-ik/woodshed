@@ -15,7 +15,7 @@ use personae::bootstrap::{self, Unlock};
 use personae::roster::{self, Roster};
 use personae::vault::ProfileId;
 use persona_picker::PickerEvent;
-use woodshed_views::persona::PersonaPick;
+use woodshed_views::persona::{PersonaPick, PickPurpose};
 
 use crate::shared::Shared;
 use crate::storage::open_store_as;
@@ -42,36 +42,97 @@ pub fn pending_roster_at(dir: &std::path::Path, unlock: Unlock) -> Option<Roster
     (roster.entries.len() > 1).then_some(roster)
 }
 
-/// Act on a gate the user has answered, if they have.
+/// The whole roster, whatever the convention would decide (P2).
+///
+/// [`pending_roster`] asks whether the question is worth putting; this answers
+/// the question the user asked for by name, so a remembered choice, a sole
+/// persona, and `PERSONAE_PROFILE` are all beside the point.
+pub fn roster_now() -> Result<Roster, personae::IdentityError> {
+    let dir = bootstrap::default_vault_dir();
+    let opened = bootstrap::open_storage(&dir, Unlock::from_env())?;
+    roster::read_roster(&*opened.storage, &dir, opened.description)
+}
+
+/// Act on a gate the user has answered, if they have, and raise one if the
+/// Settings row asked for it.
 ///
 /// Runs at the head of the dispatch tail so the rest of it (the audio seam, the
 /// skin, persistence) sees the restored session in the same beat the choice
 /// lands, rather than one frame later.
 pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     let mut answer = None;
+    let mut purpose = PickPurpose::Startup;
+    let mut requested = false;
     ctx.runner.update(|ui| {
+        requested = std::mem::take(&mut ui.persona_switch_requested);
         if let Some(pick) = ui.persona.as_mut() {
             answer = pick.outcome.take();
+            purpose = pick.purpose;
         }
     });
+    if requested {
+        raise_switch(ctx);
+        return;
+    }
     let Some(answer) = answer else {
         return;
     };
     let chosen = match answer {
         PickerEvent::Chose(id) => Some(id),
-        // Escape. Practice proceeds on the convention, exactly as it would have
-        // done had there been nothing to ask.
-        PickerEvent::Dismissed => None,
+        PickerEvent::Dismissed => match purpose {
+            // Escape at startup. Practice proceeds on the convention, exactly
+            // as it would have done had there been nothing to ask.
+            PickPurpose::Startup => None,
+            // Escape on a switch changes nothing: the store that is open stays
+            // open, and re-settling on the convention here would quietly move
+            // the user off the persona they are already practising as.
+            PickPurpose::Switch => {
+                ctx.runner.update(|ui| ui.persona = None);
+                return;
+            }
+        },
         // The view answers this one itself and keeps the gate open (P3 wires
         // the create flow), so it never reaches here.
         PickerEvent::CreateRequested => return,
     };
-    settle(shared, ctx, chosen.as_ref());
+    settle(shared, ctx, chosen.as_ref(), purpose);
+}
+
+/// Put the switch gate up, or say why it cannot go up.
+///
+/// A vault that will not open is reported on the gate itself rather than
+/// swallowed: the row was a deliberate act, and a control that answers a click
+/// with nothing reads as broken.
+fn raise_switch(ctx: &mut Ctx<'_>) {
+    let pick = match roster_now() {
+        Ok(roster) => PersonaPick::switch(roster),
+        Err(error) => {
+            eprintln!("[woodshed] cannot read the persona roster: {error}");
+            PersonaPick::switch(Roster {
+                entries: Vec::new(),
+                chosen: ProfileId(String::new()),
+                description: "no vault on this machine".into(),
+            })
+            .with_notice(format!(
+                "The identity vault would not open ({error}). Practice continues \
+                 as the current persona."
+            ))
+        }
+    };
+    // Taken rather than moved: the runner's callback is `FnMut`, and the pick
+    // is not `Copy`.
+    let mut pick = Some(pick);
+    ctx.runner.update(move |ui| ui.persona = pick.take());
 }
 
 /// Open the store on the settled persona, restore the session into it, and take
 /// the gate down.
-fn settle(shared: &mut Shared, ctx: &mut Ctx<'_>, chosen: Option<&ProfileId>) {
+fn settle(
+    shared: &mut Shared,
+    ctx: &mut Ctx<'_>,
+    chosen: Option<&ProfileId>,
+    purpose: PickPurpose,
+) {
     if let Some(id) = chosen {
         // Remembered first, so every other application in the family opens the
         // same persona next time. The store opens on the id either way: a vault
@@ -87,6 +148,15 @@ fn settle(shared: &mut Shared, ctx: &mut Ctx<'_>, chosen: Option<&ProfileId>) {
     }
     let storage = open_store_as(chosen);
     ctx.runner.update(|ui| {
+        if purpose == PickPurpose::Switch {
+            // The whole session goes, not just the parts the incoming persona
+            // happens to have stored. `restore` returns early on a store with
+            // no session, so anything left standing would be the OUTGOING
+            // persona's practice — and the next frame's save would write it
+            // into this persona's store. Host-fed fields (the MIDI port lists,
+            // latency) refill on the next dispatch.
+            *ui = woodshed_views::stage::UiState::new();
+        }
         crate::session::restore(&storage, ui);
         ui.persona = None;
     });
@@ -304,6 +374,58 @@ mod tests {
             pick.outcome,
             Some(PickerEvent::Dismissed),
             "the first Escape declines, with nothing focused"
+        );
+    }
+
+    /// The switch gate is raised by a Settings row, not by the convention, so
+    /// it must appear for the cases the startup gate deliberately skips.
+    #[test]
+    fn the_settings_row_asks_even_when_the_convention_would_not() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt"]);
+        roster::remember_profile(dir.path(), &ProfileId("alt".into())).expect("remember");
+
+        assert!(
+            pending_roster_at(dir.path(), unlock()).is_none(),
+            "a remembered choice is not a startup question"
+        );
+        let opened = bootstrap::open_storage(dir.path(), unlock()).expect("reopen vault");
+        let roster = roster::read_roster(&*opened.storage, dir.path(), opened.description)
+            .expect("the switch reads the roster regardless");
+        assert_eq!(roster.entries.len(), 2, "both personas are offered to switch to");
+    }
+
+    /// The hazard P2 introduces that P1 could not have: at startup the state
+    /// behind the gate is empty, but a switch happens over a loaded session,
+    /// and `restore` returns early when the incoming store holds nothing.
+    /// Without the reset, the next save would write the outgoing persona's
+    /// practice into the incoming persona's store.
+    #[test]
+    fn switching_into_an_unused_persona_does_not_carry_the_last_one_in() {
+        use woodshed_views::stage::UiState;
+
+        let mut ui = UiState::new();
+        ui.song.name = "the previous persona's song".into();
+
+        // An empty store stands in for a persona who has never practised;
+        // `restore` returns early on it, leaving the state exactly as found.
+        let unused: woodshed_core::storage::SessionStore<crate::storage::HostBackend> =
+            woodshed_core::storage::SessionStore::new(Box::new(muniment::MemoryBackend::default()));
+
+        // Restoring without the reset keeps the outgoing persona's practice.
+        crate::session::restore(&unused, &mut ui);
+        assert_eq!(
+            ui.song.name, "the previous persona's song",
+            "the hazard is real: an empty store restores nothing over what is there"
+        );
+
+        // What `settle` does for a switch, in the order it does it.
+        ui = UiState::new();
+        crate::session::restore(&unused, &mut ui);
+        assert_ne!(
+            ui.song.name, "the previous persona's song",
+            "a fresh persona opens on its own empty practice"
         );
     }
 

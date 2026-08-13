@@ -194,6 +194,19 @@ fn general_page(ui: &UiState) -> UiChild {
                     text("Selections, Set, practice history, tempo, theme, and layout restore on launch."),
                 )
                 .attr("class", "settings-line"),
+                el("div", text("Persona")).attr("class", "settings-heading settings-gap"),
+                el(
+                    "div",
+                    text("Practice is sealed to a persona from the shared vault. Switching \
+                          swaps to that persona's own Set, history, and settings."),
+                )
+                .attr("class", "settings-line"),
+                clickable(
+                    el("div", text("Switch persona…")).attr("class", "t-btn"),
+                    // The host answers this: reading the roster means opening
+                    // the vault, which a view does not do.
+                    |ui: &mut UiState, _| ui.persona_switch_requested = true,
+                ),
             ),
         )
         .attr("class", "board settings-page"),
