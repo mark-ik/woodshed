@@ -378,22 +378,41 @@ mod tests {
     }
 
     #[test]
+    fn the_gate_takes_the_keyboard_without_a_tab() {
+        // A startup gate is the whole window, so the picker asks for the caret
+        // as it appears. Asserted as behaviour rather than as "which node has
+        // focus": what matters is that the arrows and Enter do something on the
+        // first press, with no Tab in front of them.
+        let mut harness = gated_harness(two_persona_roster());
+        assert!(harness.focus().is_some(), "the picker took the caret unasked");
+
+        // Rows are sorted by id, so selection starts on `alt` and one step down
+        // is `work`.
+        harness.key_named(NamedKey::ArrowDown);
+        harness.key_named(NamedKey::Enter);
+        harness.relayout();
+
+        let pick = harness.state().persona.as_ref().expect("the host clears it");
+        assert_eq!(
+            pick.outcome,
+            Some(PickerEvent::Chose(ProfileId("work".into()))),
+            "arrow then Enter chose the second persona, cold"
+        );
+    }
+
+    #[test]
     fn escape_dismisses_the_gate_so_practice_is_never_blocked() {
         // "Picking nobody must not block practice." Escape has to reach the
         // picker's own key handler, which means the gate has to be focusable
         // and reachable by the host's Tab traversal from a cold start.
         let mut harness = gated_harness(two_persona_roster());
-        assert!(
-            harness.focus().is_none(),
-            "a cold start focuses nothing, which is the case this covers"
-        );
         harness.key_named(NamedKey::Escape);
         harness.relayout();
         let pick = harness.state().persona.as_ref().expect("the host clears it, not the view");
         assert_eq!(
             pick.outcome,
             Some(PickerEvent::Dismissed),
-            "the first Escape declines, with nothing focused"
+            "the first Escape declines, through the window-wide policy"
         );
     }
 

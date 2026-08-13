@@ -6,9 +6,9 @@
 //! `default` persona beside the two the user already has, and seal the session
 //! to a stranger.
 //!
-//! The list itself is not woodshed's: [`persona_picker`] renders the roster the
-//! same way in every Merely application, so a persona reads the same here as it
-//! does in Turnstone. What is woodshed's is where it appears (a gate screen in
+//! The list itself is not woodshed's: [`persona_picker_focused`] renders the
+//! roster the same way in every Merely application, so a persona reads the same
+//! here as it does in Turnstone. What is woodshed's is where it appears (a gate screen in
 //! place of the product root) and what happens next (`woodshed-genet` writes the
 //! choice and reopens the store).
 //!
@@ -20,7 +20,7 @@
 
 use cambium::{el, lens, map_action, text, CommandState};
 use personae::roster::Roster;
-use persona_picker::{persona_picker, picker_state, PickerEvent};
+use persona_picker::{persona_picker_focused, picker_state, PickerEvent};
 
 use crate::stage::{UiChild, UiState};
 
@@ -156,7 +156,10 @@ pub fn persona_gate(pick: &PersonaPick) -> UiChild {
     let roster = pick.roster.clone();
     let picker = map_action(
         lens(
-            move |state: &mut CommandState| persona_picker(state, &roster),
+            // The focused variant: this screen is the only thing on the window,
+            // so the picker takes the caret as it appears and the arrows work
+            // on the first press.
+            move |state: &mut CommandState| persona_picker_focused(state, &roster),
             |ui: &mut UiState| {
                 // The gate is only rendered while `persona` is `Some`, so this
                 // projection cannot be reached without it.

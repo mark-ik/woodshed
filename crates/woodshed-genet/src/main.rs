@@ -186,10 +186,11 @@ fn escape_policy(runner: &mut Runner<UiState, Logic, UiChild>, press: &KeyPress)
     if !matches!(press.key, WinitKey::Named(WinitNamedKey::Escape)) {
         return false;
     }
-    // While the persona gate is up, Escape is how you practise without
-    // choosing — and it has to work on the first press. The picker reports its
-    // own Escape, but only to whatever has focus, and at startup that is
-    // nothing; so the window-wide policy answers for it.
+    // While the persona gate is up, Escape is how you practise without a
+    // persona, and it has to work on the first press. The gate's picker does
+    // ask for the caret now, and would report its own Escape, but the policy
+    // answers first and consumes it: declining is not a thing to make
+    // conditional on a focus request having landed.
     if runner.state().persona.is_some() {
         runner.update(|ui| {
             if let Some(pick) = ui.persona.as_mut() {

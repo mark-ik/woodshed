@@ -195,15 +195,21 @@ fails if the reset is ever removed.
   machine-local artifact and encodes nothing either way. Moving woodshed's
   genet deps to `branch = "main"` would settle it and match every sibling
   repo, but the pin is deliberate and the call is Mark's.
-- **The picker cannot ask for focus.** `cambium::request_focus` takes an
-  `ElementView`, and `command_picker` returns
-  `impl View<..., Element = GenetElement>` without advertising
-  `ElementView`, so neither the picker crate nor woodshed can wrap it. The
-  fix is one signature widening in cambium (the return type really is
-  `OnKey<El<..>>`), which would let `mere-persona-picker` offer a focused
-  variant every startup gate wants. Until then: clicking works cold, Escape
-  works cold through the key policy, and arrow-key navigation waits for one
-  Tab.
+- **The picker could not ask for focus. Fixed 2026-08-13.**
+  `cambium::request_focus` takes an `ElementView`, and the four command
+  surfaces returned `impl View<..., Element = GenetElement>` without
+  advertising it, so neither the picker crate nor woodshed could wrap one.
+  The return type really is `OnKey<El<..>>`, so widening the four signatures
+  to say `+ ElementView<CommandState, CommandEvent>` was a pure signature
+  change with no behaviour behind it (cambium: 167 passed). On top of it,
+  `mere-persona-picker` grew `persona_picker_focused`, which the gate now
+  uses: the picker takes the caret as it appears, and the arrows and Enter
+  work on the first press.
+  `the_gate_takes_the_keyboard_without_a_tab` asserts that as behaviour
+  rather than as which node holds focus, and it fails against the unfocused
+  picker, so it discriminates. `escape_policy` keeps answering Escape before
+  dispatch: declining is not worth making conditional on a focus request
+  having landed.
 - **Command rows carry position, not identity.** `command_surface`'s DOM id
   is `persona-picker-item-0`, so a driver targets a persona by its visible
   label (`.command-label` containing the name). `graph_canvas` already sets
@@ -217,20 +223,21 @@ fails if the reset is ever removed.
 
 ## Receipts
 
-`cargo test --workspace` in woodshed: **442 passed, 0 failed** (with P2's).
+`cargo test --workspace` in woodshed: **443 passed, 0 failed** (with P2's).
 
-Eighteen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
+Nineteen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
 run against a real vault in a scratch directory: two personas and no choice
 asks; a sole persona, an empty vault, a remembered choice,
 `PERSONAE_PROFILE`, and a vault that will not unlock all stay silent; the
 roster carries the personas the vault actually holds, sorted; an open on a
 named persona loads it rather than re-minting it; and the convention open
-mints a third identity, which is why declining does not use it. Six drive
+mints a third identity, which is why declining does not use it. Seven drive
 the real product root through `Harness`: the picker and its dialog resolve
 through genet-probe selectors, the product navigation does not render behind
 the gate, clicking a row records `Chose` by id, the create row keeps the gate
-up and puts its notice on screen, Escape dismisses with nothing focused, and
-a declined session reaches the product with the "not being saved" notice on
+up and puts its notice on screen, Escape dismisses on the first press, an
+arrow and Enter choose the second persona with no Tab in front of them, and a
+declined session reaches the product with the "not being saved" notice on
 screen. Six more in `woodshed-views/src/persona.rs` cover the outcome
 recording and the declined state directly.
 
