@@ -26,7 +26,7 @@ woodshedding = { path = "crates/woodshedding", version = "0.1.0" }
 woodshed-core = { path = "crates/woodshed-core", version = "0.1.0" }
 woodshed-audio = { path = "crates/woodshed-audio", version = "0.1.0" }
 woodshed-graph = { path = "crates/woodshed-graph", version = "0.1.0" }
-genet-host-api = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
+genet-host-api = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # Shared pure-DSP primitives (click synth, onset/tempo, latency) — the
 # `audio-primitives` extraction. Pure std; consumed by woodshed-audio
 # here and cross-repo by strophe-engine via path-dep.
@@ -62,18 +62,28 @@ winit = "0.30"
 #      `sprigging::PaintCmd` is not a `paint_list_api::PaintCmd`.
 #      `[patch.crates-io]` does not redirect a published crate's own registry
 #      dependency; taking all three from the source everything else uses does.
-cambium = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
+cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # The single-root Cambium desktop host (genet G1, 2026-08-09). Woodshed was its
 # donor and is now its first consumer: the whole ApplicationHandler / SurfaceHost
 # / layout / paint / input / A11yHost assembly that used to live in
 # woodshed-genet's main.rs is this package. Never publishable (it rides
-# genet-layout and genet-winit-host), so every genet dependency is taken at the
-# same immutable revision as the host receipt.
-cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
-sprigging = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60", version = "=0.1.0" }
-genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
+# genet-layout and genet-winit-host).
+#
+# Every genet dependency takes the SAME reference, which since 2026-08-12 is
+# `branch = "main"` rather than the immutable `branch = "main"` the host
+# receipt was cut at. Sameness is what matters, and a rev could no longer
+# deliver it: cargo keys a git source by URL *and* reference, so once a
+# dependency from another repo names genet by branch (mere does, and
+# `persona-picker` brought it in), a rev pin here puts two of every cambium
+# crate in a clean checkout's graph — the two-meristem failure
+# `.cargo/config.toml` describes at length. The local patch table is keyed by
+# URL alone and hides it on a dev machine, which is exactly why the manifest
+# has to be right on its own.
+cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+sprigging = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # genet-layout, genet-winit-host, netrender, paint_list_api, paint_list_render,
 # cambium-winit and cambium-winit-a11y are deliberately NOT declared here any
 # more. They were the pieces woodshed needed to assemble a native host itself;
@@ -90,7 +100,7 @@ wgpu = { version = "29", default-features = false, features = ["std"] }
 # (`components/tinct`); the standalone mirror repo retires with the
 # 2026-07-23 consolidation. genet.git is already a source here, so this
 # costs no extra checkout.
-tinct = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60" }
+tinct = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 
 # Audio
 cpal = "0.18"
@@ -134,8 +144,8 @@ persona-picker = { package = "mere-persona-picker", git = "https://github.com/me
 # taffy + ipc-channel are vendored inside the genet repo and reached
 # through its git, by branch (owned forks track branches, never revs).
 [patch.crates-io]
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "398e4af60", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # NO stylo/stylo_atoms patch (2026-07-12, mirroring genet's ring-3 rename):
 # the fork is now the RENAMED `genet-stylo` family, and a `[patch]` cannot
 # rename its target. Genet's crates git-dep genet-stylo by package rename, so
