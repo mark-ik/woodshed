@@ -69,6 +69,16 @@ impl PersonaPick {
     }
 }
 
+/// Declining the gate, for a host that has to answer for the picker.
+///
+/// The picker reports its own Escape, but only once something is focused, and
+/// at startup nothing is. A host with a window-wide key policy can record this
+/// instead; the two paths are the same answer, so recording it twice is
+/// harmless.
+pub fn dismissed() -> PickerEvent {
+    PickerEvent::Dismissed
+}
+
 /// The gate screen: who is practising, and the roster to answer with.
 ///
 /// Rendered in place of the product root, not over it. Nothing is behind it

@@ -38,7 +38,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
-use cambium_genet_winit_host::{HostHooks, HostOptions, Init, WindowCommands, run};
+use cambium_genet_winit_host::{HostHooks, HostOptions, Init, KeyPress, Runner, WindowCommands, run};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
@@ -176,6 +176,36 @@ fn sync_viewport(ctx: &mut Ctx<'_>) {
     });
 }
 
+/// What Escape means, window-wide.
+///
+/// An intercept rather than a view handler because it is a policy, not a
+/// control's behaviour: it runs before dispatch and does not care what has the
+/// caret. Named rather than inline so a test drives the shipping decision
+/// instead of a copy of it.
+fn escape_policy(runner: &mut Runner<UiState, Logic, UiChild>, press: &KeyPress) -> bool {
+    if !matches!(press.key, WinitKey::Named(WinitNamedKey::Escape)) {
+        return false;
+    }
+    // While the persona gate is up, Escape is how you practise without
+    // choosing — and it has to work on the first press. The picker reports its
+    // own Escape, but only to whatever has focus, and at startup that is
+    // nothing; so the window-wide policy answers for it.
+    if runner.state().persona.is_some() {
+        runner.update(|ui| {
+            if let Some(pick) = ui.persona.as_mut() {
+                pick.record(woodshed_views::persona::dismissed());
+            }
+        });
+        return true;
+    }
+    // Otherwise it closes any open dropdown.
+    runner.update(|ui| {
+        ui.tuning_dd.open = false;
+        ui.root_dd.open = false;
+    });
+    true
+}
+
 fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
     let frame_shared = shared.clone();
     let dispatch_shared = shared.clone();
@@ -203,24 +233,7 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
         after_wake: Box::new(|_ctx| {}),
         close_request: Box::new(|_ctx, _request| cambium_genet_winit_host::CloseDisposition::Exit),
         focused_text: Box::new(text::focused_text),
-        key_intercept: Box::new(|runner, press| {
-            // Escape closes any open dropdown. Deliberately an intercept rather
-            // than a view handler: it is a window-wide policy, not a control's.
-            if !matches!(press.key, WinitKey::Named(WinitNamedKey::Escape)) {
-                return false;
-            }
-            // Except while the persona gate is up, where Escape is the way to
-            // practise without choosing. An intercept that consumed it would
-            // make the gate the one screen with no way out.
-            if runner.state().persona.is_some() {
-                return false;
-            }
-            runner.update(|ui| {
-                ui.tuning_dd.open = false;
-                ui.root_dd.open = false;
-            });
-            true
-        }),
+        key_intercept: Box::new(escape_policy),
     }
 }
 

@@ -103,6 +103,7 @@ mod tests {
     use super::*;
     use cambium_genet_winit_host::Harness;
     use genet_probe::Selector;
+    use winit::keyboard::NamedKey;
     use woodshed_views::stage::{UiChild, UiState};
 
     /// `PERSONAE_PROFILE` is process-wide, so every test that reads the vault
@@ -201,7 +202,20 @@ mod tests {
         let mut ui = UiState::new();
         ui.persona = Some(PersonaPick::new(roster));
         let logic: crate::sync::Logic = Box::new(woodshed_views::stage::stage_root);
-        let mut harness = Harness::new(woodshed_views::theme::slate_stage_css(), ui, logic);
+        // The shipping Escape policy, not a copy of it. Everything else is
+        // inert: this harness is about the gate, not the audio seam.
+        let hooks = cambium_genet_winit_host::HostHooks {
+            key_intercept: Box::new(crate::escape_policy),
+            ..cambium_genet_winit_host::inert_hooks()
+        };
+        let mut harness = Harness::with_hooks(
+            cambium_genet_winit_host::Init {
+                state: ui,
+                logic,
+                sheet: woodshed_views::theme::slate_stage_css(),
+            },
+            hooks,
+        );
         harness.layout_at(1_100.0, 664.0);
         harness
     }
@@ -270,6 +284,26 @@ mod tests {
         assert!(
             harness.resolve(&Selector::role("status")).is_some(),
             "the notice is on screen, not only in the state"
+        );
+    }
+
+    #[test]
+    fn escape_dismisses_the_gate_so_practice_is_never_blocked() {
+        // "Picking nobody must not block practice." Escape has to reach the
+        // picker's own key handler, which means the gate has to be focusable
+        // and reachable by the host's Tab traversal from a cold start.
+        let mut harness = gated_harness(two_persona_roster());
+        assert!(
+            harness.focus().is_none(),
+            "a cold start focuses nothing, which is the case this covers"
+        );
+        harness.key_named(NamedKey::Escape);
+        harness.relayout();
+        let pick = harness.state().persona.as_ref().expect("the host clears it, not the view");
+        assert_eq!(
+            pick.outcome,
+            Some(PickerEvent::Dismissed),
+            "the first Escape declines, with nothing focused"
         );
     }
 

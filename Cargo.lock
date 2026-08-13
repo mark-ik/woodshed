@@ -7292,10 +7292,6 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "netfetcher"
-version = "0.1.1"
-
-[[patch.unused]]
 name = "armillary"
 version = "0.1.1"
 
@@ -7354,3 +7350,7 @@ version = "0.1.2"
 [[patch.unused]]
 name = "vates"
 version = "0.1.2"
+
+[[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
