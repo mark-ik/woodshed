@@ -269,6 +269,36 @@ struct Probe<'a, 'c> {
     shared: &'a mut Shared,
 }
 
+impl Probe<'_, '_> {
+    /// The `data-key` of the Set-graph node the canvas is currently painting
+    /// as focused, or `"none"`. The canvas owns that emphasis, so the DOM is
+    /// the authority for it.
+    fn graph_focus_key(&self) -> String {
+        use layout_dom_api::LayoutDom;
+        let dom = self.ctx.runner.dom();
+        let dom = dom.borrow();
+        dom.all_with_class(dom.document(), "graph-canvas-swatch-node")
+            .into_iter()
+            .find(|node| {
+                dom.attribute(
+                    *node,
+                    &layout_dom_api::Namespace::from(""),
+                    &layout_dom_api::LocalName::from("class"),
+                )
+                .is_some_and(|class| class.split_whitespace().any(|token| token == "focused"))
+            })
+            .and_then(|node| {
+                dom.attribute(
+                    node,
+                    &layout_dom_api::Namespace::from(""),
+                    &layout_dom_api::LocalName::from("data-key"),
+                )
+                .map(str::to_owned)
+            })
+            .unwrap_or_else(|| "none".to_string())
+    }
+}
+
 impl Automatable for Probe<'_, '_> {
     fn with_surfaces<R>(&self, f: impl FnOnce(&[ProbeSurface<'_>]) -> R) -> R {
         let dom = self.ctx.runner.dom();
@@ -303,12 +333,11 @@ impl Automatable for Probe<'_, '_> {
             .with_field("relations", observed.relations)
             .with_field("tray-expanded", ui.set_tray_expanded.to_string())
             .with_field("card-expanded", ui.set_graph_card_expanded.to_string())
-            .with_field(
-                "graph-focus",
-                ui.set_graph_focus
-                    .map(|id| id.0.to_string())
-                    .unwrap_or_else(|| "none".to_string()),
-            )
+            // Graph focus emphasis belongs to the canvas component now, so it
+            // is observed where it actually is — the focused node's rendered
+            // `data-key` — rather than from a UiState field that would report
+            // "none" forever.
+            .with_field("graph-focus", self.graph_focus_key())
             .with_field("section", ui.section.label().to_string())
             .with_field("lens", format!("{:?}", ui.stage.lens))
             .with_field("material", ui.stage.material_name());

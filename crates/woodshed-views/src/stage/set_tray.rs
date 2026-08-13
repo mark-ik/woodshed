@@ -1,7 +1,7 @@
 use woodshedding::rehearsal::{CardId, Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
 use woodshed_core::storage::AppSection;
 use cambium::{
-    clickable, el, graph_canvas_swatch_with_focus, map_state, text, text_field,
+    GraphCanvasEvent, clickable, el, graph_canvas, map_state, text, text_field,
 };
 
 use super::{set_graph_swatch, UiChild, UiState};
@@ -180,22 +180,24 @@ pub(super) fn view(ui: &UiState) -> UiChild {
         } else {
             Box::new(el("div", ()))
         };
-        let graph = graph_canvas_swatch_with_focus(
+        // The canvas owns hover and focus emphasis. This view keeps only what
+        // the Set decides: which card the cursor is on, and whether it is
+        // expanded into the editor.
+        let graph = graph_canvas(
             &swatch,
-            |ui: &mut UiState, id: CardId| {
-                let was_selected = ui.set.cursor_id() == Some(id);
-                if !ui.set.select_id(id) {
-                    return;
+            |ui: &mut UiState, event: GraphCanvasEvent<CardId>| {
+                if let GraphCanvasEvent::Activate(id) = event {
+                    let was_selected = ui.set.cursor_id() == Some(id);
+                    if !ui.set.select_id(id) {
+                        return;
+                    }
+                    ui.set_graph_card_expanded = if was_selected {
+                        !ui.set_graph_card_expanded
+                    } else {
+                        true
+                    };
                 }
-                ui.set_graph_card_expanded = if was_selected {
-                    !ui.set_graph_card_expanded
-                } else {
-                    true
-                };
             },
-            |ui: &mut UiState, id: Option<CardId>| ui.set_graph_hover = id,
-            |ui: &mut UiState, id: Option<CardId>| ui.set_graph_focus = id,
-            |_ui: &mut UiState| {},
         );
         Box::new(el(
             "div",

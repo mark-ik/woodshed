@@ -151,11 +151,9 @@ pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<CardId, &'static str>
     .with_expand(false)
     .with_node_labels(true);
     swatch.selected = ui.set.cursor_id();
-    // Focus is the *native* focus reported back by the node buttons, not a
-    // mirror of selection: painting a ring where the keyboard is not would be
-    // a lie about where a keystroke lands.
-    swatch.focus = ui.set_graph_focus;
-    swatch.hovered = ui.set_graph_hover;
+    // Focus and hover emphasis are the canvas component's own state (it reads
+    // native focus from its node buttons, so the ring is never painted where
+    // the keyboard is not). This view supplies only the Set's truth.
     swatch
 }
 
@@ -377,12 +375,9 @@ pub struct UiState {
     /// the completion is the measured practice the evidence layer rests on, so
     /// it is a real elapsed measurement, not a per-card guess.
     pub card_started_ms: Option<u64>,
-    /// The Set graph node under the pointer, by occurrence identity. Transient
-    /// paint emphasis.
-    pub set_graph_hover: Option<CardId>,
-    /// The Set graph node holding native keyboard focus, by occurrence
-    /// identity, so focus survives reorder and removal.
-    pub set_graph_focus: Option<CardId>,
+    // Set-graph hover and focus emphasis are owned by `cambium::graph_canvas`.
+    // They were transient paint state this struct held only to route back into
+    // the view on the next rebuild; the component keeps them now.
     /// Whether the selected graph node is expanded into the shared Card editor.
     pub set_graph_card_expanded: bool,
     /// Note markers the user has pinned as `(string_index, fret)` to keep their
@@ -448,8 +443,6 @@ impl UiState {
             set_tray_expanded: true,
             now_ms: None,
             card_started_ms: None,
-            set_graph_hover: None,
-            set_graph_focus: None,
             set_graph_card_expanded: true,
             pinned_markers: Vec::new(),
             hover_peek: None,
