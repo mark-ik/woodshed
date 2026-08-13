@@ -1,0 +1,288 @@
+//! Whether to ask which persona is practising, and what to do with the answer.
+//!
+//! The view half is `woodshed_views::persona`. This half owns the two acts a
+//! view must not perform: deciding, before the window exists, that the question
+//! needs asking at all; and writing the answer into the shared vault before
+//! reopening the practice store under it.
+//!
+//! **Nobody is asked who has already answered.** `PERSONAE_PROFILE`, a
+//! remembered choice, a vault holding exactly one persona, and a machine with
+//! no vault backend all keep the silent path they had before this module
+//! existed. What is left is the one case the convention cannot decide: several
+//! personas, none of them chosen.
+
+use personae::bootstrap::{self, Unlock};
+use personae::roster::{self, Roster};
+use personae::vault::ProfileId;
+use persona_picker::PickerEvent;
+use woodshed_views::persona::PersonaPick;
+
+use crate::shared::Shared;
+use crate::storage::open_store_as;
+use crate::sync::Ctx;
+
+/// The roster to ask about, or `None` when the convention already decides.
+///
+/// Reads the vault but never opens a profile in it, which is the whole point of
+/// running before the store: [`roster::open_shared`] would mint a `default`
+/// persona beside the ones the user has, and seal the practice session to it.
+pub fn pending_roster() -> Option<Roster> {
+    pending_roster_at(&bootstrap::default_vault_dir(), Unlock::from_env())
+}
+
+/// [`pending_roster`] against a named vault directory, for tests.
+pub fn pending_roster_at(dir: &std::path::Path, unlock: Unlock) -> Option<Roster> {
+    if roster::chosen_profile(dir).is_some() {
+        return None;
+    }
+    // A vault that will not open is not a question to put to the user: the
+    // store's own fallback says so out loud and practice proceeds unsealed.
+    let opened = bootstrap::open_storage(dir, unlock).ok()?;
+    let roster = roster::read_roster(&*opened.storage, dir, opened.description).ok()?;
+    (roster.entries.len() > 1).then_some(roster)
+}
+
+/// Act on a gate the user has answered, if they have.
+///
+/// Runs at the head of the dispatch tail so the rest of it (the audio seam, the
+/// skin, persistence) sees the restored session in the same beat the choice
+/// lands, rather than one frame later.
+pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
+    let mut answer = None;
+    ctx.runner.update(|ui| {
+        if let Some(pick) = ui.persona.as_mut() {
+            answer = pick.outcome.take();
+        }
+    });
+    let Some(answer) = answer else {
+        return;
+    };
+    let chosen = match answer {
+        PickerEvent::Chose(id) => Some(id),
+        // Escape. Practice proceeds on the convention, exactly as it would have
+        // done had there been nothing to ask.
+        PickerEvent::Dismissed => None,
+        // The view answers this one itself and keeps the gate open (P3 wires
+        // the create flow), so it never reaches here.
+        PickerEvent::CreateRequested => return,
+    };
+    settle(shared, ctx, chosen.as_ref());
+}
+
+/// Open the store on the settled persona, restore the session into it, and take
+/// the gate down.
+fn settle(shared: &mut Shared, ctx: &mut Ctx<'_>, chosen: Option<&ProfileId>) {
+    if let Some(id) = chosen {
+        // Remembered first, so every other application in the family opens the
+        // same persona next time. The store opens on the id either way: a vault
+        // directory that refuses the write must not silently reroute this
+        // session to somebody else.
+        if let Err(error) = roster::remember_profile(&bootstrap::default_vault_dir(), id) {
+            eprintln!(
+                "[woodshed] chose persona {:?} but could not remember it ({error}); \
+                 this session practises as it, the next one will ask again",
+                id.0
+            );
+        }
+    }
+    let storage = open_store_as(chosen);
+    ctx.runner.update(|ui| {
+        crate::session::restore(&storage, ui);
+        ui.persona = None;
+    });
+    shared.storage = Some(storage);
+}
+
+/// Seed the gate onto a fresh [`UiState`], if one is pending.
+pub fn seed(shared: &mut Shared, ui: &mut woodshed_views::stage::UiState) {
+    ui.persona = shared.pending_roster.take().map(PersonaPick::new);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cambium_genet_winit_host::Harness;
+    use genet_probe::Selector;
+    use woodshed_views::stage::{UiChild, UiState};
+
+    /// `PERSONAE_PROFILE` is process-wide, so every test that reads the vault
+    /// serializes behind one lock: `chosen_profile` consults it, which makes an
+    /// unrelated test's export enough to change this one's answer.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn unlock() -> Unlock {
+        Unlock::passphrase(b"woodshed-test".to_vec())
+    }
+
+    /// A vault directory holding `names`, and nothing else.
+    fn vault(names: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp vault");
+        let opened = bootstrap::open_storage(dir.path(), unlock()).expect("open vault");
+        for name in names {
+            roster::create_profile(&*opened.storage, &ProfileId((*name).into()), *name)
+                .expect("mint persona");
+        }
+        dir
+    }
+
+    #[test]
+    fn two_personas_and_no_choice_is_the_one_case_worth_asking_about() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt"]);
+        let roster = pending_roster_at(dir.path(), unlock()).expect("the gate must open");
+        assert_eq!(roster.entries.len(), 2);
+        assert_eq!(roster.description.is_empty(), false, "the vault says what protects it");
+    }
+
+    #[test]
+    fn a_sole_persona_is_not_a_question() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["only"]);
+        assert!(pending_roster_at(dir.path(), unlock()).is_none());
+    }
+
+    #[test]
+    fn an_empty_vault_is_not_a_question_either() {
+        // First run. `default` is minted on open, which is the silent path the
+        // application had before the gate existed.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&[]);
+        assert!(pending_roster_at(dir.path(), unlock()).is_none());
+    }
+
+    #[test]
+    fn a_remembered_choice_is_not_asked_again() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt"]);
+        roster::remember_profile(dir.path(), &ProfileId("alt".into())).expect("remember");
+        assert!(pending_roster_at(dir.path(), unlock()).is_none());
+    }
+
+    #[test]
+    fn a_forced_persona_is_not_asked_about() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = vault(&["work", "alt"]);
+        std::env::set_var(roster::PROFILE_ENV, "work");
+        let pending = pending_roster_at(dir.path(), unlock());
+        std::env::remove_var(roster::PROFILE_ENV);
+        assert!(pending.is_none(), "PERSONAE_PROFILE decides without asking");
+    }
+
+    #[test]
+    fn a_vault_that_will_not_open_is_stepped_over_rather_than_asked_about() {
+        // The done condition behind "sealing is not a gate": a machine with no
+        // usable vault backend never sees the picker. Here, the wrong
+        // passphrase stands in for a backend that will not unlock.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt"]);
+        let wrong = Unlock::passphrase(b"not-the-passphrase".to_vec());
+        assert!(pending_roster_at(dir.path(), wrong).is_none());
+    }
+
+    #[test]
+    fn the_gate_asks_about_the_personas_the_vault_actually_holds() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt", "burner"]);
+        let roster = pending_roster_at(dir.path(), unlock()).expect("the gate must open");
+        let ids: Vec<&str> = roster.entries.iter().map(|entry| entry.id.0.as_str()).collect();
+        // Sorted by id, so the list does not reorder itself between runs.
+        assert_eq!(ids, ["alt", "burner", "work"]);
+    }
+
+    /// A harness over the real product root, so what is asserted is the DOM the
+    /// shipping build lays out — not a view fn called in isolation.
+    fn gated_harness(roster: Roster) -> Harness<UiState, crate::sync::Logic, UiChild> {
+        let mut ui = UiState::new();
+        ui.persona = Some(PersonaPick::new(roster));
+        let logic: crate::sync::Logic = Box::new(woodshed_views::stage::stage_root);
+        let mut harness = Harness::new(woodshed_views::theme::slate_stage_css(), ui, logic);
+        harness.layout_at(1_100.0, 664.0);
+        harness
+    }
+
+    fn two_persona_roster() -> Roster {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["alt", "work"]);
+        let opened = bootstrap::open_storage(dir.path(), unlock()).expect("reopen vault");
+        roster::read_roster(&*opened.storage, dir.path(), opened.description).expect("roster")
+    }
+
+    #[test]
+    fn the_gate_is_reachable_by_a_driver() {
+        // The standing requirement for any new surface: genet-probe must be
+        // able to find it through identity the DOM carries.
+        let harness = gated_harness(two_persona_roster());
+        assert!(
+            harness.resolve(&Selector::class("command-picker")).is_some(),
+            "the picker itself must resolve"
+        );
+        assert!(
+            harness
+                .resolve(&Selector::role("dialog").containing("Choose a persona"))
+                .is_some(),
+            "the gate announces itself as a dialog with a label"
+        );
+        assert!(
+            harness
+                .resolve(&Selector::class("command-label").containing("work"))
+                .is_some(),
+            "each persona is addressable by the name it shows"
+        );
+    }
+
+    #[test]
+    fn the_gate_stands_in_front_of_the_product_rather_than_over_it() {
+        let harness = gated_harness(two_persona_roster());
+        assert!(
+            harness.resolve(&Selector::class("pills")).is_none(),
+            "no product navigation while the session behind it is unread"
+        );
+    }
+
+    #[test]
+    fn clicking_a_persona_records_the_choice_the_host_acts_on() {
+        let mut harness = gated_harness(two_persona_roster());
+        assert!(
+            harness.click_on(&Selector::class("command-label").containing("work")),
+            "the row must be clickable where the driver found it"
+        );
+        let pick = harness.state().persona.as_ref().expect("the gate is still up");
+        assert_eq!(
+            pick.outcome,
+            Some(PickerEvent::Chose(ProfileId("work".into()))),
+            "the answer is recorded by id, for `settle` to open the store on"
+        );
+    }
+
+    #[test]
+    fn asking_for_a_new_persona_keeps_the_gate_up_and_says_why() {
+        let mut harness = gated_harness(two_persona_roster());
+        assert!(harness.click_on(&Selector::class("command-label").containing("New persona")));
+        let pick = harness.state().persona.as_ref().expect("the gate stays up");
+        assert!(pick.outcome.is_none(), "nothing for the host to settle");
+        assert!(
+            harness.resolve(&Selector::role("status")).is_some(),
+            "the notice is on screen, not only in the state"
+        );
+    }
+
+    #[test]
+    fn choosing_a_persona_opens_the_store_on_it_without_a_round_trip() {
+        // What `settle` rests on: naming the persona in the open is what seals
+        // the session, not the remembered file, which may fail to write.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["work", "alt"]);
+        let opened = roster::open_profile(dir.path(), unlock(), &ProfileId("alt".into()))
+            .expect("open on the chosen persona");
+        assert_eq!(opened.profile.0, "alt");
+        assert!(!opened.created, "an existing persona is loaded, never re-minted");
+    }
+}

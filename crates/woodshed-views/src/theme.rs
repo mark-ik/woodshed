@@ -456,6 +456,29 @@ pub fn stage_css(p: &Palette) -> String {
 .pill, .lens {{ transition: background-color 0.14s ease, color 0.14s ease; }}
 .film-card, .recipe-tile, .bar-chip {{ transition: border-color 0.14s ease, background-color 0.14s ease; }}
 .search-wrap input {{ transition: border-color 0.12s ease; }}
+/* The persona gate (P1): the whole product root, replaced by one question,
+   because nothing behind it has been read yet. Centred rather than anchored:
+   there is no trigger control to point back at. */
+.persona-gate {{ align-items: center; justify-content: center; }}
+.persona-card {{ width: 380px; background-color: {surface}; border-radius: 14px;
+                padding: 20px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }}
+.persona-title {{ color: {text_header}; font-size: 17px; font-weight: 700;
+                 padding-bottom: 4px; }}
+.persona-vault {{ color: {text_dim}; font-size: 12px; padding-bottom: 12px; }}
+.persona-notice {{ color: {secondary}; font-size: 12px; padding-top: 10px; }}
+.persona-hint {{ color: {text_disabled}; font-size: 12px; padding-top: 12px; }}
+/* Cambium's command surface, styled here because woodshed emits its own sheet
+   rather than importing a component stylesheet. The picker is the only
+   configuration woodshed uses so far; a palette or context menu would want the
+   other two root classes. */
+.command-picker {{ display: flex; flex-direction: column; background-color: {surface_2};
+                  border-radius: 10px; padding: 4px; }}
+.command-items {{ display: flex; flex-direction: column; }}
+.command-item {{ display: flex; padding: 8px 10px; border-radius: 7px; }}
+.command-item:hover {{ background-color: {surface_hover}; }}
+.command-item.selected {{ background-color: {surface_hover}; }}
+.command-label {{ color: {text}; flex-grow: 1; font-size: 14px; }}
+.command-shortcut {{ color: {text_dim}; font-size: 12px; padding: 2px 0 0 8px; }}
 /* Responsive shell. The host selects a width band so the same product view
    stays legible on a small desktop window and future browser canvas. */
 .viewport-medium .recipe-grid {{ grid-template-columns: repeat(2, 260px); }}

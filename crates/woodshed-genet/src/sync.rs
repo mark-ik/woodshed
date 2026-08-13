@@ -6,7 +6,7 @@
 //! asks the host for a new sheet.
 
 use cambium_genet_winit_host::AppCtx;
-use woodshed_core::audio::{AudioBackend, CalibrationStatus};
+use woodshed_core::audio::{AudioBackend, AudioRequest, CalibrationStatus};
 use woodshed_core::midi::MidiBackend as _;
 use woodshed_views::stage::{UiChild, UiState};
 
@@ -32,6 +32,9 @@ fn midi_port_at(ports: &[String], selected: usize) -> Option<String> {
 
 /// Everything woodshed does after an input dispatch.
 pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
+    // First, so that everything below sees the session the chosen persona
+    // unsealed rather than the empty one that stood in for it.
+    crate::persona::after_dispatch(shared, ctx);
     push_backend(shared, ctx);
     // Window verbs used to be drained here from four `UiState` flags. The
     // host owns them now: the caption buttons call `WindowCommands` directly
@@ -63,52 +66,49 @@ fn push_backend(shared: &mut Shared, ctx: &mut Ctx<'_>) {
                 *last_song = ui.song.clone();
             }
             backend.set_song_transport(ui.song_playing);
-            if ui.song_rewind_requested {
-                backend.song_rewind();
-                ui.song_rewind_requested = false;
-            }
-            if ui.preview_requested {
-                ui.preview_requested = false;
-                let (pitches, dur, strum) = ui.preview_voicing();
-                if !pitches.is_empty() {
-                    backend.preview_pitches(&pitches, dur, strum);
+            // Every one-shot command the views queued this frame, realized in
+            // the order the user asked for it. Draining here is the only place
+            // a request is consumed, so none can be left set or cleared twice.
+            for request in std::mem::take(&mut ui.audio_requests) {
+                match request {
+                    AudioRequest::SongRewind => backend.song_rewind(),
+                    AudioRequest::PreviewVoicing => {
+                        let (pitches, dur, strum) = ui.preview_voicing();
+                        if !pitches.is_empty() {
+                            backend.preview_pitches(&pitches, dur, strum);
+                        }
+                    }
+                    AudioRequest::PreviewNote(freq) => backend.preview_note(freq, 0.9),
+                    AudioRequest::CalibrationStart => {
+                        backend.calibration_start();
+                        ui.calib_active = true;
+                        ui.calib_status = CalibrationStatus::Running {
+                            clicks_fired: 0,
+                            total: 6,
+                        };
+                    }
+                    AudioRequest::CalibrationCancel => {
+                        backend.calibration_cancel();
+                        ui.calib_active = false;
+                        ui.calib_status = CalibrationStatus::Idle;
+                    }
+                    AudioRequest::CalibrationAccept => {
+                        if let CalibrationStatus::Success { latency_ms, .. } = ui.calib_status {
+                            backend.set_latency_ms(Some(latency_ms));
+                        }
+                        ui.calib_status = CalibrationStatus::Idle;
+                    }
+                    AudioRequest::SongRecordToggle => {
+                        if ui.song_recording {
+                            backend.song_stop_record();
+                        } else {
+                            backend.song_arm_record(ui.song_edit_cursor);
+                        }
+                    }
+                    AudioRequest::SongClearLoop => backend.song_clear_loop(ui.song_edit_cursor),
                 }
-            }
-            if let Some(freq) = ui.preview_note_requested.take() {
-                backend.preview_note(freq, 0.9);
-            }
-            // Latency-calibration requests.
-            if std::mem::take(&mut ui.calib_start_requested) {
-                backend.calibration_start();
-                ui.calib_active = true;
-                ui.calib_status = CalibrationStatus::Running {
-                    clicks_fired: 0,
-                    total: 6,
-                };
-            }
-            if std::mem::take(&mut ui.calib_cancel_requested) {
-                backend.calibration_cancel();
-                ui.calib_active = false;
-                ui.calib_status = CalibrationStatus::Idle;
-            }
-            if std::mem::take(&mut ui.calib_accept_requested) {
-                if let CalibrationStatus::Success { latency_ms, .. } = ui.calib_status {
-                    backend.set_latency_ms(Some(latency_ms));
-                }
-                ui.calib_status = CalibrationStatus::Idle;
             }
             ui.latency_ms = backend.latency_ms();
-            // Looper (song-mode record) requests.
-            if std::mem::take(&mut ui.song_record_toggle_requested) {
-                if ui.song_recording {
-                    backend.song_stop_record();
-                } else {
-                    backend.song_arm_record(ui.song_edit_cursor);
-                }
-            }
-            if std::mem::take(&mut ui.song_clear_loop_requested) {
-                backend.song_clear_loop(ui.song_edit_cursor);
-            }
             backend.song_set_record_replace(ui.song_record_replace);
             ui.song_recording = backend.song_recording();
             ui.song_loop_bars = backend.song_loop_bars();
@@ -124,11 +124,17 @@ fn push_backend(shared: &mut Shared, ctx: &mut Ctx<'_>) {
         // The host takes it from here: a new sheet forces a full relayout.
         *ctx.set_sheet = Some(sheet);
     }
+    // No store while the persona gate is up, and nothing worth saving either:
+    // what would be written is the empty state standing in for a session that
+    // has not been read.
+    let Some(storage) = shared.storage.as_ref() else {
+        return;
+    };
     if let Some(json) = persisted {
-        shared.storage.save(&json);
+        storage.save(&json);
     }
     if let Some(json) = persisted_settings {
-        shared.storage.save_settings(&json);
+        storage.save_settings(&json);
     }
 }
 

@@ -3,7 +3,7 @@ use genet_host_api::settings::{
     SettingControl, SettingValue, SettingsProjection, SettingsProvider,
 };
 use genet_host_api::tile::SettingsRef;
-use woodshed_core::audio::CalibrationStatus;
+use woodshed_core::audio::{AudioRequest, CalibrationStatus};
 use woodshedding::rehearsal::SetGraphEdgeKind;
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
@@ -100,14 +100,14 @@ fn calibration_panel(ui: &UiState) -> UiChild {
     let start_btn = |label: &str| {
         Box::new(clickable(
             el("div", text(label.to_string())).attr("class", "t-btn"),
-            |ui: &mut UiState, _| ui.calib_start_requested = true,
+            |ui: &mut UiState, _| ui.request(AudioRequest::CalibrationStart),
         )) as UiChild
     };
     let readout = |s: String| Box::new(el("div", text(s)).attr("class", "t-readout")) as UiChild;
     let controls: Vec<UiChild> = match ui.calib_status {
         CalibrationStatus::Idle => vec![Box::new(clickable(
             el("div", text("Calibrate")).attr("class", "t-btn t-hear"),
-            |ui: &mut UiState, _| ui.calib_start_requested = true,
+            |ui: &mut UiState, _| ui.request(AudioRequest::CalibrationStart),
         )) as UiChild],
         CalibrationStatus::Running {
             clicks_fired,
@@ -116,7 +116,7 @@ fn calibration_panel(ui: &UiState) -> UiChild {
             readout(format!("Tap along… {clicks_fired}/{total}")),
             Box::new(clickable(
                 el("div", text("Cancel")).attr("class", "t-btn"),
-                |ui: &mut UiState, _| ui.calib_cancel_requested = true,
+                |ui: &mut UiState, _| ui.request(AudioRequest::CalibrationCancel),
             )) as UiChild,
         ],
         CalibrationStatus::Success {
@@ -127,7 +127,7 @@ fn calibration_panel(ui: &UiState) -> UiChild {
             readout(format!("{latency_ms:.0} ms · {matched}/{total} hits")),
             Box::new(clickable(
                 el("div", text("Accept")).attr("class", "t-btn t-hear"),
-                |ui: &mut UiState, _| ui.calib_accept_requested = true,
+                |ui: &mut UiState, _| ui.request(AudioRequest::CalibrationAccept),
             )) as UiChild,
             start_btn("Retry"),
         ],

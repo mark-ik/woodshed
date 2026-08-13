@@ -3050,6 +3050,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mere-persona-picker"
+version = "0.0.1"
+dependencies = [
+ "cambium",
+ "personae",
+]
+
+[[package]]
 name = "meristem"
 version = "0.1.1"
 dependencies = [
@@ -6850,10 +6858,12 @@ dependencies = [
  "genet-scripted-dom",
  "image",
  "layout-dom-api",
+ "mere-persona-picker",
  "muniment",
  "personae",
  "serde_json",
  "sprigging",
+ "tempfile",
  "wgpu",
  "winit",
  "woodshed-audio",
@@ -6877,6 +6887,8 @@ dependencies = [
  "accesskit",
  "cambium",
  "genet-host-api",
+ "mere-persona-picker",
+ "personae",
  "sprigging",
  "tinct",
  "woodshed-core",
@@ -7280,6 +7292,10 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
+
+[[patch.unused]]
 name = "armillary"
 version = "0.1.1"
 
@@ -7338,7 +7354,3 @@ version = "0.1.2"
 [[patch.unused]]
 name = "vates"
 version = "0.1.2"
-
-[[patch.unused]]
-name = "netfetcher"
-version = "0.1.1"

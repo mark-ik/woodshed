@@ -26,7 +26,9 @@ mod audio;
 mod drive;
 mod leaves;
 mod midi;
+mod persona;
 mod scenario;
+mod session;
 mod shared;
 mod storage;
 mod sync;
@@ -136,32 +138,13 @@ fn boot_state(
     ui.set_viewport_height(size.height as f32 / scale);
     ui.audio_error = backend.error().map(String::from);
 
-    // Restore the artifact session and the separate application settings. A
-    // legacy flat session migrates its settings when no split settings file
-    // exists yet.
-    let mut app_settings = shared
-        .storage
-        .load_settings()
-        .and_then(|json| match serde_json::from_str(&json) {
-            Ok(settings) => Some(settings),
-            Err(error) => {
-                eprintln!("[woodshed-genet] ignoring corrupt application settings: {error}");
-                None
-            }
-        })
-        .unwrap_or_default();
-    if let Some(json) = shared.storage.load() {
-        match woodshed_core::storage::decode_session(&json) {
-            Ok(loaded) => {
-                if shared.storage.load_settings().is_none() {
-                    if let Some(legacy) = loaded.legacy_settings {
-                        app_settings = legacy;
-                    }
-                }
-                ui.apply_persisted(&loaded.session, app_settings);
-            }
-            Err(e) => eprintln!("[woodshed-genet] ignoring corrupt session: {e}"),
-        }
+    // Restore the artifact session and the separate application settings, when
+    // there is a store to restore from. There is not, on a machine whose vault
+    // holds several personas with none chosen: the gate goes up instead, and
+    // `persona::after_dispatch` restores once the question is answered.
+    match shared.storage.as_ref() {
+        Some(storage) => session::restore(storage, &mut ui),
+        None => persona::seed(&mut shared, &mut ui),
     }
     shared.theme = ui.theme();
     shared.reduce_motion = ui.app_settings.accessibility.reduce_motion;
@@ -224,6 +207,12 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
             // Escape closes any open dropdown. Deliberately an intercept rather
             // than a view handler: it is a window-wide policy, not a control's.
             if !matches!(press.key, WinitKey::Named(WinitNamedKey::Escape)) {
+                return false;
+            }
+            // Except while the persona gate is up, where Escape is the way to
+            // practise without choosing. An intercept that consumed it would
+            // make the gate the one screen with no way out.
+            if runner.state().persona.is_some() {
                 return false;
             }
             runner.update(|ui| {

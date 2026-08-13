@@ -67,6 +67,40 @@ pub struct TunerState {
     pub reading: Option<TunerReading>,
 }
 
+/// One thing the view layer asks the audio host to do, once.
+///
+/// These are commands, not settings: continuous state (metronome transport,
+/// tuner enabled, record-replace) is realized idempotently from the app state
+/// every sync, while these happen exactly once each time they are requested.
+///
+/// They are queued rather than flagged. A boolean flag per request coalesces
+/// two presses in one frame into one action, loses the order the user pressed
+/// things in, and has to be cleared correctly at every consumption site. A
+/// queue keeps every request, in order, drained in one place.
+///
+/// Nothing here carries a correlation id, because nothing here has an answer
+/// that could arrive late: results (recording status, calibration progress,
+/// measured latency) are polled from the backend each frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AudioRequest {
+    /// Rewind the song transport to its start.
+    SongRewind,
+    /// Voice the current lens or rehearsal card.
+    PreviewVoicing,
+    /// Play one note at this frequency (Hz).
+    PreviewNote(f32),
+    /// Begin latency calibration.
+    CalibrationStart,
+    /// Abandon a calibration run.
+    CalibrationCancel,
+    /// Accept a finished calibration's measured latency.
+    CalibrationAccept,
+    /// Arm or stop song-mode recording at the edit cursor.
+    SongRecordToggle,
+    /// Clear the recorded loop at the edit cursor.
+    SongClearLoop,
+}
+
 /// The host-supplied audio realization. Implementations should be
 /// tolerant of missing devices: construct in a degraded state and report
 /// through [`error`](Self::error) rather than failing the app.

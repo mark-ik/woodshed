@@ -14,6 +14,13 @@ woodshedding = { workspace = true }
 cambium = { workspace = true }
 sprigging = { workspace = true }
 tinct = { workspace = true }
+# The persona gate. `mere-persona-picker` owns how a roster reads as a list
+# (which persona is in use, how many keys the others hold); `personae` is
+# needed to name the `Roster` the gate holds. Both are desktop-shaped — the
+# vault is a filesystem — so a browser host would carry a stub rather than
+# this pair. Nothing else in this crate touches them.
+persona-picker = { workspace = true }
+personae = { workspace = true }
 # For the fretboard leaf's accessibility() hook — the same accesskit sprigging's
 # Leaf trait speaks, so the neck can announce itself to assistive tech.
 accesskit = "0.24"

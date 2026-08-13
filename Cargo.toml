@@ -109,6 +109,15 @@ midir = "0.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# Identity. The family-shared vault (`personae`) and the shared view over its
+# roster (`mere-persona-picker`) — the same question every Merely application
+# asks at startup, asked once and drawn the same way everywhere. Both from
+# mere's git by branch, matching the `muniment`/`personae` deps woodshed-genet
+# already carried; the picker is declared here rather than per-crate because
+# woodshed-views draws it and woodshed-genet acts on it.
+personae = { git = "https://github.com/merely-made/mere.git", branch = "main" }
+persona-picker = { package = "mere-persona-picker", git = "https://github.com/merely-made/mere.git", branch = "main" }
+
 # Future:
 #   fundsp          — DSP for fancier sounds (deferred — raw sin is enough for click)
 #   symphonia       — FLAC / OGG / MP3 sample loading (deferred — WAV via hound is enough for now)

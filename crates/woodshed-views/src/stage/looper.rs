@@ -1,3 +1,4 @@
+use woodshed_core::audio::AudioRequest;
 use woodshed_core::song::{song_from_progression, SECTION_LABELS};
 use cambium::{clickable, el, text};
 
@@ -24,7 +25,7 @@ fn song_deck(ui: &UiState) -> UiChild {
                 clickable(
                     el("div", text("Rewind")).attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
-                        ui.song_rewind_requested = true;
+                        ui.request(AudioRequest::SongRewind);
                         ui.song_bar_live = 0;
                     },
                 ),
@@ -53,7 +54,7 @@ fn song_deck(ui: &UiState) -> UiChild {
                             ui.song_playing = false;
                             ui.song_bar_live = 0;
                             ui.song_edit_cursor = 0;
-                            ui.song_rewind_requested = true;
+                            ui.request(AudioRequest::SongRewind);
                         }
                     },
                 ),
@@ -140,7 +141,7 @@ fn song_loop_ops(ui: &UiState) -> UiChild {
             (
                 clickable(
                     el("div", text(rec_label)).attr("class", rec_class),
-                    |ui: &mut UiState, _| ui.song_record_toggle_requested = true,
+                    |ui: &mut UiState, _| ui.request(AudioRequest::SongRecordToggle),
                 ),
                 clickable(
                     el("div", text(mode_label)).attr("class", "t-btn"),
@@ -148,7 +149,7 @@ fn song_loop_ops(ui: &UiState) -> UiChild {
                 ),
                 clickable(
                     el("div", text("Clear loop")).attr("class", "t-btn"),
-                    |ui: &mut UiState, _| ui.song_clear_loop_requested = true,
+                    |ui: &mut UiState, _| ui.request(AudioRequest::SongClearLoop),
                 ),
                 el(
                     "div",

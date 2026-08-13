@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use personae::roster::Roster;
 use woodshed_core::storage::SessionStore;
 use woodshed_views::theme::ThemeMode;
 
@@ -31,7 +32,16 @@ pub struct Shared {
     /// Named slots over a host backend: files on desktop, OPFS on the web host.
     /// Which backend is decided at startup by [`open_store`] — sealed to the
     /// chosen persona when the family vault opens, plain files otherwise.
-    pub storage: SessionStore<HostBackend>,
+    ///
+    /// `None` only while the persona gate is up. Opening the store is what
+    /// derives the sealing key, so it cannot happen before the persona is
+    /// settled: doing it early would mint a `default` persona beside the ones
+    /// the user has and seal this session to a stranger. Nothing reads or
+    /// writes practice through this while it is `None`, which is the point.
+    pub storage: Option<SessionStore<HostBackend>>,
+    /// The roster the startup gate asks about, handed to the first `UiState`
+    /// and taken from here. `None` on every machine the convention decides for.
+    pub pending_roster: Option<Roster>,
 
     /// Theme the current sheet was generated from; a change re-skins.
     pub theme: ThemeMode,
@@ -68,10 +78,13 @@ pub struct Shared {
 impl Shared {
     /// Everything that can be built before the window exists.
     pub fn boot() -> Rc<RefCell<Self>> {
+        // Asked before the store opens, not after: see `crate::persona`.
+        let pending_roster = crate::persona::pending_roster();
         Rc::new(RefCell::new(Self {
             backend: None,
             midi: MidiHost::new(),
-            storage: open_store(),
+            storage: pending_roster.is_none().then(open_store),
+            pending_roster,
             theme: ThemeMode::default(),
             reduce_motion: false,
             text_scale: "Normal".into(),

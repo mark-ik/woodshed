@@ -8,7 +8,7 @@
 //! dispatch so dropdown picks land in the core state.
 
 
-use woodshed_core::audio::{CalibrationStatus, TransportState, TunerState};
+use woodshed_core::audio::{AudioRequest, CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::search::{search_corpus, SearchHit};
 use woodshed_core::settings::{AppSettings, SettingsPage};
@@ -310,8 +310,11 @@ pub struct UiState {
     pub song_bar_live: usize,
     /// Which bar the editor targets (click a chip to select).
     pub song_edit_cursor: usize,
-    /// One-shot rewind request the host consumes after dispatch.
-    pub song_rewind_requested: bool,
+    /// One-shot commands for the audio host, in the order they were asked
+    /// for. Push with [`Self::request`]; the host drains the queue each sync.
+    /// Continuous audio state (transport, tuner, record-replace) is not here:
+    /// it is realized idempotently from this struct every frame.
+    pub audio_requests: Vec<AudioRequest>,
     pub section: AppSection,
     pub stage_page: StagePage,
     pub tool_page: ToolPage,
@@ -338,31 +341,20 @@ pub struct UiState {
     /// answerable. Transient.
     pub card_rename: TextInput,
     pub card_rename_for: Option<usize>,
-    /// One-shot "♪ Hear" request the host consumes after dispatch: voice
-    /// the current lens (or rehearsal card) through the audio backend.
-    pub preview_requested: bool,
-    /// One-shot single-note play request (frequency, Hz) from a marker card's
-    /// play button; the host consumes it via the backend's `preview_note`.
-    pub preview_note_requested: Option<f32>,
     /// MIDI panel state (Settings tab).
     pub midi: MidiUiState,
-    /// Latency-calibration state (Settings tab). `calib_active` drives
-    /// host polling; the request flags are consumed after dispatch.
+    /// Latency-calibration state (Settings tab). `calib_active` drives host
+    /// polling; the calibration commands ride `audio_requests`.
     pub calib_status: CalibrationStatus,
     pub calib_active: bool,
-    pub calib_start_requested: bool,
-    pub calib_cancel_requested: bool,
-    pub calib_accept_requested: bool,
     /// Accepted round-trip latency (ms), host-reflected.
     pub latency_ms: Option<f32>,
-    /// Looper (song-mode record) state. Recording status + per-bar loop
-    /// flags are host-reflected; the toggle/clear requests are consumed
-    /// after dispatch; `song_record_replace` is a view-owned toggle.
+    /// Looper (song-mode record) state. Recording status and per-bar loop
+    /// flags are host-reflected; `song_record_replace` is a view-owned
+    /// toggle; the toggle/clear commands ride `audio_requests`.
     pub song_recording: bool,
     pub song_loop_bars: Vec<bool>,
     pub song_record_replace: bool,
-    pub song_record_toggle_requested: bool,
-    pub song_clear_loop_requested: bool,
     /// Whether the document-bottom Set tray shows its Cards and editor.
     pub set_tray_expanded: bool,
     /// Wall-clock now, Unix epoch milliseconds, refreshed by the host each
@@ -392,6 +384,11 @@ pub struct UiState {
     pub related_hover: Option<RelatedTarget>,
     /// Whether the Related graph swatch is expanded to its taller size.
     pub related_expanded: bool,
+    /// The startup persona pick, while one is open. `Some` only on a machine
+    /// whose vault holds several personas with none chosen; the host seeds it
+    /// before the first frame and clears it when the choice is acted on. While
+    /// it is set, [`stage_root`] renders the gate instead of the product.
+    pub persona: Option<crate::persona::PersonaPick>,
 }
 
 impl Default for UiState {
@@ -412,7 +409,7 @@ impl UiState {
             song_playing: false,
             song_bar_live: 0,
             song_edit_cursor: 0,
-            song_rewind_requested: false,
+            audio_requests: Vec::new(),
             section: AppSection::Stage,
             stage_page: StagePage::default(),
             tool_page: ToolPage::default(),
@@ -426,20 +423,13 @@ impl UiState {
             search: TextInput::new(""),
             card_rename: TextInput::new(""),
             card_rename_for: None,
-            preview_requested: false,
-            preview_note_requested: None,
             midi: MidiUiState::new(),
             calib_status: CalibrationStatus::Idle,
             calib_active: false,
-            calib_start_requested: false,
-            calib_cancel_requested: false,
-            calib_accept_requested: false,
             latency_ms: None,
             song_recording: false,
             song_loop_bars: Vec::new(),
             song_record_replace: false,
-            song_record_toggle_requested: false,
-            song_clear_loop_requested: false,
             set_tray_expanded: true,
             now_ms: None,
             card_started_ms: None,
@@ -448,6 +438,7 @@ impl UiState {
             hover_peek: None,
             related_hover: None,
             related_expanded: false,
+            persona: None,
             stage,
         }
     }
@@ -807,8 +798,8 @@ impl UiState {
 
     /// Pitches + shape for the on-demand "♪ Hear" preview, resolved from
     /// context: the current rehearsal card on the Rehearsal tab, else the
-    /// active Stage lens. Empty pitches = nothing to voice. The host
-    /// consumes [`Self::preview_requested`] and calls this.
+    /// active Stage lens. Empty pitches = nothing to voice. The host calls
+    /// this when it drains an [`AudioRequest::PreviewVoicing`].
     pub fn preview_voicing(&self) -> (Vec<f32>, f32, f32) {
         if self.section == AppSection::Rehearsal && !self.set.cards.is_empty() {
             let cursor = self.set.cursor.min(self.set.cards.len() - 1);
@@ -828,7 +819,13 @@ impl UiState {
             self.practice_history
                 .record(self.now_ms, subject_id, EngagementKind::Previewed, None, None);
         }
-        self.preview_requested = true;
+        self.request(AudioRequest::PreviewVoicing);
+    }
+
+    /// Ask the audio host to do one thing. Requests are kept in order and
+    /// drained by the host each sync; asking twice does it twice.
+    pub fn request(&mut self, request: AudioRequest) {
+        self.audio_requests.push(request);
     }
 
     pub fn stage_current(&mut self, from_id: Option<String>) {
@@ -1497,7 +1494,7 @@ fn note_card(d: &woodshed_core::FretDot, string_count: usize) -> UiChild {
                 el("div", text(pos)).attr("class", "note-card-row"),
                 clickable(
                     el("div", text("♪ Play")).attr("class", "note-card-play"),
-                    move |ui: &mut UiState, _| ui.preview_note_requested = Some(freq),
+                    move |ui: &mut UiState, _| ui.request(AudioRequest::PreviewNote(freq)),
                 ),
             ),
         )
@@ -1855,6 +1852,12 @@ fn search_view(ui: &UiState) -> UiChild {
 /// Shared product root. Desktop hosts add CSD chrome and resize affordances;
 /// browser hosts supply neither. Boxed so hosts can name the runner view type.
 pub fn stage_root(ui: &UiState) -> UiChild {
+    // The persona gate stands in front of everything, because everything behind
+    // it is unread: the practice session is sealed to a persona nobody has
+    // named yet. See `crate::persona`.
+    if let Some(pick) = &ui.persona {
+        return crate::persona::persona_gate(pick);
+    }
     let mut nav: Vec<UiChild> = AppSection::ALL
         .iter()
         .map(|&section| pill(section, section == ui.section))
@@ -1948,6 +1951,44 @@ mod evidence_tests {
             ui.practice_history.total_practiced_ms(&subject),
             4_000 + 1_500,
             "each span measures its own card, and they do not overlap"
+        );
+    }
+}
+
+/// The audio-request queue's semantics, which a boolean flag per request
+/// could not provide.
+#[cfg(test)]
+mod audio_request_tests {
+    use super::*;
+
+    #[test]
+    fn repeated_requests_all_survive_in_the_order_they_were_asked() {
+        let mut ui = UiState::new();
+        ui.request(AudioRequest::PreviewNote(440.0));
+        ui.request(AudioRequest::SongRewind);
+        ui.request(AudioRequest::PreviewNote(880.0));
+
+        // A flag would have kept one note and lost the other, and would have
+        // had no way to say the rewind happened between them.
+        assert_eq!(
+            ui.audio_requests,
+            [
+                AudioRequest::PreviewNote(440.0),
+                AudioRequest::SongRewind,
+                AudioRequest::PreviewNote(880.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn draining_leaves_nothing_behind_to_repeat() {
+        let mut ui = UiState::new();
+        ui.request(AudioRequest::PreviewVoicing);
+        let drained: Vec<_> = std::mem::take(&mut ui.audio_requests);
+        assert_eq!(drained, [AudioRequest::PreviewVoicing]);
+        assert!(
+            ui.audio_requests.is_empty(),
+            "one drain site owns consumption; a missed clear cannot repeat a command"
         );
     }
 }

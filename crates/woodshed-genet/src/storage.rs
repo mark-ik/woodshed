@@ -13,8 +13,9 @@ use async_trait::async_trait;
 use directories::ProjectDirs;
 use muniment::backend::WriteOp;
 use muniment::{Backend, StoreError};
-use personae::bootstrap::Unlock;
-use personae::roster;
+use personae::bootstrap::{self, Unlock};
+use personae::roster::{self, OpenedVault};
+use personae::vault::ProfileId;
 use woodshed_core::sealed_backend::SealedBackend;
 use woodshed_core::storage::SessionStore;
 
@@ -31,15 +32,34 @@ use woodshed_core::storage::SessionStore;
 /// machine readable on another carrying the same persona, and what makes
 /// switching personas switch practice sessions.
 pub fn open_store() -> SessionStore<HostBackend> {
-    SessionStore::new(open_backend())
+    open_store_as(None)
+}
+
+/// The practice store, sealed to `profile` when one was named.
+///
+/// `None` runs the family convention ([`roster::open_shared`]), which is the
+/// startup path on every machine that needs no asking. `Some` is the answer to
+/// the persona gate: the id goes straight into the open rather than through the
+/// remembered file, so a vault directory that refuses the write still practises
+/// as the persona the user picked.
+pub fn open_store_as(profile: Option<&ProfileId>) -> SessionStore<HostBackend> {
+    SessionStore::new(open_backend(profile))
 }
 
 /// The store woodshed practices over, decided at startup.
 pub type HostBackend = Box<dyn Backend + Send + Sync>;
 
-fn open_backend() -> HostBackend {
+fn open_vault(profile: Option<&ProfileId>) -> Result<OpenedVault, personae::IdentityError> {
+    let unlock = Unlock::from_env();
+    match profile {
+        Some(id) => roster::open_profile(&bootstrap::default_vault_dir(), unlock, id),
+        None => roster::open_shared(unlock),
+    }
+}
+
+fn open_backend(profile: Option<&ProfileId>) -> HostBackend {
     let files = FsBackend::new();
-    let opened = match roster::open_shared(Unlock::from_env()) {
+    let opened = match open_vault(profile) {
         Ok(opened) => opened,
         Err(error) => {
             eprintln!("[woodshed] no identity vault ({error}); practice will be stored unsealed");
