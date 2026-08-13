@@ -384,6 +384,14 @@ pub struct UiState {
     pub related_hover: Option<RelatedTarget>,
     /// Whether the Related graph swatch is expanded to its taller size.
     pub related_expanded: bool,
+    /// Whether practice is written anywhere at all.
+    ///
+    /// False for a session the user chose to run with no persona: there is no
+    /// key to seal it with and no persona to seal it to, so nothing is stored
+    /// and the window closing is the end of it. The app plays exactly the same
+    /// either way, which is why the nav row says so rather than leaving it to
+    /// be discovered on the next launch.
+    pub practice_saved: bool,
     /// The startup persona pick, while one is open. `Some` only on a machine
     /// whose vault holds several personas with none chosen; the host seeds it
     /// before the first frame and clears it when the choice is acted on. While
@@ -442,6 +450,7 @@ impl UiState {
             hover_peek: None,
             related_hover: None,
             related_expanded: false,
+            practice_saved: true,
             persona: None,
             persona_switch_requested: false,
             stage,
@@ -1868,6 +1877,7 @@ pub fn stage_root(ui: &UiState) -> UiChild {
         .map(|&section| pill(section, section == ui.section))
         .collect();
     nav.push(Box::new(el("div", ()).attr("class", "nav-spacer")));
+    nav.extend(crate::persona::unsaved_notice(ui));
     nav.push(search_view(ui));
     Box::new(
         el(

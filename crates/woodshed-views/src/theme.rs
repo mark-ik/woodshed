@@ -467,6 +467,10 @@ pub fn stage_css(p: &Palette) -> String {
 .persona-vault {{ color: {text_dim}; font-size: 12px; padding-bottom: 12px; }}
 .persona-notice {{ color: {secondary}; font-size: 12px; padding-top: 10px; }}
 .persona-hint {{ color: {text_disabled}; font-size: 12px; padding-top: 12px; }}
+/* The nav-row notice for a session nobody is saving. Coloured as a flag rather
+   than an error: practising without a persona is a choice the user made, not a
+   fault, so it states itself and stays out of the way. */
+.unsaved {{ color: {secondary}; font-size: 12px; padding: 7px 10px 0 0; }}
 /* Cambium's command surface, styled here because woodshed emits its own sheet
    rather than importing a component stylesheet. The picker is the only
    configuration woodshed uses so far; a palette or context menu would want the

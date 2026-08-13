@@ -80,9 +80,11 @@ pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     let chosen = match answer {
         PickerEvent::Chose(id) => Some(id),
         PickerEvent::Dismissed => match purpose {
-            // Escape at startup. Practice proceeds on the convention, exactly
-            // as it would have done had there been nothing to ask.
-            PickPurpose::Startup => None,
+            // Escape at startup: practise with no persona at all.
+            PickPurpose::Startup => {
+                decline(ctx);
+                return;
+            }
             // Escape on a switch changes nothing: the store that is open stays
             // open, and re-settling on the convention here would quietly move
             // the user off the persona they are already practising as.
@@ -123,6 +125,24 @@ fn raise_switch(ctx: &mut Ctx<'_>) {
     // is not `Copy`.
     let mut pick = Some(pick);
     ctx.runner.update(move |ui| ui.persona = pick.take());
+}
+
+/// Practise with no persona: no store, nothing saved, and the nav row says so.
+///
+/// The alternative was to open on the convention, which is what this did until
+/// the shape was thought through. On the only vault that reaches this screen —
+/// several personas, none chosen — the convention resolves to `default` and
+/// *mints it*, so declining would have added a third identity beside the user's
+/// two and sealed their practice to one they never picked. Opening nothing is
+/// both the honest reading of "no thanks" and the only one that leaves the
+/// vault as it was found.
+///
+/// The cost is stated where it lands rather than buried: `Shared.storage` stays
+/// `None`, every save in the dispatch tail is skipped, and `practice_saved`
+/// turns the nav-row notice on for the rest of the session.
+fn decline(ctx: &mut Ctx<'_>) {
+    eprintln!("[woodshed] no persona chosen; this session is not saved");
+    ctx.runner.update(woodshed_views::persona::practise_unsaved);
 }
 
 /// Open the store on the settled persona, restore the session into it, and take
@@ -426,6 +446,51 @@ mod tests {
         assert_ne!(
             ui.song.name, "the previous persona's song",
             "a fresh persona opens on its own empty practice"
+        );
+    }
+
+    #[test]
+    fn declining_at_startup_would_have_minted_a_third_identity() {
+        // Why declining opens nothing rather than opening on the convention.
+        // The only vault that reaches the gate is several personas with none
+        // chosen, and the convention resolves that to `default` and mints it.
+        // If personae's ladder ever changes, this fails and the reasoning in
+        // `decline` gets re-read rather than quietly outliving its cause.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var(roster::PROFILE_ENV);
+        let dir = vault(&["alt", "work"]);
+
+        let opened = roster::open_chosen(dir.path(), unlock()).expect("the convention open");
+        assert_eq!(opened.profile.0, "default");
+        assert!(opened.created, "and it was minted, not found");
+
+        let reopened = bootstrap::open_storage(dir.path(), unlock()).expect("reopen");
+        let after = roster::read_roster(&*reopened.storage, dir.path(), reopened.description)
+            .expect("roster");
+        assert_eq!(
+            after.entries.len(),
+            3,
+            "a third identity now sits beside the two the user made"
+        );
+    }
+
+    #[test]
+    fn the_unsaved_notice_is_on_screen_for_a_declined_session() {
+        let mut harness = gated_harness(two_persona_roster());
+        assert!(
+            harness.resolve(&Selector::class("unsaved")).is_none(),
+            "nothing to say while the gate is still up"
+        );
+        harness.update(woodshed_views::persona::practise_unsaved);
+        assert!(
+            harness.resolve(&Selector::class("pills")).is_some(),
+            "the product is reachable without a persona"
+        );
+        assert!(
+            harness
+                .resolve(&Selector::role("status").containing("not being saved"))
+                .is_some(),
+            "and it says, for the rest of the session, that nothing is kept"
         );
     }
 

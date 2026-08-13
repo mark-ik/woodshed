@@ -12,9 +12,11 @@
 //! place of the product root) and what happens next (`woodshed-genet` writes the
 //! choice and reopens the store).
 //!
-//! **The gate is not a lock.** Escape dismisses it and practice proceeds on the
-//! convention choice, the same doctrine as "sealing is not a gate": a tuner has
-//! to open on a machine whose vault will not.
+//! **The gate is not a lock.** Escape practises with no persona at all: no key,
+//! no store, nothing kept when the window closes. That is the same doctrine as
+//! "sealing is not a gate" carried one step further — a tuner has to open on a
+//! machine whose vault will not, and it has to open for somebody who does not
+//! want to say who they are.
 
 use cambium::{el, lens, map_action, text, CommandState};
 use personae::roster::Roster;
@@ -25,8 +27,8 @@ use crate::stage::{UiChild, UiState};
 /// Why the gate is up, which is what declining it means.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickPurpose {
-    /// Startup, with nothing loaded behind the gate. Declining practises as
-    /// the convention's persona, which is what opens the store.
+    /// Startup, with nothing loaded behind the gate. Declining practises with
+    /// no persona: no store opens, and nothing is saved.
     Startup,
     /// A deliberate switch from Settings, with a session already open and
     /// sealed to somebody. Declining changes nothing at all.
@@ -112,6 +114,38 @@ pub fn dismissed() -> PickerEvent {
     PickerEvent::Dismissed
 }
 
+/// Take the gate down and practise with no persona.
+///
+/// The state half of declining. The host owns the other half (opening no
+/// store), but the flag and the pick both live here, so the shape of "nobody
+/// is saving this" is stated once in the crate that draws it.
+pub fn practise_unsaved(ui: &mut UiState) {
+    ui.persona = None;
+    ui.practice_saved = false;
+}
+
+/// The nav-row notice for a session nobody is saving.
+///
+/// A row rather than a one-off dialog: the choice is in force for as long as
+/// the window is open, so saying it once at startup and then going quiet would
+/// leave the honest fact where nobody can check it. Absent entirely on the
+/// ordinary path, including the unsealed fallback a machine with no vault
+/// takes, which does save.
+pub fn unsaved_notice(ui: &UiState) -> Option<UiChild> {
+    if ui.practice_saved {
+        return None;
+    }
+    Some(Box::new(
+        el("div", text("Not saving"))
+            .attr("class", "unsaved")
+            .attr("role", "status")
+            .attr(
+                "aria-label",
+                "Practice is not being saved: no persona was chosen.",
+            ),
+    ))
+}
+
 /// The gate screen: who is practising, and the roster to answer with.
 ///
 /// Rendered in place of the product root, not over it. Nothing is behind it
@@ -162,7 +196,7 @@ pub fn persona_gate(pick: &PersonaPick) -> UiChild {
                         "div",
                         text(match pick.purpose {
                             PickPurpose::Startup => {
-                                "Escape practises as the usual persona without choosing."
+                                "Escape practises without a persona. Nothing is saved."
                             }
                             // Nothing is pending behind a switch: the session
                             // on screen belongs to somebody already.
@@ -251,6 +285,27 @@ mod tests {
         // The Settings row is a deliberate act; it cannot answer with nothing.
         let pick = PersonaPick::switch(roster(&[])).with_notice("the vault would not open");
         assert!(pick.notice.as_deref().is_some_and(|n| n.contains("would not open")));
+    }
+
+    #[test]
+    fn declining_takes_the_gate_down_and_stops_saving() {
+        let mut ui = UiState::new();
+        ui.persona = Some(PersonaPick::new(roster(&[("work", 2, false), ("alt", 0, false)])));
+        assert!(ui.practice_saved, "an ordinary session saves");
+        practise_unsaved(&mut ui);
+        assert!(ui.persona.is_none(), "the gate does not stay up");
+        assert!(!ui.practice_saved);
+    }
+
+    #[test]
+    fn the_notice_appears_only_for_a_session_nobody_is_saving() {
+        let mut ui = UiState::new();
+        assert!(
+            unsaved_notice(&ui).is_none(),
+            "an ordinary session says nothing, including the unsealed fallback"
+        );
+        practise_unsaved(&mut ui);
+        assert!(unsaved_notice(&ui).is_some());
     }
 
     #[test]

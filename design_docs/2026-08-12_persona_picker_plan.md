@@ -32,9 +32,10 @@ and it ships next).
   and none remembered or forced (`PERSONAE_PROFILE` set, or a sole
   persona, keeps today's silent path), present the picker before the
   store opens. On `Chose`: `remember_profile`, then open storage sealed
-  to it. On `Dismissed`: proceed on the convention choice, exactly as
-  today — picking nobody must not block practice, the same doctrine as
-  "sealing is not a gate."
+  to it. On `Dismissed`: practise with no persona at all, saving nothing
+  (revised 2026-08-12; it opened on the convention until then, see "No
+  persona is a real answer" below). Picking nobody must not block practice,
+  the same doctrine as "sealing is not a gate."
 - **P2 — live switch. Landed.** A settings row reopens the picker at any time; a
   `Chose` swaps the sealed store live (close, reopen sealed to the new
   persona, reload the practice session). No restart: persona change is a
@@ -55,6 +56,8 @@ the personae dep it already carries.
   restart.
 - A machine with no vault backend never sees the picker and keeps the
   loud unsealed fallback.
+- Declining the gate leaves the app fully usable and the vault untouched,
+  and the window says for the rest of the session that nothing is saved.
 - The picker surface is reachable by genet-probe (the a11y/automation
   surface plan's standing requirement for any new surface).
 
@@ -108,6 +111,33 @@ Three decisions worth keeping:
 P1 answers it rather than dropping it: the gate stays open and says a
 persona comes from `personae-vault` today. A row that silently does nothing
 reads as a broken application.
+
+### No persona is a real answer (revised 2026-08-12)
+
+Declining first shipped as "open on the convention", which was the wrong
+answer twice over.
+
+It was wrong as product: practising should not require saying who you are.
+Now Escape opens no store at all. The app is completely usable, and the
+window closing is the end of the session. `Shared.storage` stays `None`,
+every save in the dispatch tail is skipped, and `UiState.practice_saved`
+turns a nav-row notice on for as long as the window is open. A row rather
+than a one-off dialog, because the choice is in force the whole time and
+saying it once at startup would leave the honest fact where nobody can
+check it.
+
+It was also wrong as behaviour, and in exactly the way this plan's first
+decision names. The only vault that reaches the gate is several personas
+with none chosen; the convention resolves that to `default` and *mints it*.
+So the old decline path added a third identity beside the user's two and
+sealed their practice to one they never picked, which is the harm the gate
+exists to prevent, left standing on the one path that skips the gate.
+`declining_at_startup_would_have_minted_a_third_identity` pins the
+convention's behaviour so the reasoning cannot quietly outlive its cause.
+
+Unchanged: a machine with no vault backend still saves, unsealed and out
+loud. That fallback predates sealing and is somebody's real practice; "no
+persona" here means the user declined one, not that the machine has none.
 
 ## P2 as built
 
@@ -181,20 +211,22 @@ fails if the reset is ever removed.
 
 ## Receipts
 
-`cargo test --workspace` in woodshed: **433 passed, 0 failed**.
+`cargo test --workspace` in woodshed: **441 passed, 0 failed** (with P2's).
 
-Thirteen of those are the gate's, in `woodshed-genet/src/persona.rs`. Eight
+Seventeen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
 run against a real vault in a scratch directory: two personas and no choice
 asks; a sole persona, an empty vault, a remembered choice,
 `PERSONAE_PROFILE`, and a vault that will not unlock all stay silent; the
-roster carries the personas the vault actually holds, sorted; and an open on
-a named persona loads it rather than re-minting it. Five drive the real
-product root through `Harness`: the picker and
-its dialog resolve through genet-probe selectors, the product navigation
-does not render behind the gate, clicking a row records `Chose` by id,
-the create row keeps the gate up and puts its notice on screen, and Escape
-dismisses with nothing focused. Four more in
-`woodshed-views/src/persona.rs` cover the outcome recording directly.
+roster carries the personas the vault actually holds, sorted; an open on a
+named persona loads it rather than re-minting it; and the convention open
+mints a third identity, which is why declining does not use it. Six drive
+the real product root through `Harness`: the picker and its dialog resolve
+through genet-probe selectors, the product navigation does not render behind
+the gate, clicking a row records `Chose` by id, the create row keeps the gate
+up and puts its notice on screen, Escape dismisses with nothing focused, and
+a declined session reaches the product with the "not being saved" notice on
+screen. Six more in `woodshed-views/src/persona.rs` cover the outcome
+recording and the declined state directly.
 
 In personae: `roster::open_profile` (the named-persona open, factored so
 both open paths unlock once) and `Unlock::passphrase` (so an application
