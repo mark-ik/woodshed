@@ -135,6 +135,12 @@ exists to prevent, left standing on the one path that skips the gate.
 `declining_at_startup_would_have_minted_a_third_identity` pins the
 convention's behaviour so the reasoning cannot quietly outlive its cause.
 
+Declining is not a dead end. P2's Settings row raises the switch gate over a
+declined session like any other, and its state reset is what turns saving
+back on, so adopting a persona later takes no restart.
+`declining_is_not_a_dead_end_the_settings_switch_starts_saving` pins that
+coupling, which neither slice's own tests would catch breaking.
+
 Unchanged: a machine with no vault backend still saves, unsealed and out
 loud. That fallback predates sealing and is somebody's real practice; "no
 persona" here means the user declined one, not that the machine has none.
@@ -211,9 +217,9 @@ fails if the reset is ever removed.
 
 ## Receipts
 
-`cargo test --workspace` in woodshed: **441 passed, 0 failed** (with P2's).
+`cargo test --workspace` in woodshed: **442 passed, 0 failed** (with P2's).
 
-Seventeen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
+Eighteen of those are the gate's, in `woodshed-genet/src/persona.rs`. Nine
 run against a real vault in a scratch directory: two personas and no choice
 asks; a sole persona, an empty vault, a remembered choice,
 `PERSONAE_PROFILE`, and a vault that will not unlock all stay silent; the

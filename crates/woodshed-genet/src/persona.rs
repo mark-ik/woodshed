@@ -450,6 +450,24 @@ mod tests {
     }
 
     #[test]
+    fn declining_is_not_a_dead_end_the_settings_switch_starts_saving() {
+        // The coupling between P1's decline and P2's switch, which nothing else
+        // covers: `settle` resets the whole state for a switch, and the reset
+        // is what turns saving back on. A declined session must be able to
+        // adopt a persona from Settings rather than needing a restart.
+        let mut ui = UiState::new();
+        woodshed_views::persona::practise_unsaved(&mut ui);
+        assert!(!ui.practice_saved);
+
+        // What `settle` does on the switch path, before it opens the store.
+        ui = UiState::new();
+        assert!(
+            ui.practice_saved,
+            "a session that has just adopted a persona saves again"
+        );
+    }
+
+    #[test]
     fn declining_at_startup_would_have_minted_a_third_identity() {
         // Why declining opens nothing rather than opening on the convention.
         // The only vault that reaches the gate is several personas with none
