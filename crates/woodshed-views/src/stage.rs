@@ -401,6 +401,9 @@ pub struct UiState {
     /// host takes it, reads the vault, and puts the gate up; a view cannot,
     /// because reading the roster is vault work.
     pub persona_switch_requested: bool,
+    /// What is protecting this session, reported by the store when it opened.
+    /// `None` before a store opens at all, which includes a declined gate.
+    pub seal: Option<crate::persona::PracticeSeal>,
 }
 
 impl Default for UiState {
@@ -453,6 +456,7 @@ impl UiState {
             practice_saved: true,
             persona: None,
             persona_switch_requested: false,
+            seal: None,
             stage,
         }
     }

@@ -173,6 +173,23 @@ fn page_nav(ui: &UiState) -> UiChild {
     Box::new(el("nav", items).attr("class", "side settings-nav"))
 }
 
+/// The persona line: who is practising, and what protects the session.
+///
+/// Three real states, none of them guessed. A declined gate is checked first
+/// because it outranks the seal: the store never opened, so a seal left on the
+/// state would be from before the decline.
+fn persona_line(ui: &UiState) -> String {
+    if !ui.practice_saved {
+        return "No persona chosen. Nothing from this session is saved.".to_string();
+    }
+    match &ui.seal {
+        Some(seal) => seal.summary(),
+        // Only before a store opens, which the gate covers. Said rather than
+        // left blank, so a state nobody predicted does not read as an answer.
+        None => "The practice store has not reported a persona yet.".to_string(),
+    }
+}
+
 fn general_page(ui: &UiState) -> UiChild {
     let audio_line = match &ui.audio_error {
         Some(err) => format!("Audio: {err}"),
@@ -195,10 +212,14 @@ fn general_page(ui: &UiState) -> UiChild {
                 )
                 .attr("class", "settings-line"),
                 el("div", text("Persona")).attr("class", "settings-heading settings-gap"),
+                // Who is practising, as the store reported it opening. A page
+                // offering to switch personas has to be able to name the one in
+                // force; before this it described sealing in general and left the
+                // actual answer only in the boot log.
+                el("div", text(persona_line(ui))).attr("class", "settings-line"),
                 el(
                     "div",
-                    text("Practice is sealed to a persona from the shared vault. Switching \
-                          swaps to that persona's own Set, history, and settings."),
+                    text("Switching swaps to that persona's own Set, history, and settings."),
                 )
                 .attr("class", "settings-line"),
                 clickable(
@@ -678,4 +699,59 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         SettingsPage::Accessibility => accessibility_page(ui),
     };
     Box::new(el("div", (page_nav(ui), page)).attr("class", "body settings-shell"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persona::PracticeSeal;
+
+    #[test]
+    fn the_persona_line_names_who_is_practising_and_what_holds_the_key() {
+        // The gap this closes: Settings offered to switch a persona it could
+        // not name.
+        let mut ui = UiState::new();
+        ui.seal = Some(PracticeSeal::Sealed {
+            persona: "work".into(),
+            protection: "OS auto-unlock sealed records".into(),
+        });
+        let line = persona_line(&ui);
+        assert!(line.contains("work"), "{line}");
+        assert!(line.contains("OS auto-unlock"), "the backend's own words: {line}");
+    }
+
+    #[test]
+    fn an_unsealed_session_says_so_and_says_why() {
+        let mut ui = UiState::new();
+        ui.seal = Some(PracticeSeal::Unsealed {
+            reason: "no identity vault on this machine".into(),
+        });
+        let line = persona_line(&ui);
+        assert!(line.contains("Not sealed"), "{line}");
+        assert!(
+            line.contains("no identity vault"),
+            "a reason, because 'unsealed' alone is not actionable: {line}"
+        );
+    }
+
+    #[test]
+    fn a_declined_gate_outranks_any_seal_left_on_the_state() {
+        // Declining opens no store, so a seal from before the decline would be
+        // a stale claim that this session is being kept.
+        let mut ui = UiState::new();
+        ui.seal = Some(PracticeSeal::Sealed {
+            persona: "work".into(),
+            protection: "DPAPI".into(),
+        });
+        crate::persona::practise_unsaved(&mut ui);
+        let line = persona_line(&ui);
+        assert!(line.contains("No persona chosen"), "{line}");
+        assert!(!line.contains("work"), "the stale persona must not survive: {line}");
+    }
+
+    #[test]
+    fn a_store_that_has_not_reported_yet_says_that_rather_than_nothing() {
+        let ui = UiState::new();
+        assert!(persona_line(&ui).contains("not reported"));
+    }
 }

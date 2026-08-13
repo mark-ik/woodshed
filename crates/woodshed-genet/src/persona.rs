@@ -166,7 +166,7 @@ fn settle(
             );
         }
     }
-    let storage = open_store_as(chosen);
+    let (storage, seal) = open_store_as(chosen);
     ctx.runner.update(|ui| {
         if purpose == PickPurpose::Switch {
             // The whole session goes, not just the parts the incoming persona
@@ -179,14 +179,24 @@ fn settle(
         }
         crate::session::restore(&storage, ui);
         ui.persona = None;
+        // After the reset above, so a switch does not wipe the seal it just
+        // established. Cloned rather than moved: the callback is `FnMut`.
+        ui.seal = Some(seal.clone());
     });
+    // Both from the one value, so `Shared` and the view cannot disagree about
+    // who is practising.
+    shared.seal = Some(seal);
     shared.storage = Some(storage);
 }
 
 /// Seed the gate onto a fresh [`UiState`], if one is pending.
 pub fn seed(shared: &mut Shared, ui: &mut woodshed_views::stage::UiState) {
     ui.persona = shared.pending_roster.take().map(PersonaPick::new);
+    // `None` while a gate is up: no store has opened, so there is nothing
+    // honest to say about what protects it yet.
+    ui.seal = shared.seal.clone();
 }
+
 
 #[cfg(test)]
 mod tests {

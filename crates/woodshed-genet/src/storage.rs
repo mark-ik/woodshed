@@ -18,6 +18,7 @@ use personae::roster::{self, OpenedVault};
 use personae::vault::ProfileId;
 use woodshed_core::sealed_backend::SealedBackend;
 use woodshed_core::storage::SessionStore;
+use woodshed_views::persona::PracticeSeal;
 
 /// Open the practice store, sealed to the chosen persona when the family
 /// vault opens and plain files when it does not.
@@ -32,7 +33,7 @@ use woodshed_core::storage::SessionStore;
 /// machine readable on another carrying the same persona, and what makes
 /// switching personas switch practice sessions.
 pub fn open_store() -> SessionStore<HostBackend> {
-    open_store_as(None)
+    open_store_as(None).0
 }
 
 /// The practice store, sealed to `profile` when one was named.
@@ -42,8 +43,9 @@ pub fn open_store() -> SessionStore<HostBackend> {
 /// the persona gate: the id goes straight into the open rather than through the
 /// remembered file, so a vault directory that refuses the write still practises
 /// as the persona the user picked.
-pub fn open_store_as(profile: Option<&ProfileId>) -> SessionStore<HostBackend> {
-    SessionStore::new(open_backend(profile))
+pub fn open_store_as(profile: Option<&ProfileId>) -> (SessionStore<HostBackend>, PracticeSeal) {
+    let (backend, seal) = open_backend(profile);
+    (SessionStore::new(backend), seal)
 }
 
 /// The store woodshed practices over, decided at startup.
@@ -57,13 +59,23 @@ fn open_vault(profile: Option<&ProfileId>) -> Result<OpenedVault, personae::Iden
     }
 }
 
-fn open_backend(profile: Option<&ProfileId>) -> HostBackend {
+/// The backend, plus what is protecting what it writes.
+///
+/// The seal is returned rather than only logged: Settings offers to switch a
+/// persona, and until this it could not name the one in force. Every branch
+/// answers, so "unsealed" always arrives with its reason attached.
+fn open_backend(profile: Option<&ProfileId>) -> (HostBackend, PracticeSeal) {
     let files = FsBackend::new();
     let opened = match open_vault(profile) {
         Ok(opened) => opened,
         Err(error) => {
             eprintln!("[woodshed] no identity vault ({error}); practice will be stored unsealed");
-            return Box::new(files);
+            return (
+                Box::new(files),
+                PracticeSeal::Unsealed {
+                    reason: format!("no identity vault on this machine ({error})"),
+                },
+            );
         }
     };
     match SealedBackend::for_provider(files, &opened.vault) {
@@ -75,7 +87,13 @@ fn open_backend(profile: Option<&ProfileId>) -> HostBackend {
                 "[woodshed] practice sealed to persona {:?} ({})",
                 opened.profile.0, opened.description
             );
-            Box::new(sealed.adopting_plaintext())
+            (
+                Box::new(sealed.adopting_plaintext()),
+                PracticeSeal::Sealed {
+                    persona: opened.profile.0.clone(),
+                    protection: opened.description.clone(),
+                },
+            )
         }
         Err(error) => {
             eprintln!(
@@ -83,7 +101,12 @@ fn open_backend(profile: Option<&ProfileId>) -> HostBackend {
                  practice will be stored unsealed",
                 opened.profile.0
             );
-            Box::new(FsBackend::new())
+            (
+                Box::new(FsBackend::new()),
+                PracticeSeal::Unsealed {
+                    reason: format!("persona {:?} gave no sealing key ({error})", opened.profile.0),
+                },
+            )
         }
     }
 }

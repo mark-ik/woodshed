@@ -104,6 +104,37 @@ impl PersonaPick {
     }
 }
 
+/// What is protecting the practice session, as the store reported it opening.
+///
+/// The store knows this and used to only print it, which left Settings offering
+/// to switch a persona it could not name. Reported rather than inferred: the
+/// view cannot re-derive which persona opened or what the vault backend is,
+/// and a settings page that guesses at whose practice this is would be worse
+/// than one that says nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PracticeSeal {
+    /// Sealed to a persona. `protection` is personae's own account of what
+    /// holds the key at rest, passed through unedited.
+    Sealed { persona: String, protection: String },
+    /// Saved, but in the clear: no vault on this machine, or no key from it.
+    /// Carries the reason, because "unsealed" without a why is not actionable.
+    Unsealed { reason: String },
+}
+
+impl PracticeSeal {
+    /// The one-line reading for Settings.
+    pub fn summary(&self) -> String {
+        match self {
+            Self::Sealed { persona, protection } => {
+                format!("Practising as {persona}. Sealed with {protection}.")
+            }
+            Self::Unsealed { reason } => {
+                format!("Not sealed: {reason}. Practice is saved in the clear on this machine.")
+            }
+        }
+    }
+}
+
 /// Declining the gate, for a host that has to answer for the picker.
 ///
 /// The picker reports its own Escape, but only once something is focused, and

@@ -21,7 +21,7 @@ use woodshed_views::theme::ThemeMode;
 use crate::audio::CpalBackend;
 use crate::midi::MidiHost;
 use crate::scenario::{Observed, ScenarioLane};
-use crate::storage::{HostBackend, open_store};
+use crate::storage::{HostBackend, open_store_as};
 
 /// The application's own state, beside the host's.
 pub struct Shared {
@@ -39,6 +39,9 @@ pub struct Shared {
     /// the user has and seal this session to a stranger. Nothing reads or
     /// writes practice through this while it is `None`, which is the point.
     pub storage: Option<SessionStore<HostBackend>>,
+    /// What is protecting the store, for Settings to report. Seeded onto the
+    /// first `UiState` beside the gate, then kept current by a switch.
+    pub seal: Option<woodshed_views::persona::PracticeSeal>,
     /// The roster the startup gate asks about, handed to the first `UiState`
     /// and taken from here. `None` on every machine the convention decides for.
     pub pending_roster: Option<Roster>,
@@ -80,10 +83,18 @@ impl Shared {
     pub fn boot() -> Rc<RefCell<Self>> {
         // Asked before the store opens, not after: see `crate::persona`.
         let pending_roster = crate::persona::pending_roster();
+        // Opened here only when nobody needs asking; behind a gate the store
+        // (and so the seal) arrives later, from `persona::settle`.
+        let opened = pending_roster.is_none().then(|| open_store_as(None));
+        let (storage, seal) = match opened {
+            Some((storage, seal)) => (Some(storage), Some(seal)),
+            None => (None, None),
+        };
         Rc::new(RefCell::new(Self {
             backend: None,
             midi: MidiHost::new(),
-            storage: pending_roster.is_none().then(open_store),
+            storage,
+            seal,
             pending_roster,
             theme: ThemeMode::default(),
             reduce_motion: false,
