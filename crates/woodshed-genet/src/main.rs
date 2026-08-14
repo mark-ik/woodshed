@@ -146,6 +146,11 @@ fn boot_state(
         Some(storage) => session::restore(storage, &mut ui),
         None => persona::seed(&mut shared, &mut ui),
     }
+    // Outside the match, deliberately. This lived inside `seed`, which only
+    // runs on the gate path, so on every ordinary launch Settings reported no
+    // persona while the store was sealed to one. One assignment, both paths,
+    // and they cannot drift apart again.
+    ui.seal = shared.seal.clone();
     shared.theme = ui.theme();
     shared.reduce_motion = ui.app_settings.accessibility.reduce_motion;
     shared.text_scale = ui.app_settings.accessibility.text_scale.clone();

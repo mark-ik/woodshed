@@ -192,9 +192,6 @@ fn settle(
 /// Seed the gate onto a fresh [`UiState`], if one is pending.
 pub fn seed(shared: &mut Shared, ui: &mut woodshed_views::stage::UiState) {
     ui.persona = shared.pending_roster.take().map(PersonaPick::new);
-    // `None` while a gate is up: no store has opened, so there is nothing
-    // honest to say about what protects it yet.
-    ui.seal = shared.seal.clone();
 }
 
 

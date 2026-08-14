@@ -1,0 +1,29 @@
+# Settings names the persona it offers to switch.
+#
+# The claim under test is not "Settings draws": it is that the page can answer
+# "whose practice is this?" — which it could not before, while still offering
+# to change it. So the assert is on the persona's name and the seal, not on the
+# heading above them.
+#
+# Drive with testing/woodshed/run-scenario.ps1, under a scratch LOCALAPPDATA:
+# `open_store` mints a vault profile when none exists, so a run against the real
+# environment would write to Mark's identity store as a side effect.
+
+log persona line: a sealed session names its persona
+settle 3
+
+click .pill Settings
+settle 2
+
+# General is the default page, so no second click. The persona line is what
+# this receipt exists for.
+assert text Practising as
+assert text Sealed with
+capture 01_settings_persona_sealed
+
+# The row that changes it is still there, and still says what switching does.
+assert text Switch persona
+assert text own Set, history, and settings
+capture 02_switch_row_present
+
+log persona line receipt complete

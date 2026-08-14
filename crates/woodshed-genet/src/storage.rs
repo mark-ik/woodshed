@@ -73,7 +73,11 @@ fn open_backend(profile: Option<&ProfileId>) -> (HostBackend, PracticeSeal) {
             return (
                 Box::new(files),
                 PracticeSeal::Unsealed {
-                    reason: format!("no identity vault on this machine ({error})"),
+                    // The category, not the errno. The line above carries the
+                    // full io::Error to the log; a settings page that prints a
+                    // Debug-quoted path and "(os error 183)" is telling the
+                    // user something only a developer can read.
+                    reason: "no identity vault on this machine".into(),
                 },
             );
         }
@@ -104,7 +108,7 @@ fn open_backend(profile: Option<&ProfileId>) -> (HostBackend, PracticeSeal) {
             (
                 Box::new(FsBackend::new()),
                 PracticeSeal::Unsealed {
-                    reason: format!("persona {:?} gave no sealing key ({error})", opened.profile.0),
+                    reason: format!("persona {:?} has no sealing key", opened.profile.0),
                 },
             )
         }

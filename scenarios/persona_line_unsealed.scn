@@ -1,0 +1,21 @@
+# A machine with no identity vault still practises, and says why it is unsealed.
+#
+# "Sealing is not a gate" is the doctrine; this is its receipt. The page must
+# not simply omit the persona line when there is no vault, because a blank
+# where an identity claim belongs reads as "sealed" to anyone not looking hard.
+#
+# Drive under a LOCALAPPDATA whose `personae/vault` cannot be created (a file
+# in the way), which is how the no-vault branch is forced on a machine that
+# has one.
+
+log persona line: no vault, still practising, and it says so
+settle 3
+
+click .pill Settings
+settle 2
+
+assert text Not sealed
+assert text saved in the clear
+capture 01_settings_persona_unsealed
+
+log unsealed receipt complete

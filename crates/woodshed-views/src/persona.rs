@@ -129,7 +129,7 @@ impl PracticeSeal {
                 format!("Practising as {persona}. Sealed with {protection}.")
             }
             Self::Unsealed { reason } => {
-                format!("Not sealed: {reason}. Practice is saved in the clear on this machine.")
+                format!("Not sealed: {reason}. Practice is saved in the clear.")
             }
         }
     }
