@@ -154,12 +154,12 @@ genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch 
 # (one Stylo per graph) makes a hard resolution error.
 #
 # stylo_taffy must be patched for the same reason: the registry copy names
-# crates.io stylo, dragging a second Stylo in. Direct sibling paths keep Cargo
-# from treating Genet's large workspace as a crates.io patch source.
-stylo_taffy = { path = "../genet/support/patches/stylo_taffy" }
+# crates.io stylo, dragging a second Stylo in. Take the vendor crate from the
+# same moving Genet source as the rest of this graph, not a sibling path.
+stylo_taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # genet-layout requires genet's vendored taffy fork (float-layout patches on
 # stable 0.12.1), not on crates.io.
-taffy = { path = "../genet/support/patches/taffy" }
+taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # ipc-channel: genet's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
-ipc-channel = { path = "../genet/support/patches/ipc-channel" }
+ipc-channel = { git = "https://github.com/merely-made/genet.git", branch = "main" }
