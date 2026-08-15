@@ -94,7 +94,7 @@ genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main
 # wgpu stays: the scenario lane still touches a `wgpu::TextureView` in the
 # capture the host hands it. Backend features come from netrender's own
 # per-target manifest split, transitively. The genet stack is wgpu 29.
-wgpu = { version = "29", default-features = false, features = ["std"] }
+wgpu = { version = "30", default-features = false, features = ["std"] }
 
 # Theming: pure OKLCH seed-to-palette derivation. A genet component
 # (`components/tinct`); the standalone mirror repo retires with the
@@ -163,3 +163,11 @@ taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # ipc-channel: genet's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
 ipc-channel = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+
+# Vello on wgpu 30. Upstream vello 0.10 still requires wgpu 29, so netrender
+# (and through it this app's render path) takes vello from the owned fork:
+# the v0.10.0 tag plus exactly the API changes in linebender/vello#1754.
+# `[patch]` applies only from the top-level manifest and is NOT inherited
+# from genet or netrender, so every app workspace restates it. Retires by
+# deletion when upstream ships a wgpu-30 vello.
+vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-30" }
