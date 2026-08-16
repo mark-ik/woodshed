@@ -3045,7 +3045,7 @@ name = "mere-persona-picker"
 version = "0.0.1"
 dependencies = [
  "cambium",
- "personae 0.2.0",
+ "personae",
 ]
 
 [[package]]
@@ -3912,25 +3912,6 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "personae"
-version = "0.1.1"
-source = "git+https://github.com/merely-made/mere.git?branch=main#7b6b41303b8f845f143dc9c2817273b929f1caed"
-dependencies = [
- "argon2",
- "blake3",
- "chacha20poly1305",
- "ed25519-dalek",
- "getrandom 0.3.4",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
- "uuid",
- "windows-sys 0.59.0",
- "zeroize",
-]
-
-[[package]]
-name = "personae"
 version = "0.2.0"
 dependencies = [
  "argon2",
@@ -4734,7 +4715,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6918,7 +6899,7 @@ dependencies = [
  "chartulary",
  "hex",
  "muniment",
- "personae 0.1.1",
+ "personae",
  "pollster",
  "serde",
  "serde_json",
@@ -6941,7 +6922,7 @@ dependencies = [
  "layout-dom-api",
  "mere-persona-picker",
  "muniment",
- "personae 0.1.1",
+ "personae",
  "serde_json",
  "sprigging",
  "tempfile",
@@ -6969,7 +6950,7 @@ dependencies = [
  "cambium",
  "genet-host-api",
  "mere-persona-picker",
- "personae 0.1.1",
+ "personae",
  "sprigging",
  "tinct",
  "woodshed-core",
