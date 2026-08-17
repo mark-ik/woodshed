@@ -39,11 +39,11 @@ use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
 use cambium_genet_winit_host::{
-    HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands, run,
+    run, HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands,
 };
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
-use woodshed_views::stage::{UiChild, UiState, stage_root};
+use woodshed_views::stage::{stage_root, UiChild, UiState};
 
 use crate::audio::CpalBackend;
 use crate::shared::Shared;
@@ -127,16 +127,16 @@ fn desktop_root(ui: &UiState, commands: &WindowCommands) -> UiChild {
 /// but before the first frame.
 fn boot_state(
     shared: &Rc<RefCell<Shared>>,
-    window: &winit::window::Window,
+    window: &dyn cambium_genet_winit_host::HostWindow,
     commands: &WindowCommands,
 ) -> Init<UiState, Logic> {
     let mut shared = shared.borrow_mut();
     let backend = CpalBackend::new();
     let mut ui = UiState::new();
-    let size = window.inner_size();
+    let (size_w, size_h) = window.inner_size();
     let scale = window.scale_factor() as f32;
-    ui.set_viewport_width(size.width as f32 / scale);
-    ui.set_viewport_height(size.height as f32 / scale);
+    ui.set_viewport_width(size_w as f32 / scale);
+    ui.set_viewport_height(size_h as f32 / scale);
     ui.audio_error = backend.error().map(String::from);
 
     // Restore the artifact session and the separate application settings, when
