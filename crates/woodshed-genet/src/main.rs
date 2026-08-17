@@ -38,8 +38,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
-use cambium_genet_winit_host::{HostHooks, HostOptions, Init, KeyPress, Runner, WindowCommands, run};
-use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
+use cambium_genet_winit_host::{
+    HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands, run,
+};
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
 use woodshed_views::stage::{UiChild, UiState, stage_root};
@@ -188,7 +189,7 @@ fn sync_viewport(ctx: &mut Ctx<'_>) {
 /// caret. Named rather than inline so a test drives the shipping decision
 /// instead of a copy of it.
 fn escape_policy(runner: &mut Runner<UiState, Logic, UiChild>, press: &KeyPress) -> bool {
-    if !matches!(press.key, WinitKey::Named(WinitNamedKey::Escape)) {
+    if !matches!(press.key, Key::Named(NamedKey::Escape)) {
         return false;
     }
     // While the persona gate is up, Escape is how you practise without a

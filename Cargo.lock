@@ -822,15 +822,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "cambium-genet-host"
+version = "0.1.0"
+dependencies = [
+ "cambium",
+ "genet-layout",
+ "genet-render-host",
+ "genet-scripted-dom",
+ "netrender",
+ "sprigging",
+ "web-time",
+ "wgpu",
+]
+
+[[package]]
 name = "cambium-genet-winit-host"
 version = "0.1.0"
 dependencies = [
  "accesskit",
  "cambium",
+ "cambium-genet-host",
  "cambium-winit",
  "cambium-winit-a11y",
  "genet-layout",
  "genet-probe",
+ "genet-render-host",
  "genet-scripted-dom",
  "genet-winit-host",
  "layout-dom-api",
@@ -848,6 +864,7 @@ name = "cambium-winit"
 version = "0.3.0"
 dependencies = [
  "cambium",
+ "web-time",
  "winit",
 ]
 
@@ -856,6 +873,7 @@ name = "cambium-winit-a11y"
 version = "0.3.0"
 dependencies = [
  "accesskit",
+ "cambium-genet-host",
  "genet-layout",
  "genet-scripted-dom",
  "genet-winit-host",
@@ -7364,6 +7382,10 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
+
+[[patch.unused]]
 name = "armillary"
 version = "0.1.1"
 
@@ -7422,7 +7444,3 @@ version = "0.1.2"
 [[patch.unused]]
 name = "vates"
 version = "0.1.2"
-
-[[patch.unused]]
-name = "netfetcher"
-version = "0.1.1"
