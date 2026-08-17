@@ -10,9 +10,9 @@ use std::hash::{Hash, Hasher};
 
 use sprigging::LeafRegistry;
 use woodshed_views::fretboard_leaf::{
-    Dot, FretboardLeaf, MarkerStyle, Orientation, FRETBOARD_LEAF_KEY, REHEARSAL_FRETBOARD_LEAF_KEY,
+    Dot, FRETBOARD_LEAF_KEY, FretboardLeaf, MarkerStyle, Orientation, REHEARSAL_FRETBOARD_LEAF_KEY,
 };
-use woodshed_views::stage::{UiState, NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY};
+use woodshed_views::stage::{NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY, UiState};
 
 use crate::shared::Shared;
 

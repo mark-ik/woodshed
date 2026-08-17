@@ -21,7 +21,7 @@ use woodshed_views::theme::ThemeMode;
 use crate::audio::CpalBackend;
 use crate::midi::MidiHost;
 use crate::scenario::{Observed, ScenarioLane};
-use crate::storage::{open_store_as, HostBackend};
+use crate::storage::{HostBackend, open_store_as};
 
 /// The application's own state, beside the host's.
 pub struct Shared {

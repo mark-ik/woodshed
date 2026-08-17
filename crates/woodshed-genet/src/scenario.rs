@@ -32,7 +32,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use cambium_genet_winit_host::{read_frame, Frame, HostPointer};
+use cambium_genet_winit_host::{Frame, HostPointer, read_frame};
 use genet_probe::{Automatable, Driveable, ProbeSnapshot, ProbeSurface, Progress, Scenario};
 use woodshed_views::stage::UiState;
 
