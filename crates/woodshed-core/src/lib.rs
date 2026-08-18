@@ -17,6 +17,7 @@ pub mod search;
 pub mod sealed_backend;
 pub mod settings;
 pub mod song;
+pub mod stage_scene;
 pub mod storage;
 
 use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};

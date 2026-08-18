@@ -7,6 +7,7 @@ members = [
     "crates/woodshed-core",
     "crates/woodshed-views",
     "crates/woodshed-genet",
+    "crates/woodshed-web",
     # The chartulary substrate's first real consumer (G3): woodshed's theory
     # catalog as a content graph. Folded in from its own repo 2026-07-08.
     "crates/woodshed-graph",
@@ -63,6 +64,9 @@ winit = "0.30"
 #      `[patch.crates-io]` does not redirect a published crate's own registry
 #      dependency; taking all three from the source everything else uses does.
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+cambium-rootstock = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+cambium-genet-web-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+woodshed-web = { path = "crates/woodshed-web" }
 # The single-root Cambium desktop host (genet G1, 2026-08-09). Woodshed was its
 # donor and is now its first consumer: the whole ApplicationHandler / SurfaceHost
 # / layout / paint / input / A11yHost assembly that used to live in

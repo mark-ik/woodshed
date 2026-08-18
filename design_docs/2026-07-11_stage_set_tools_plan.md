@@ -980,3 +980,53 @@ receipts are recorded before those platforms are advertised.
   tray can now collapse without changing the durable Set. P3 remains partial
   on reusable user Set save/load and whether the tray should become a sticky
   bottom rail; it is currently a collapsible document-bottom surface.
+- **2026-08-18, scene-contract founding (the L1 release gate):** woodshed took
+  its first `sceno` dependency and `StageGraphSnapshot` now exists, at
+  `crates/woodshed-core/src/stage_scene.rs`, projecting one Set into the frozen
+  0.0.3 contract. 10 module tests, 68 core tests, workspace check and clippy
+  green.
+
+  What it emits: one `ProjectedItem` per staged occurrence in Set order, Set
+  order as `woodshed:sequence` relations read straight off `Set::graph()`, and
+  every catalog reason between each pair as its own `RoutedRelation`. Practice
+  recency rides `ProjectedItem.channels` as `"heat"`, supplied by the caller
+  because this crate owns no history.
+
+  **Three findings, two of which changed the work.**
+
+  First, **P4a and P4b were already done and the plan did not say so.**
+  `CardId`, `SetGraphNode`, `SetGraphEdge`, `SetGraph`, and `Set::graph()` were
+  all landed in `woodshedding::rehearsal`, and `woodshed-graph` already carried
+  a full relation engine (`MaterialRelation`, 16 `RelationKind` variants
+  including `VoiceLeadsTo`, `SharesTones`, `FitsInScale`, `PracticedAfter`,
+  plus `relations_between` returning *every* reason for a pair). So the
+  founding was genuinely adapter-only: no relation had to be derived, because
+  the fan the contract wanted was already computed catalog-side. Whoever
+  reads this plan next should treat P4a/P4b as landed and P4's remaining work
+  as surface, not model.
+
+  Second, **the source/instance separation carries the occurrence model for
+  free.** A staged card is an *instance*; the material is the *source*. Staging
+  one voicing four times interns one `SourceRef` and emits four items, which is
+  exactly the "staging the same material twice yields two occurrences" rule
+  P4a states, expressed in the contract rather than restated beside it. The
+  consequence: `sceno` addresses items by index, so the `InstanceId` to
+  `CardId` mapping rides on the snapshot beside the scene rather than inside
+  it, which keeps the scene product-free.
+
+  Third, and this one bounds the next slice: **the relations lifted here are
+  formula-level, and so key-agnostic.** `woodshed-graph` relates formulas
+  (`Major 7` extends `Major` whatever the tonic) and its own doc comment says
+  the keyed relations this plan also wants — diatonic in, borrowed from,
+  dominant of, resolves to, relative/parallel — are contextual and belong to a
+  keyed-instance layer. Staged cards carry roots, so **the Stage projection is
+  that keyed layer**, and deriving those relations is its own slice rather
+  than something the adapter should have faked.
+
+  Still open in P4: the fanned *rendering* (this lands the data, and a host
+  must now draw and hit-test fanned cells rather than one line per pair),
+  retiring `related_swatch`'s hand-rolled radial placement onto
+  `scenomise::relax`, and the fretboard `Space` mapping (string, fret) to
+  screen so picking resolves through `scenotime` rather than woodshed
+  hit-testing.
+

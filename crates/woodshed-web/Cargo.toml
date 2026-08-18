@@ -1,0 +1,31 @@
+[package]
+name = "woodshed-web"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.92"
+license = "MPL-2.0"
+repository = "https://github.com/merely-made/woodshed"
+description = "Woodshed in a browser: the same views the desktop draws, mounted on a canvas."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The same views the desktop binary draws. Not a reimplementation of them,
+# which is the entire point of this crate existing.
+woodshed-views = { path = "../woodshed-views" }
+cambium = { workspace = true }
+cambium-genet-web-host = { workspace = true }
+cambium-rootstock = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+# The browser's CSPRNG, via crypto.getRandomValues. Named here because the
+# personae vault's sealing reaches getrandom transitively and wasm has no
+# default backend. This is a real random source, not a stub.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "HtmlCanvasElement", "Window"] }

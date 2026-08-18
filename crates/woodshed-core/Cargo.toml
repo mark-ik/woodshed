@@ -10,6 +10,10 @@ description = "Woodshed's portable state/logic core: app state over the woodshed
 [dependencies]
 woodshedding = { workspace = true }
 woodshed-graph = { workspace = true }
+# The frozen scene contract (sceno 0.0.3). woodshed owns the musical facts and
+# their typed relations; sceno owns placement, footprints, representation, and
+# routing. Sibling repo, like woodshed-graph's chartulary dep.
+sceno = { git = "https://github.com/merely-made/mere.git", branch = "main" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Persona-keyed encrypt-at-rest for the private practice session — the woodshed
