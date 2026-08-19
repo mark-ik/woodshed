@@ -1,5 +1,8 @@
-use cambium::{clickable, el, graph_canvas_swatch, on_hover, text, HoverEvent, HoverPhase};
-use woodshed_core::{RelatedSuggestion, RelatedTarget};
+use cambium::{
+    clickable, el, graph_canvas_swatch_with_drag_and_relations, on_hover, text, HoverEvent,
+    HoverPhase,
+};
+use woodshed_core::RelatedSuggestion;
 
 use super::{related_swatch, UiChild, UiState, RELATED_LIMIT};
 
@@ -126,16 +129,23 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
         Box::new(
             el(
                 "div",
-                graph_canvas_swatch(
+                graph_canvas_swatch_with_drag_and_relations(
                     &swatch,
-                    |ui: &mut UiState, id: Option<RelatedTarget>| {
-                        if let Some(target) = id {
-                            ui.stage.select_related(target);
-                        }
+                    |ui: &mut UiState, id: String| {
+                        ui.stage.select_catalog_id(&id);
                     },
-                    |ui: &mut UiState, id: Option<Option<RelatedTarget>>| {
-                        ui.related_hover = id.flatten();
+                    |ui: &mut UiState, id: Option<String>| {
+                        ui.related_hover = id
+                            .as_deref()
+                            .and_then(|id| ui.stage.related_target_for_id(id));
                     },
+                    |_ui: &mut UiState, _drag| {},
+                    |ui: &mut UiState, relation| {
+                        ui.related_relation = (ui.related_relation.as_deref()
+                            != Some(relation.as_str()))
+                        .then_some(relation);
+                    },
+                    |_ui: &mut UiState, _relation| {},
                     |ui: &mut UiState| {
                         ui.related_expanded = !ui.related_expanded;
                     },

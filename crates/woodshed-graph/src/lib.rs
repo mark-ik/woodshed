@@ -47,6 +47,26 @@ pub enum CatalogKind {
     Exercise,
 }
 
+impl CatalogKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Scale => "Scale",
+            Self::Chord => "Chord",
+            Self::Arpeggio => "Arpeggio",
+            Self::Progression => "Progression",
+            Self::Exercise => "Exercise",
+        }
+    }
+}
+
+/// One material in the catalog graph, projected without its chartulary key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CatalogMaterial {
+    pub id: String,
+    pub name: String,
+    pub kind: CatalogKind,
+}
+
 /// Who says so. A relation's authority travels with it, because a filter that
 /// hides one layer must not be able to delete another's facts, and a suggestion
 /// must never read as catalog truth.
@@ -480,6 +500,34 @@ pub fn relations_between(source_id: &str, target_id: &str) -> Vec<MaterialRelati
 /// A catalog object's display name, if it exists.
 pub fn material_name(id: &str) -> Option<String> {
     node_names().get(id).cloned()
+}
+
+/// Every material in the catalog graph, in stable id order. This is the
+/// whole-mere source; focused views should use [`related_neighbors`] instead.
+pub fn catalog_materials() -> Vec<CatalogMaterial> {
+    static MATERIALS: OnceLock<Vec<CatalogMaterial>> = OnceLock::new();
+    MATERIALS
+        .get_or_init(|| {
+            let log = build_catalog_graph("woodshed:catalog:materials");
+            let mut materials = log
+                .graph()
+                .nodes()
+                .filter_map(|(_, node)| {
+                    Some(CatalogMaterial {
+                        id: node.id.clone(),
+                        name: if node.title.is_empty() {
+                            node.id.clone()
+                        } else {
+                            node.title.clone()
+                        },
+                        kind: kind_of(node)?,
+                    })
+                })
+                .collect::<Vec<_>>();
+            materials.sort_by(|a, b| a.id.cmp(&b.id));
+            materials
+        })
+        .clone()
 }
 
 fn relation_index() -> &'static HashMap<String, Vec<RelatedNeighbor>> {

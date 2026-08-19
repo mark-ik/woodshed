@@ -352,6 +352,22 @@ fn stage_page(ui: &UiState) -> UiChild {
     } else {
         "Neighborhood graph: off"
     };
+    let scope_label = format!(
+        "Graph scope: {}",
+        ui.app_settings.stage.related.graph_scope.label()
+    );
+    let depth_label = format!(
+        "Selection depth: {}",
+        ui.app_settings.stage.related.relation_depth
+    );
+    let swatch_arrangement = format!(
+        "Mere arrangement: {}",
+        ui.app_settings.stage.related.arrangement.label()
+    );
+    let set_arrangement = format!(
+        "Set arrangement: {}",
+        ui.app_settings.stage.set_arrangement.label()
+    );
     let hidden_count = ui.app_settings.stage.related.dismissed_ids.len();
     // One entry per derivable relation family, so the Set graph's visible
     // relations are configured here rather than through a single switch that
@@ -391,6 +407,38 @@ fn stage_page(ui: &UiState) -> UiChild {
                     |ui: &mut UiState, _| {
                         let related = &mut ui.app_settings.stage.related;
                         related.show_neighborhood = !related.show_neighborhood;
+                    },
+                ),
+                clickable(
+                    el("div", text(scope_label)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        let related = &mut ui.app_settings.stage.related;
+                        related.graph_scope = related.graph_scope.toggle();
+                        ui.related_relation = None;
+                    },
+                ),
+                clickable(
+                    el("div", text(depth_label)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        let depth = &mut ui.app_settings.stage.related.relation_depth;
+                        *depth = if *depth >= 6 { 1 } else { *depth + 1 };
+                        ui.related_relation = None;
+                    },
+                ),
+                clickable(
+                    el("div", text(swatch_arrangement)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        let related = &mut ui.app_settings.stage.related;
+                        related.arrangement = related.arrangement.next();
+                    },
+                ),
+                clickable(
+                    el("div", text(set_arrangement)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| {
+                        let stage = &mut ui.app_settings.stage;
+                        stage.set_arrangement = stage.set_arrangement.next();
+                        ui.set_graph_positions.clear();
+                        ui.set_graph_relation = None;
                     },
                 ),
                 clickable(

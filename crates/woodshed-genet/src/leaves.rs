@@ -55,10 +55,21 @@ fn sync_related_swatch(shared: &mut Shared, ui: &UiState, leaves: &mut LeafRegis
     swatch.width.hash(&mut h);
     swatch.height.hash(&mut h);
     for node in &swatch.graph.nodes {
+        node.id.hash(&mut h);
         node.position.0.to_bits().hash(&mut h);
         node.position.1.to_bits().hash(&mut h);
         node.kind.hash(&mut h);
     }
+    for relation in &swatch.relations {
+        relation.id.hash(&mut h);
+        relation.visible.hash(&mut h);
+        relation.emphasized.hash(&mut h);
+        for point in &relation.route {
+            point.0.to_bits().hash(&mut h);
+            point.1.to_bits().hash(&mut h);
+        }
+    }
+    swatch.selected.hash(&mut h);
     let hovered_idx = swatch
         .hovered
         .as_ref()
@@ -87,9 +98,14 @@ fn sync_set_graph_swatch(shared: &mut Shared, ui: &UiState, leaves: &mut LeafReg
         node.position.1.to_bits().hash(&mut h);
         node.kind.hash(&mut h);
     }
-    for edge in &swatch.graph.edges {
-        edge.from.hash(&mut h);
-        edge.to.hash(&mut h);
+    for relation in &swatch.relations {
+        relation.id.hash(&mut h);
+        relation.visible.hash(&mut h);
+        relation.emphasized.hash(&mut h);
+        for point in &relation.route {
+            point.0.to_bits().hash(&mut h);
+            point.1.to_bits().hash(&mut h);
+        }
     }
     swatch.selected.hash(&mut h);
     swatch.hovered.hash(&mut h);

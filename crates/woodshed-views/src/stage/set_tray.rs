@@ -1,10 +1,11 @@
-use woodshedding::rehearsal::{CardId, Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
+use woodshedding::rehearsal::{Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
 use woodshed_core::storage::AppSection;
+use woodshed_core::stage_scene::StageInstanceRef;
 use cambium::{
     GraphCanvasEvent, clickable, el, graph_canvas, map_state, text, text_field,
 };
 
-use super::{set_graph_swatch, UiChild, UiState};
+use super::{set_graph_snapshot, set_graph_swatch_from_snapshot, UiChild, UiState};
 
 /// Label for one relation family's visibility toggle. The family is named, so
 /// adding the harmonic or evidence layer reads as another entry rather than a
@@ -173,32 +174,32 @@ pub(super) fn view(ui: &UiState) -> UiChild {
     } else {
         Box::new(el("div", cards).attr("class", "set-cards"))
     };
+    let snapshot = set_graph_snapshot(ui);
+    let swatch = set_graph_swatch_from_snapshot(&snapshot, ui, ui.set_tray_expanded);
+    let event_snapshot = snapshot.clone();
+    let graph = graph_canvas(
+        &swatch,
+        move |ui: &mut UiState, event: GraphCanvasEvent<StageInstanceRef>| {
+            ui.handle_set_graph_event(&event_snapshot, event);
+        },
+    );
+    let relation_detail: UiChild = ui
+        .set_graph_relation
+        .and_then(|reference| snapshot.relation(reference))
+        .map(|relation| {
+            let kind = relation.kind.as_deref().unwrap_or("relation");
+            Box::new(
+                el("div", text(format!("Selected relation · {kind}")))
+                    .attr("class", "set-graph-relation"),
+            ) as UiChild
+        })
+        .unwrap_or_else(|| Box::new(el("div", ())) as UiChild);
     let content: UiChild = if ui.set_tray_expanded {
-        let swatch = set_graph_swatch(ui);
         let expanded_card: UiChild = if ui.set_graph_card_expanded {
             card_editor(ui)
         } else {
             Box::new(el("div", ()))
         };
-        // The canvas owns hover and focus emphasis. This view keeps only what
-        // the Set decides: which card the cursor is on, and whether it is
-        // expanded into the editor.
-        let graph = graph_canvas(
-            &swatch,
-            |ui: &mut UiState, event: GraphCanvasEvent<CardId>| {
-                if let GraphCanvasEvent::Activate(id) = event {
-                    let was_selected = ui.set.cursor_id() == Some(id);
-                    if !ui.set.select_id(id) {
-                        return;
-                    }
-                    ui.set_graph_card_expanded = if was_selected {
-                        !ui.set_graph_card_expanded
-                    } else {
-                        true
-                    };
-                }
-            },
-        );
         Box::new(el(
             "div",
             (
@@ -207,6 +208,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     (
                         el("div", text("Set graph")).attr("class", "set-graph-heading"),
                         graph,
+                        relation_detail,
                         el(
                             "div",
                             clickable(
@@ -231,7 +233,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
             ),
         ))
     } else {
-        Box::new(el("div", ()))
+        Box::new(el("div", graph).attr("class", "set-graph set-graph-compact"))
     };
 
     Box::new(

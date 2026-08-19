@@ -277,6 +277,7 @@ mod tests {
             use_history: false,
             show_neighborhood: false,
             dismissed_ids: vec![woodshed_graph::chord_id("Minor 7")],
+            ..Default::default()
         };
         let settings = AppSettings {
             page: crate::settings::SettingsPage::Tuning,

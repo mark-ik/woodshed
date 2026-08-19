@@ -10,8 +10,10 @@
 //! until their engines migrate from woodshed-xilem's `AppState` (S4).
 
 pub mod arpeggio;
+pub mod arrangement;
 pub mod audio;
 pub mod history;
+pub mod mere;
 pub mod midi;
 pub mod search;
 pub mod sealed_backend;
@@ -901,6 +903,24 @@ impl StageState {
             }
             RelatedTarget::Exercise(idx) => woodshed_graph::exercise_id(self.exercises()[idx].name),
         }
+    }
+
+    pub fn related_target_for_id(&self, id: &str) -> Option<RelatedTarget> {
+        let (kind, name) = id.split_once(':')?;
+        match kind {
+            "scale" => self.scales().iter().position(|item| item.name == name).map(RelatedTarget::Scale),
+            "chord" => self.chords().iter().position(|item| item.name == name).map(RelatedTarget::Chord),
+            "arpeggio" => self.chords().iter().position(|item| item.name == name).map(RelatedTarget::Arpeggio),
+            "progression" => self.progressions().iter().position(|item| item.name == name).map(RelatedTarget::Progression),
+            "exercise" => self.exercises().iter().position(|item| item.name == name).map(RelatedTarget::Exercise),
+            _ => None,
+        }
+    }
+
+    pub fn select_catalog_id(&mut self, id: &str) -> bool {
+        let Some(target) = self.related_target_for_id(id) else { return false };
+        self.select_related(target);
+        true
     }
 
     pub fn related_material_configured(
@@ -2474,6 +2494,7 @@ mod tests {
             use_history: false,
             show_neighborhood: true,
             dismissed_ids: vec![woodshed_graph::chord_id("Minor 7")],
+            ..Default::default()
         };
         let related = s.related_material_configured(&history, &settings, 5);
         assert!(related.iter().all(|item| item.title != "Minor 7"));

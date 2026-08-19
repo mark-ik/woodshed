@@ -32,10 +32,13 @@ use sceno::{
     Footprint, InstanceId, ProjectedItem, Rect, Representation, RoutedRelation, Scene, Size2,
     SourceRef, Transform2, Vec2,
 };
+use scenotime::{RelationId, Revision, SceneEpoch, SceneSnapshot};
 use woodshed_graph::{
-    MaterialRelation, RelationKind, chord_id, exercise_id, relations_between, scale_id,
+    chord_id, exercise_id, relations_between, scale_id, MaterialRelation, RelationKind,
 };
 use woodshedding::rehearsal::{CardId, Material, Set};
+
+use crate::arrangement::{arrange_graph, GraphArrangement};
 
 /// The adapter name every Stage source ref carries, so a viewer with no
 /// woodshed access still knows which product minted the id.
@@ -69,6 +72,9 @@ pub struct StageSceneOptions {
     pub relation_kinds: Option<Vec<RelationKind>>,
     /// Whether Set order is drawn as relations.
     pub sequence: bool,
+    /// Product-selected arrangement. It changes placement only; occurrence and
+    /// relation identity are assigned after the arrangement is resolved.
+    pub arrangement: GraphArrangement,
 }
 
 impl Default for StageSceneOptions {
@@ -79,6 +85,7 @@ impl Default for StageSceneOptions {
             recency: BTreeMap::new(),
             relation_kinds: None,
             sequence: true,
+            arrangement: GraphArrangement::Snake,
         }
     }
 }
@@ -92,14 +99,54 @@ impl Default for StageSceneOptions {
 /// "which card did I just click".
 #[derive(Clone, Debug)]
 pub struct StageGraphSnapshot {
-    pub scene: Scene,
+    pub snapshot: SceneSnapshot,
     /// Occurrence identity per instance, indexed by [`InstanceId`].
     pub cards: Vec<CardId>,
 }
 
+/// Epoch-qualified item identity used by Cambium callbacks. A stale event from
+/// a previous dense projection cannot name a new occupant of the same slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StageInstanceRef {
+    pub epoch: SceneEpoch,
+    pub instance: InstanceId,
+}
+
+/// Epoch-qualified relation identity. Cambium currently carries relation ids as
+/// strings, so [`Self::key`] is the lossless adapter at that boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StageRelationRef {
+    pub epoch: SceneEpoch,
+    pub relation: RelationId,
+}
+
+impl StageRelationRef {
+    pub fn key(self) -> String {
+        format!("{}:{}", self.epoch.0, self.relation.0)
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        let (epoch, relation) = key.split_once(':')?;
+        Some(Self {
+            epoch: SceneEpoch(epoch.parse().ok()?),
+            relation: RelationId(relation.parse().ok()?),
+        })
+    }
+}
+
 impl StageGraphSnapshot {
+    pub fn epoch(&self) -> SceneEpoch {
+        self.snapshot.epoch
+    }
+
     pub fn card_of(&self, instance: InstanceId) -> Option<CardId> {
         self.cards.get(instance.0 as usize).copied()
+    }
+
+    pub fn card_of_ref(&self, reference: StageInstanceRef) -> Option<CardId> {
+        (reference.epoch == self.epoch())
+            .then(|| self.card_of(reference.instance))
+            .flatten()
     }
 
     pub fn instance_of(&self, card: CardId) -> Option<InstanceId> {
@@ -107,6 +154,61 @@ impl StageGraphSnapshot {
             .iter()
             .position(|c| *c == card)
             .map(|i| InstanceId(i as u32))
+    }
+
+    pub fn instance_ref_of(&self, card: CardId) -> Option<StageInstanceRef> {
+        Some(StageInstanceRef {
+            epoch: self.epoch(),
+            instance: self.instance_of(card)?,
+        })
+    }
+
+    pub fn relation_ref(&self, relation: RelationId) -> Option<StageRelationRef> {
+        self.snapshot.active_relation(relation)?;
+        Some(StageRelationRef {
+            epoch: self.epoch(),
+            relation,
+        })
+    }
+
+    pub fn relation(&self, reference: StageRelationRef) -> Option<&RoutedRelation> {
+        (reference.epoch == self.epoch())
+            .then(|| self.snapshot.active_relation(reference.relation))
+            .flatten()
+    }
+
+    pub fn items(&self) -> Vec<(StageInstanceRef, &ProjectedItem)> {
+        self.snapshot
+            .active_items_in_order()
+            .into_iter()
+            .map(|(instance, item)| {
+                (
+                    StageInstanceRef {
+                        epoch: self.epoch(),
+                        instance,
+                    },
+                    item,
+                )
+            })
+            .collect()
+    }
+
+    pub fn relations(&self) -> Vec<(StageRelationRef, &RoutedRelation)> {
+        self.snapshot
+            .tables
+            .relations
+            .iter()
+            .enumerate()
+            .filter_map(|(index, relation)| {
+                Some((
+                    StageRelationRef {
+                        epoch: self.epoch(),
+                        relation: RelationId(index as u32),
+                    },
+                    relation.as_ref()?,
+                ))
+            })
+            .collect()
     }
 
     /// Every reason two staged occurrences are related, in display order.
@@ -117,7 +219,10 @@ impl StageGraphSnapshot {
     /// side (a hand-drawn Path relates to nothing yet).
     pub fn reasons(&self, from: CardId, to: CardId, set: &Set) -> Vec<MaterialRelation> {
         let material = |id: CardId| set.cards.iter().find(|c| c.id == id).map(|c| &c.material);
-        match (material(from).and_then(catalog_id), material(to).and_then(catalog_id)) {
+        match (
+            material(from).and_then(catalog_id),
+            material(to).and_then(catalog_id),
+        ) {
             (Some(a), Some(b)) => relations_between(&a, &b),
             _ => Vec::new(),
         }
@@ -183,16 +288,35 @@ pub fn stage_scene(set: &Set, options: &StageSceneOptions) -> StageGraphSnapshot
     let mut scene = Scene::new();
     let graph = set.graph();
     let mut cards = Vec::with_capacity(graph.nodes.len());
+    let graph_edges = graph
+        .edges
+        .iter()
+        .filter_map(|edge| {
+            Some((
+                graph.nodes.iter().position(|node| node.id == edge.from)?,
+                graph.nodes.iter().position(|node| node.id == edge.to)?,
+            ))
+        })
+        .collect::<Vec<_>>();
+    let positions = arrange_graph(
+        options.arrangement,
+        graph.nodes.len(),
+        &graph_edges,
+        if graph.nodes.is_empty() {
+            None
+        } else {
+            Some(set.cursor.min(graph.nodes.len() - 1))
+        },
+    );
+    let span = options.spacing * (graph.nodes.len() as f32).sqrt().ceil().max(1.0);
 
     // Items, in Set order, one per staged occurrence.
     for node in &graph.nodes {
         let Some(card) = set.cards.iter().find(|c| c.id == node.id) else {
             continue;
         };
-        let source = scene.intern_source(SourceRef::new(
-            ADAPTER,
-            source_id(&card.material, card.id),
-        ));
+        let source =
+            scene.intern_source(SourceRef::new(ADAPTER, source_id(&card.material, card.id)));
         let channels = options
             .recency
             .get(&card.id)
@@ -202,7 +326,10 @@ pub fn stage_scene(set: &Set, options: &StageSceneOptions) -> StageGraphSnapshot
         scene.items.push(ProjectedItem {
             source,
             space: Scene::WORLD,
-            transform: Transform2::translation(node.index as f32 * options.spacing, 0.0),
+            transform: Transform2::translation(
+                (positions[node.index].0 - 0.5) * span,
+                (positions[node.index].1 - 0.5) * span,
+            ),
             footprint: Footprint::Rect {
                 size: options.card_size,
             },
@@ -286,8 +413,66 @@ pub fn stage_scene(set: &Set, options: &StageSceneOptions) -> StageGraphSnapshot
     }
     scene.relations = relations;
     scene.bounds = lane_bounds(&scene, options.card_size);
+    let epoch = dense_epoch(&scene, &cards);
+    let snapshot = SceneSnapshot::from_dense(epoch, Revision(0), scene)
+        .unwrap_or_else(|error| panic!("Woodshed produced an invalid Stage scene: {error:?}"));
 
-    StageGraphSnapshot { scene, cards }
+    StageGraphSnapshot { snapshot, cards }
+}
+
+/// A dense projection starts a fresh, content-addressed epoch whenever any
+/// table occupant or route changes. Woodshed does not emit diffs yet, so this
+/// coarse lifetime is safer than reinterpreting an `InstanceId` after reorder.
+fn dense_epoch(scene: &Scene, cards: &[CardId]) -> SceneEpoch {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    let mut write = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100_0000_01b3);
+        }
+    };
+    for card in cards {
+        write(&card.0.to_le_bytes());
+    }
+    for source in &scene.sources {
+        write(&(source.adapter.len() as u64).to_le_bytes());
+        write(source.adapter.as_bytes());
+        write(&(source.id.len() as u64).to_le_bytes());
+        write(source.id.as_bytes());
+    }
+    for item in &scene.items {
+        write(&item.source.0.to_le_bytes());
+        write(&item.transform.translate.x.to_bits().to_le_bytes());
+        write(&item.transform.translate.y.to_bits().to_le_bytes());
+        write(&item.transform.scale.to_bits().to_le_bytes());
+        write(&item.transform.rotate.to_bits().to_le_bytes());
+        if let Footprint::Rect { size } = &item.footprint {
+            write(&size.w.to_bits().to_le_bytes());
+            write(&size.h.to_bits().to_le_bytes());
+        }
+        for (channel, value) in &item.channels {
+            write(&(channel.len() as u64).to_le_bytes());
+            write(channel.as_bytes());
+            write(&value.to_bits().to_le_bytes());
+        }
+    }
+    for relation in &scene.relations {
+        write(&relation.from.0.to_le_bytes());
+        write(&relation.to.0.to_le_bytes());
+        write(&relation.space.0.to_le_bytes());
+        if let Some(kind) = &relation.kind {
+            write(&(kind.len() as u64).to_le_bytes());
+            write(kind.as_bytes());
+        }
+        if let Some(weight) = relation.weight {
+            write(&weight.to_bits().to_le_bytes());
+        }
+        for point in &relation.points {
+            write(&point.x.to_bits().to_le_bytes());
+            write(&point.y.to_bits().to_le_bytes());
+        }
+    }
+    SceneEpoch(hash.max(1))
 }
 
 /// World bounds covering every placed card.
@@ -344,20 +529,37 @@ mod tests {
         let set = set_of(&[("one", chord("Major")), ("two", chord("Major"))]);
         let snapshot = stage_scene(&set, &StageSceneOptions::default());
 
-        assert_eq!(snapshot.scene.items.len(), 2, "two occurrences, two items");
         assert_eq!(
-            snapshot.scene.sources.len(),
+            snapshot.snapshot.active_item_count(),
+            2,
+            "two occurrences, two items"
+        );
+        assert_eq!(
+            snapshot.snapshot.tables.sources.iter().flatten().count(),
             1,
             "one material, interned once"
         );
         assert_eq!(
-            snapshot.scene.items[0].source, snapshot.scene.items[1].source,
+            snapshot.snapshot.active_item(InstanceId(0)).unwrap().source,
+            snapshot.snapshot.active_item(InstanceId(1)).unwrap().source,
             "both instances point at the same source"
         );
         assert_ne!(
             snapshot.cards[0], snapshot.cards[1],
             "occurrence identities stay distinct"
         );
+    }
+
+    #[test]
+    fn changed_source_content_starts_a_fresh_dense_epoch() {
+        let mut set = set_of(&[("one", chord("Major"))]);
+        let before = stage_scene(&set, &StageSceneOptions::default());
+        set.cards[0].material = chord("Minor");
+        let after = stage_scene(&set, &StageSceneOptions::default());
+
+        assert_ne!(before.epoch(), after.epoch());
+        assert_eq!(before.snapshot.revision, Revision(0));
+        assert_eq!(after.snapshot.revision, Revision(0));
     }
 
     #[test]
@@ -369,9 +571,11 @@ mod tests {
         ]);
         let with = stage_scene(&set, &StageSceneOptions::default());
         let sequence = |s: &StageGraphSnapshot| {
-            s.scene
+            s.snapshot
+                .tables
                 .relations
                 .iter()
+                .flatten()
                 .filter(|r| r.kind.as_deref() == Some(SEQUENCE_KIND))
                 .count()
         };
@@ -386,7 +590,7 @@ mod tests {
         );
         assert_eq!(sequence(&without), 0);
         assert_eq!(
-            without.scene.items.len(),
+            without.snapshot.active_item_count(),
             3,
             "withholding a relation family never drops items"
         );
@@ -401,9 +605,11 @@ mod tests {
         let snapshot = stage_scene(&set, &StageSceneOptions::default());
 
         let catalog: Vec<&RoutedRelation> = snapshot
-            .scene
+            .snapshot
+            .tables
             .relations
             .iter()
+            .flatten()
             .filter(|r| r.kind.as_deref() != Some(SEQUENCE_KIND))
             .collect();
         assert!(
@@ -419,10 +625,7 @@ mod tests {
             kinds.len(),
             "each reason appears once, not deduped to the best one"
         );
-        assert!(
-            catalog.iter().all(|r| r.from != r.to),
-            "no self-relations"
-        );
+        assert!(catalog.iter().all(|r| r.from != r.to), "no self-relations");
     }
 
     #[test]
@@ -451,36 +654,47 @@ mod tests {
         );
         assert!(
             only_tones
-                .scene
+                .snapshot
+                .tables
                 .relations
                 .iter()
+                .flatten()
                 .all(|r| r.kind.as_deref() == Some(relation_slug(RelationKind::SharesTones))),
             "only the requested family survives"
         );
-        assert_eq!(only_tones.scene.items.len(), 2, "Set truth is untouched");
+        assert_eq!(
+            only_tones.snapshot.active_item_count(),
+            2,
+            "Set truth is untouched"
+        );
     }
 
     #[test]
     fn a_hand_drawn_path_is_placed_but_relates_to_nothing() {
         let set = set_of(&[
-            ("drawn", Material::Path {
-                positions: vec![(0, 3), (1, 5)],
-                root: PitchClass::new(0),
-            }),
+            (
+                "drawn",
+                Material::Path {
+                    positions: vec![(0, 3), (1, 5)],
+                    root: PitchClass::new(0),
+                },
+            ),
             ("chord", chord("Major")),
         ]);
         let snapshot = stage_scene(&set, &StageSceneOptions::default());
 
-        assert_eq!(snapshot.scene.items.len(), 2);
+        assert_eq!(snapshot.snapshot.active_item_count(), 2);
         assert_eq!(
-            snapshot.scene.sources.len(),
+            snapshot.snapshot.tables.sources.iter().flatten().count(),
             2,
             "a path carries its own content, so it interns its own source"
         );
         let catalog = snapshot
-            .scene
+            .snapshot
+            .tables
             .relations
             .iter()
+            .flatten()
             .filter(|r| r.kind.as_deref() != Some(SEQUENCE_KIND))
             .count();
         assert_eq!(catalog, 0, "a path names no catalog formula");
@@ -500,11 +714,20 @@ mod tests {
         );
 
         assert_eq!(
-            snapshot.scene.items[0].channels,
+            snapshot
+                .snapshot
+                .active_item(InstanceId(0))
+                .unwrap()
+                .channels,
             vec![(RECENCY_CHANNEL.to_string(), 0.75)],
             "a remote viewer shades from the scene, not from woodshed's store"
         );
-        assert!(snapshot.scene.items[1].channels.is_empty());
+        assert!(snapshot
+            .snapshot
+            .active_item(InstanceId(1))
+            .unwrap()
+            .channels
+            .is_empty());
     }
 
     #[test]
@@ -521,11 +744,48 @@ mod tests {
     }
 
     #[test]
+    fn epoch_qualifies_instance_and_relation_table_ids() {
+        let set = set_of(&[("one", chord("Major")), ("two", chord("Major 7"))]);
+        let first = stage_scene(&set, &StageSceneOptions::default());
+        let instance = first.instance_ref_of(first.cards[0]).unwrap();
+        let relation = first.relations()[0].0;
+        assert_eq!(first.card_of_ref(instance), Some(first.cards[0]));
+        assert!(first.relation(relation).is_some());
+
+        let rearranged = stage_scene(
+            &set,
+            &StageSceneOptions {
+                arrangement: GraphArrangement::Circle,
+                ..StageSceneOptions::default()
+            },
+        );
+        assert_ne!(first.epoch(), rearranged.epoch());
+        assert_eq!(rearranged.card_of_ref(instance), None);
+        assert!(rearranged.relation(relation).is_none());
+        assert_eq!(
+            StageRelationRef::from_key(&relation.key()),
+            Some(relation),
+            "the Cambium string seam preserves SceneEpoch and RelationId"
+        );
+    }
+
+    #[test]
     fn an_empty_set_projects_an_empty_scene_not_a_broken_one() {
         let snapshot = stage_scene(&Set::default(), &StageSceneOptions::default());
-        assert!(snapshot.scene.items.is_empty());
-        assert!(snapshot.scene.relations.is_empty());
-        assert_eq!(snapshot.scene.spaces.len(), 1, "the world space still exists");
+        assert_eq!(snapshot.snapshot.active_item_count(), 0);
+        assert!(snapshot
+            .snapshot
+            .tables
+            .relations
+            .iter()
+            .flatten()
+            .next()
+            .is_none());
+        assert_eq!(
+            snapshot.snapshot.tables.spaces.iter().flatten().count(),
+            1,
+            "the world space still exists"
+        );
     }
 
     #[test]
@@ -537,10 +797,10 @@ mod tests {
         ]);
         let options = StageSceneOptions::default();
         let snapshot = stage_scene(&set, &options);
-        let bounds = snapshot.scene.bounds;
+        let bounds = snapshot.snapshot.tables.bounds;
 
         assert!(bounds.size.w >= options.spacing * 2.0);
-        for item in &snapshot.scene.items {
+        for item in snapshot.snapshot.tables.items.iter().flatten() {
             let x = item.transform.translate.x;
             assert!(
                 x >= bounds.origin.x && x <= bounds.origin.x + bounds.size.w,

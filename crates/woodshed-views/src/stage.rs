@@ -7,20 +7,26 @@
 //! view-layer dropdown state; hosts call [`UiState::sync`] after any
 //! dispatch so dropdown picks land in the core state.
 
+use std::collections::BTreeMap;
 
+use cambium::{
+    clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, GenetCtx,
+    GenetElement, GraphCanvasEvent, GraphCanvasNode, GraphCanvasRelation, GraphCanvasSubgraph,
+    GraphCanvasSwatch, SelectState, TextInput,
+};
+use woodshed_core::arrangement::arrange_graph;
 use woodshed_core::audio::{AudioRequest, CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
+use woodshed_core::mere::{woodshed_mere, MereScope, WoodshedMereSnapshot};
 use woodshed_core::search::{search_corpus, SearchHit};
-use woodshed_core::settings::{AppSettings, SettingsPage};
+use woodshed_core::settings::{AppSettings, RelatedGraphScope, SettingsPage};
 use woodshed_core::song::SongDoc;
+use woodshed_core::stage_scene::{
+    stage_scene, StageGraphSnapshot, StageInstanceRef, StageRelationRef, StageSceneOptions,
+};
 use woodshed_core::storage::{AppSection, PersistedSession};
 use woodshed_core::{set_from_practice, tunings, Lens, RelatedTarget, StageState, ROOT_NAMES};
 use woodshedding::rehearsal::{Card, CardId, FretWindow, Hold, MarkMode, Set, Touch};
-use cambium::{
-    clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, GenetCtx,
-    GenetElement, GraphCanvasEdge, GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch,
-    SelectState, TextInput,
-};
 
 use crate::fretboard_leaf::{BoardGeom, Orientation, FRETBOARD_LEAF_KEY};
 
@@ -46,54 +52,99 @@ pub const RELATED_LIMIT: usize = 6;
 /// suggestion's [`RelatedTarget`] (`None` = the centre), so a node links 1:1 to
 /// its pane row and clicking navigates. Built once and shared by the view (which
 /// renders it) and the host (which paints its leaf), the sanctioned pattern.
-pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, &'static str> {
-    use std::f32::consts::{FRAC_PI_2, TAU};
-    let mut nodes: Vec<GraphCanvasNode<Option<RelatedTarget>, &'static str>> = Vec::new();
-    let mut edges: Vec<GraphCanvasEdge<Option<RelatedTarget>>> = Vec::new();
-    let has_center = ui.stage.catalog_id().is_some();
-    if let Some(id) = ui.stage.catalog_id() {
-        let title = id.split_once(':').map(|(_, t)| t).unwrap_or(id.as_str()).to_string();
-        nodes.push(GraphCanvasNode {
-            id: None,
-            kind: ui.stage.lens.label(),
-            position: (0.5, 0.5),
-            label: title,
-            // Stable selector key (catalog id) for a driver/test, distinct from
-            // the displayed label.
-            key: Some(id),
-        });
-    }
-    let suggestions =
-        ui.stage
-            .related_material_configured(&ui.practice_history, &ui.app_settings.stage.related, RELATED_LIMIT);
-    let n = suggestions.len();
-    for (i, s) in suggestions.into_iter().enumerate() {
-        let angle = i as f32 / n.max(1) as f32 * TAU - FRAC_PI_2;
-        let key = s.title.clone();
-        nodes.push(GraphCanvasNode {
-            id: Some(s.target),
-            kind: s.kind,
-            position: (0.5 + angle.cos() * 0.40, 0.5 + angle.sin() * 0.40),
-            label: s.title,
-            key: Some(key),
-        });
-        if has_center {
-            edges.push(GraphCanvasEdge {
-                from: None,
-                to: Some(s.target),
-            });
+pub fn related_mere_snapshot(ui: &UiState) -> WoodshedMereSnapshot {
+    match ui.app_settings.stage.related.graph_scope {
+        RelatedGraphScope::Mere => woodshed_mere(&ui.practice_history, MereScope::Whole),
+        RelatedGraphScope::Selection => {
+            ui.stage
+                .catalog_id()
+                .map_or_else(WoodshedMereSnapshot::default, |center| {
+                    woodshed_mere(
+                        &ui.practice_history,
+                        MereScope::Selection {
+                            center: &center,
+                            depth: ui.app_settings.stage.related.relation_depth,
+                        },
+                    )
+                })
         }
     }
-    let (w, h) = if ui.related_expanded {
-        (300, 210)
-    } else {
-        (232, 120)
-    };
-    let mut swatch = GraphCanvasSwatch::new(NEIGHBORHOOD_LEAF_KEY, GraphCanvasSubgraph { nodes, edges })
-        .with_size(w, h)
-        .with_label("What might I stage next");
-    swatch.hovered = ui.related_hover.map(Some);
+}
+
+pub fn related_swatch_from_snapshot(
+    snapshot: &WoodshedMereSnapshot,
+    ui: &UiState,
+    expanded: bool,
+) -> GraphCanvasSwatch<String, &'static str> {
+    let edges = snapshot.edges();
+    let selected = ui.stage.catalog_id();
+    let focus = selected.as_deref().and_then(|id| snapshot.node_index(id));
+    let positions = arrange_graph(
+        ui.app_settings.stage.related.arrangement,
+        snapshot.nodes.len(),
+        &edges,
+        focus,
+    );
+    let nodes = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| GraphCanvasNode {
+            id: node.id.clone(),
+            kind: node.kind.label(),
+            position: positions[index],
+            label: node.title.clone(),
+            key: Some(node.id.clone()),
+        })
+        .collect();
+    let relations = snapshot
+        .relations
+        .iter()
+        .enumerate()
+        .map(|(index, relation)| {
+            let id = format!(
+                "{}:{}:{}:{index}",
+                relation.source,
+                relation.target,
+                relation.kind.label()
+            );
+            GraphCanvasRelation {
+                emphasized: ui.related_relation.as_deref() == Some(id.as_str()),
+                id,
+                from: relation.source.clone(),
+                to: relation.target.clone(),
+                kind: relation.kind.label().to_string(),
+                label: relation.explanation.clone(),
+                route: Vec::new(),
+                visible: true,
+            }
+        })
+        .collect();
+    let (w, h) = if expanded { (300, 210) } else { (232, 120) };
+    let mut swatch = GraphCanvasSwatch::new(
+        NEIGHBORHOOD_LEAF_KEY,
+        GraphCanvasSubgraph {
+            nodes,
+            edges: Vec::new(),
+        },
+    )
+    .with_relations(relations)
+    .with_size(w, h)
+    .with_label(match ui.app_settings.stage.related.graph_scope {
+        RelatedGraphScope::Mere => "Woodshed mere",
+        RelatedGraphScope::Selection => "Selection relations",
+    })
+    .with_node_labels(expanded);
+    swatch.selected = selected;
+    swatch.hovered = ui
+        .related_hover
+        .map(|target| ui.stage.related_target_id(target));
     swatch
+}
+
+pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<String, &'static str> {
+    let snapshot = related_mere_snapshot(ui);
+    related_swatch_from_snapshot(&snapshot, ui, ui.related_expanded)
 }
 
 /// The current Set as a numbered, selectable graph. The ordered Set remains
@@ -103,58 +154,156 @@ pub fn related_swatch(ui: &UiState) -> GraphCanvasSwatch<Option<RelatedTarget>, 
 /// Nodes are keyed by [`CardId`], so selection, hover, and the DOM key survive
 /// reorder and removal. The visible number and the serpentine slot are read off
 /// current order and change freely under it.
-pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<CardId, &'static str> {
-    let graph = ui
-        .set
-        .graph()
-        .with_relations(&ui.app_settings.stage.visible_relations());
-    let count = graph.nodes.len();
-    let columns = count.clamp(1, 6);
-    let rows = count.div_ceil(columns).max(1);
-    let nodes = graph
-        .nodes
+pub fn set_graph_snapshot(ui: &UiState) -> StageGraphSnapshot {
+    stage_scene(
+        &ui.set,
+        &StageSceneOptions {
+            arrangement: ui.app_settings.stage.set_arrangement,
+            sequence: ui
+                .app_settings
+                .stage
+                .shows_relation(woodshedding::rehearsal::SetGraphEdgeKind::Next),
+            ..StageSceneOptions::default()
+        },
+    )
+}
+
+fn scene_position(snapshot: &StageGraphSnapshot, x: f32, y: f32) -> (f32, f32) {
+    let bounds = snapshot.snapshot.tables.bounds;
+    let x = if bounds.size.w > 0.0 {
+        (x - bounds.origin.x) / bounds.size.w
+    } else {
+        0.5
+    };
+    let y = if bounds.size.h > 0.0 {
+        (y - bounds.origin.y) / bounds.size.h
+    } else {
+        0.5
+    };
+    (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0))
+}
+
+pub fn set_graph_swatch_from_snapshot(
+    snapshot: &StageGraphSnapshot,
+    ui: &UiState,
+    expanded: bool,
+) -> GraphCanvasSwatch<StageInstanceRef, &'static str> {
+    let set_graph = ui.set.graph();
+    let nodes = snapshot
+        .items()
         .into_iter()
-        .map(|node| {
-            let row = node.index / columns;
-            let raw_column = node.index % columns;
-            let column = if row % 2 == 0 {
-                raw_column
-            } else {
-                columns - 1 - raw_column
-            };
-            GraphCanvasNode {
-                id: node.id,
+        .filter_map(|(reference, item)| {
+            let card_id = snapshot.card_of_ref(reference)?;
+            let node = set_graph.node(card_id)?;
+            let position = ui
+                .set_graph_positions
+                .get(&card_id)
+                .copied()
+                .unwrap_or_else(|| {
+                    scene_position(
+                        snapshot,
+                        item.transform.translate.x,
+                        item.transform.translate.y,
+                    )
+                });
+            Some(GraphCanvasNode {
+                id: reference,
                 kind: node.kind,
-                position: (
-                    (column as f32 + 0.5) / columns as f32,
-                    (row as f32 + 0.5) / rows as f32,
-                ),
+                position,
                 label: format!("{} · {}", node.number, node.label),
-                key: Some(format!("set-card-{}", node.id.0)),
-            }
+                key: Some(format!(
+                    "stage-{}-instance-{}",
+                    reference.epoch.0, reference.instance.0
+                )),
+            })
         })
-        .collect();
-    let edges = graph
-        .edges
+        .collect::<Vec<_>>();
+    let node_position = |reference: StageInstanceRef| {
+        nodes
+            .iter()
+            .find(|node| node.id == reference)
+            .map(|node| node.position)
+    };
+    let relations = snapshot
+        .relations()
         .into_iter()
-        .map(|edge| GraphCanvasEdge {
-            from: edge.from,
-            to: edge.to,
+        .filter_map(|(reference, relation)| {
+            let from = StageInstanceRef {
+                epoch: snapshot.epoch(),
+                instance: relation.from,
+            };
+            let to = StageInstanceRef {
+                epoch: snapshot.epoch(),
+                instance: relation.to,
+            };
+            let from_position = node_position(from)?;
+            let to_position = node_position(to)?;
+            let mut route = relation
+                .points
+                .iter()
+                .map(|point| scene_position(snapshot, point.x, point.y))
+                .collect::<Vec<_>>();
+            if route.len() < 2 {
+                route = vec![from_position, to_position];
+            } else {
+                route[0] = from_position;
+                let last = route.len() - 1;
+                route[last] = to_position;
+            }
+            let from_label = snapshot
+                .card_of_ref(from)
+                .and_then(|id| ui.set.cards.iter().find(|card| card.id == id))
+                .map(|card| card.label.as_str())
+                .unwrap_or("card");
+            let to_label = snapshot
+                .card_of_ref(to)
+                .and_then(|id| ui.set.cards.iter().find(|card| card.id == id))
+                .map(|card| card.label.as_str())
+                .unwrap_or("card");
+            let kind = relation.kind.as_deref().unwrap_or("relation");
+            Some(GraphCanvasRelation {
+                id: reference.key(),
+                from,
+                to,
+                kind: kind.to_string(),
+                label: format!("{from_label} · {kind} · {to_label}"),
+                route,
+                visible: true,
+                emphasized: ui.set_graph_relation == Some(reference),
+            })
         })
         .collect();
+    let rows = nodes.len().div_ceil(6).max(1);
+    let (width, height) = if expanded {
+        (520, (rows as u32 * 72).clamp(144, 320))
+    } else {
+        (300, 104)
+    };
     let mut swatch = GraphCanvasSwatch::new(
         SET_GRAPH_LEAF_KEY,
-        GraphCanvasSubgraph { nodes, edges },
+        GraphCanvasSubgraph {
+            nodes,
+            edges: Vec::new(),
+        },
     )
-    .with_size(520, (rows as u32 * 72).clamp(112, 256))
+    .with_relations(relations)
+    .with_size(width, height)
     .with_label("Staged Set graph")
     .with_expand(false)
-    .with_node_labels(true);
-    swatch.selected = ui.set.cursor_id();
+    .with_node_labels(expanded);
+    swatch.selected = ui
+        .set
+        .cursor_id()
+        .and_then(|card| snapshot.instance_ref_of(card));
     // Focus and hover emphasis are the canvas component's own state (it reads
     // native focus from its node buttons, so the ring is never painted where
     // the keyboard is not). This view supplies only the Set's truth.
     swatch
+}
+
+pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<StageInstanceRef, &'static str> {
+    let snapshot = set_graph_snapshot(ui);
+    set_graph_swatch_from_snapshot(&snapshot, ui, ui.set_tray_expanded)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -372,6 +521,11 @@ pub struct UiState {
     // the view on the next rebuild; the component keeps them now.
     /// Whether the selected graph node is expanded into the shared Card editor.
     pub set_graph_card_expanded: bool,
+    /// Node positions moved in this view. They override the arrangement in the
+    /// Cambium adapter and never alter Set order or persisted material truth.
+    pub set_graph_positions: BTreeMap<CardId, (f32, f32)>,
+    /// The activated scene relation, qualified by the dense scene epoch.
+    pub set_graph_relation: Option<StageRelationRef>,
     /// Note markers the user has pinned as `(string_index, fret)` to keep their
     /// detail card open. Multi-pin, to compare. Transient (not persisted).
     pub pinned_markers: Vec<(usize, u8)>,
@@ -384,6 +538,8 @@ pub struct UiState {
     pub related_hover: Option<RelatedTarget>,
     /// Whether the Related graph swatch is expanded to its taller size.
     pub related_expanded: bool,
+    /// Activated relation cell in the joined-mere swatch.
+    pub related_relation: Option<String>,
     /// Whether practice is written anywhere at all.
     ///
     /// False for a session the user chose to run with no persona: there is no
@@ -449,15 +605,60 @@ impl UiState {
             now_ms: None,
             card_started_ms: None,
             set_graph_card_expanded: true,
+            set_graph_positions: BTreeMap::new(),
+            set_graph_relation: None,
             pinned_markers: Vec::new(),
             hover_peek: None,
             related_hover: None,
             related_expanded: false,
+            related_relation: None,
             practice_saved: true,
             persona: None,
             persona_switch_requested: false,
             seal: None,
             stage,
+        }
+    }
+
+    /// Apply one event from the epoch-qualified Set scene. Drag positions are
+    /// view-local, relation activation retains `RelationId`, and stale events
+    /// fail closed when their epoch no longer matches the rendered snapshot.
+    pub fn handle_set_graph_event(
+        &mut self,
+        snapshot: &StageGraphSnapshot,
+        event: GraphCanvasEvent<StageInstanceRef>,
+    ) {
+        match event {
+            GraphCanvasEvent::Activate(reference) => {
+                let Some(id) = snapshot.card_of_ref(reference) else {
+                    return;
+                };
+                let was_selected = self.set.cursor_id() == Some(id);
+                if !self.set.select_id(id) {
+                    return;
+                }
+                self.set_graph_relation = None;
+                self.set_graph_card_expanded = if was_selected {
+                    !self.set_graph_card_expanded
+                } else {
+                    true
+                };
+            }
+            GraphCanvasEvent::Drag(drag) => {
+                if let Some(card) = snapshot.card_of_ref(drag.id) {
+                    self.set_graph_positions.insert(card, drag.position);
+                }
+            }
+            GraphCanvasEvent::RelationActivate(key) => {
+                let Some(reference) = StageRelationRef::from_key(&key) else {
+                    return;
+                };
+                if snapshot.relation(reference).is_some() {
+                    self.set_graph_relation =
+                        (self.set_graph_relation != Some(reference)).then_some(reference);
+                }
+            }
+            GraphCanvasEvent::Expand => self.set_tray_expanded = true,
         }
     }
 
@@ -928,6 +1129,9 @@ impl UiState {
         self.song = session.song.clone();
         self.practice_history = session.practice_history.clone();
         self.app_settings = app_settings;
+        self.set_graph_positions.clear();
+        self.set_graph_relation = None;
+        self.related_relation = None;
         // The one bounded migration for sessions written before occurrence
         // identity: Cards gain ids, the legacy single-boolean edge toggle
         // becomes a relation set. Both persist on the next save, and both
@@ -1903,6 +2107,131 @@ mod evidence_tests {
         let mut ui = UiState::new();
         ui.stage_current(None);
         ui
+    }
+
+    #[test]
+    fn one_stage_snapshot_drives_compact_and_expanded_views() {
+        let mut ui = staged_set();
+        ui.stage_current(None);
+        let snapshot = set_graph_snapshot(&ui);
+        let compact = set_graph_swatch_from_snapshot(&snapshot, &ui, false);
+        let expanded = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
+
+        assert_eq!(
+            compact
+                .graph
+                .nodes
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            expanded
+                .graph
+                .nodes
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            compact
+                .relations
+                .iter()
+                .map(|relation| relation.id.as_str())
+                .collect::<Vec<_>>(),
+            expanded
+                .relations
+                .iter()
+                .map(|relation| relation.id.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert!(compact
+            .graph
+            .nodes
+            .iter()
+            .all(|node| node.id.epoch == snapshot.epoch()));
+        assert_ne!(
+            (compact.width, compact.height),
+            (expanded.width, expanded.height)
+        );
+    }
+
+    #[test]
+    fn stage_relation_activation_and_drag_stay_epoch_and_view_local() {
+        let mut ui = staged_set();
+        ui.stage_current(None);
+        let snapshot = set_graph_snapshot(&ui);
+        let instance = snapshot.items()[0].0;
+        let card = snapshot.card_of_ref(instance).unwrap();
+        let relation = snapshot.relations()[0].0;
+        let order = ui.set.cards.iter().map(|card| card.id).collect::<Vec<_>>();
+
+        ui.handle_set_graph_event(
+            &snapshot,
+            GraphCanvasEvent::RelationActivate(relation.key()),
+        );
+        assert_eq!(ui.set_graph_relation, Some(relation));
+
+        ui.handle_set_graph_event(
+            &snapshot,
+            GraphCanvasEvent::Drag(cambium::GraphCanvasNodeDrag {
+                id: instance,
+                phase: cambium::PointerPhase::Move,
+                position: (0.22, 0.78),
+            }),
+        );
+        assert_eq!(ui.set_graph_positions.get(&card), Some(&(0.22, 0.78)));
+        assert_eq!(
+            ui.set.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
+            order,
+            "view-local motion cannot reorder Set truth"
+        );
+        let swatch = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
+        assert_eq!(
+            swatch
+                .graph
+                .nodes
+                .iter()
+                .find(|node| node.id == instance)
+                .unwrap()
+                .position,
+            (0.22, 0.78)
+        );
+    }
+
+    #[test]
+    fn stage_scene_parallel_relations_reach_cambium_as_distinct_routes() {
+        let mut ui = UiState::new();
+        ui.stage.set_lens(Lens::Chords);
+        let major = ui
+            .stage
+            .chords()
+            .iter()
+            .position(|chord| chord.name == "Major")
+            .unwrap();
+        ui.stage.select_chord(major);
+        ui.stage_current(None);
+        let major_seven = ui
+            .stage
+            .chords()
+            .iter()
+            .position(|chord| chord.name == "Major 7")
+            .unwrap();
+        ui.stage.select_chord(major_seven);
+        ui.stage_current(None);
+
+        let snapshot = set_graph_snapshot(&ui);
+        let swatch = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
+        let routes = swatch.projected_relations();
+        assert!(routes.len() > 2, "sequence plus several catalog reasons");
+        let middles = routes
+            .iter()
+            .filter_map(|(_, route)| route.get(1).copied())
+            .map(|(x, y)| (x.to_bits(), y.to_bits()))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            middles.len(),
+            routes.len(),
+            "Cambium fans every relation cell onto its own visible route"
+        );
     }
 
     #[test]

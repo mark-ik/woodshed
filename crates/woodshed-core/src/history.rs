@@ -119,6 +119,16 @@ pub struct PracticeEvent {
     pub practiced_ms: Option<u64>,
 }
 
+/// One aggregated movement in the practice path. Catalog and history share
+/// the same ids, so this can join the material graph without copying nodes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PracticeTransition {
+    pub from_id: String,
+    pub to_id: String,
+    pub traversal_count: u64,
+    pub latest_at_ms: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct PracticeHistory {
     lineage: Lineage,
@@ -225,6 +235,26 @@ impl PracticeHistory {
             });
         }
         out
+    }
+
+    /// Aggregated directed movements through practice history. Stemma remains
+    /// the authority; this is the product-shaped projection a mere consumes.
+    pub fn transitions(&self) -> Vec<PracticeTransition> {
+        self.lineage
+            .aggregated_entry_edges()
+            .into_iter()
+            .filter_map(|edge| {
+                let from = self.lineage.entry(edge.from_entry)?;
+                let to = self.lineage.entry(edge.to_entry)?;
+                Some(PracticeTransition {
+                    from_id: from.key.clone(),
+                    to_id: to.key.clone(),
+                    traversal_count: edge.traversal_count,
+                    latest_at_ms: (edge.latest_transition_at_ms > 0)
+                        .then_some(edge.latest_transition_at_ms),
+                })
+            })
+            .collect()
     }
 
     /// Total measured practice on `subject_id`, milliseconds. An hour of

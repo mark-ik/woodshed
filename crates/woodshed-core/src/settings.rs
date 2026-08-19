@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use woodshedding::rehearsal::SetGraphEdgeKind;
 
+use crate::arrangement::GraphArrangement;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SettingsPage {
     #[default]
@@ -66,12 +68,40 @@ pub struct TuningSettings {
     pub tuning_idx: usize,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RelatedGraphScope {
+    Mere,
+    #[default]
+    Selection,
+}
+
+impl RelatedGraphScope {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mere => "Whole mere",
+            Self::Selection => "Selection",
+        }
+    }
+
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Mere => Self::Selection,
+            Self::Selection => Self::Mere,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RelatedSettings {
     pub use_history: bool,
     pub show_neighborhood: bool,
     pub dismissed_ids: Vec<String>,
+    /// Whether the swatch shows the joined whole mere or an N-depth
+    /// neighborhood around the current material.
+    pub graph_scope: RelatedGraphScope,
+    pub relation_depth: u8,
+    pub arrangement: GraphArrangement,
 }
 
 impl Default for RelatedSettings {
@@ -80,6 +110,9 @@ impl Default for RelatedSettings {
             use_history: true,
             show_neighborhood: true,
             dismissed_ids: Vec::new(),
+            graph_scope: RelatedGraphScope::Selection,
+            relation_depth: 1,
+            arrangement: GraphArrangement::Radial,
         }
     }
 }
@@ -88,6 +121,9 @@ impl Default for RelatedSettings {
 #[serde(default)]
 pub struct StageSettings {
     pub related: RelatedSettings,
+    /// Arrangement for the staged Set surface. The same ten-item catalog is
+    /// available to the joined-mere swatch above.
+    pub set_arrangement: GraphArrangement,
     /// Which projected relation families the Set graph draws. A set rather
     /// than a flag per family, so the harmonic, evidence, and suggestion
     /// layers join it by becoming members. Visibility is a view state: hiding
@@ -105,6 +141,7 @@ impl Default for StageSettings {
     fn default() -> Self {
         Self {
             related: RelatedSettings::default(),
+            set_arrangement: GraphArrangement::Snake,
             visible_set_relations: SetGraphEdgeKind::ALL.into_iter().collect(),
             show_set_sequence_edges: None,
         }
