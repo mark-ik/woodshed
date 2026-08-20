@@ -1,0 +1,43 @@
+# P4c performance receipt: deliver a captured node gesture one presented
+# frame at a time, so the host records the actual drag-frame pipeline rather
+# than draining a whole synthetic gesture in one turn.
+
+log P4c: frame-spaced Set graph drag performance
+settle 3
+act stage-related-pair
+settle 3
+assert snap graph-moved-nodes == 0
+
+act reset-dispatch-sync-counts
+press-stage-node 0
+settle 1
+move-stage-node 14 -4
+settle 1
+move-stage-node 28 -8
+settle 1
+move-stage-node 42 -12
+settle 1
+move-stage-node 56 -16
+settle 1
+move-stage-node 70 -20
+settle 1
+move-stage-node 84 -24
+settle 1
+move-stage-node 98 -26
+settle 1
+move-stage-node 110 -28
+settle 1
+release-stage-node 110 -28
+settle 3
+
+assert snap graph-drag-active == false
+assert snap graph-moved-nodes == 1
+assert snap view-only-dispatches >= 9
+assert snap full-dispatch-syncs == 1
+assert snap drag-present-samples >= 8
+assert snap drag-host-samples >= 8
+assert snap drag-root-rebuilds == 0
+assert snap drag-host-layout-rebuilds <= 1
+capture 01_frame_spaced_drag_released
+
+log P4c performance receipt complete

@@ -33,8 +33,14 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use cambium_genet_winit_host::{Frame, HostPointer, read_frame};
-use genet_probe::{Automatable, Driveable, ProbeSnapshot, ProbeSurface, Progress, Scenario};
-use woodshed_views::stage::UiState;
+use genet_probe::{
+    Automatable, AutomatableExt, Driveable, ProbeSnapshot, ProbeSurface, Progress, Scenario,
+    Selector,
+};
+use woodshed_core::Lens;
+use woodshed_views::stage::{
+    UiState, set_graph_relation_choices, set_graph_snapshot, set_graph_swatch_from_snapshot,
+};
 
 use crate::shared::Shared;
 use crate::sync::Ctx;
@@ -206,7 +212,10 @@ pub fn drive(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     // Hold the sentinel until every armed capture has actually been written, or
     // the receipt would claim a screenshot that does not exist.
     if progress == Progress::Done && PENDING.with(|p| p.borrow().is_none()) {
-        let outcome = scenario.finish();
+        let mut outcome = scenario.finish();
+        if shared.drag_frame_metrics.samples > 0 {
+            outcome.log.push(shared.drag_frame_metrics.summary());
+        }
         let capture_dir = shared.capture_dir.clone();
         if let Some(lane) = shared.scenario.as_mut() {
             lane.write_outcome(outcome, capture_dir.as_deref());
@@ -297,6 +306,25 @@ impl Probe<'_, '_> {
             })
             .unwrap_or_else(|| "none".to_string())
     }
+
+    fn stage_node_key(&self, index: usize) -> Option<String> {
+        let ui = self.ctx.runner.state();
+        let snapshot = set_graph_snapshot(ui);
+        set_graph_swatch_from_snapshot(&snapshot, ui, ui.set_tray_expanded)
+            .graph
+            .nodes
+            .get(index)
+            .and_then(|node| node.key.clone())
+    }
+
+    fn stage_relation_id(&self, index: usize) -> Option<String> {
+        let ui = self.ctx.runner.state();
+        let snapshot = set_graph_snapshot(ui);
+        set_graph_swatch_from_snapshot(&snapshot, ui, ui.set_tray_expanded)
+            .relations
+            .get(index)
+            .map(|relation| relation.id.clone())
+    }
 }
 
 impl Automatable for Probe<'_, '_> {
@@ -317,6 +345,10 @@ impl Automatable for Probe<'_, '_> {
     fn snapshot(&self) -> ProbeSnapshot {
         let ui = self.ctx.runner.state();
         let observed = Observed::read(ui);
+        let stage_snapshot = set_graph_snapshot(ui);
+        let stage_swatch =
+            set_graph_swatch_from_snapshot(&stage_snapshot, ui, ui.set_tray_expanded);
+        let relation_choices = set_graph_relation_choices(&stage_snapshot, ui);
         let cursor_label = ui
             .set
             .cursor_id()
@@ -330,6 +362,193 @@ impl Automatable for Probe<'_, '_> {
             .with_field("cursor-label", cursor_label.clone())
             .with_field("graph-nodes", ui.set.graph().nodes.len().to_string())
             .with_field("graph-edges", observed.edges.to_string())
+            .with_field("graph-relations", stage_swatch.relations.len().to_string())
+            .with_field(
+                "graph-visible-relations",
+                relation_choices
+                    .iter()
+                    .filter(|relation| relation.visible)
+                    .count()
+                    .to_string(),
+            )
+            .with_field("graph-relation-choices", relation_choices.len().to_string())
+            .with_field("graph-epoch", stage_snapshot.epoch().0.to_string())
+            .with_field("graph-drag-active", ui.set_graph_drag_active.to_string())
+            .with_field(
+                "graph-selected-relation",
+                ui.set_graph_relation.is_some().to_string(),
+            )
+            .with_field(
+                "graph-moved-nodes",
+                ui.set_graph_positions.len().to_string(),
+            )
+            .with_field(
+                "view-only-dispatches",
+                self.shared.view_only_dispatches.to_string(),
+            )
+            .with_field(
+                "full-dispatch-syncs",
+                self.shared.full_dispatch_syncs.to_string(),
+            )
+            .with_field(
+                "drag-present-samples",
+                self.shared.drag_frame_metrics.samples.to_string(),
+            )
+            .with_field(
+                "drag-present-average-us",
+                self.shared.drag_frame_metrics.average_us().to_string(),
+            )
+            .with_field(
+                "drag-present-max-us",
+                self.shared.drag_frame_metrics.max_us.to_string(),
+            )
+            .with_field(
+                "drag-viewport-us",
+                self.shared.drag_frame_metrics.viewport_us.to_string(),
+            )
+            .with_field(
+                "drag-drive-us",
+                self.shared.drag_frame_metrics.drive_us.to_string(),
+            )
+            .with_field(
+                "drag-leaves-us",
+                self.shared.drag_frame_metrics.leaves_us.to_string(),
+            )
+            .with_field(
+                "drag-root-rebuilds",
+                self.shared.drag_frame_metrics.root_rebuilds.to_string(),
+            )
+            .with_field(
+                "drag-host-samples",
+                self.shared.drag_frame_metrics.host_samples.to_string(),
+            )
+            .with_field(
+                "drag-host-average-us",
+                self.shared.drag_frame_metrics.host_average_us().to_string(),
+            )
+            .with_field(
+                "drag-host-max-us",
+                self.shared.drag_frame_metrics.host_max_us.to_string(),
+            )
+            .with_field(
+                "drag-host-relayout-us",
+                self.shared.drag_frame_metrics.host_relayout_us.to_string(),
+            )
+            .with_field(
+                "drag-host-layout-update-us",
+                self.shared
+                    .drag_frame_metrics
+                    .host_layout_update_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-layout-apply-us",
+                self.shared
+                    .drag_frame_metrics
+                    .host_layout_apply_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-layout-mutations",
+                self.shared
+                    .drag_frame_metrics
+                    .host_layout_mutations
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-layout-rebuilds",
+                self.shared
+                    .drag_frame_metrics
+                    .host_layout_rebuilds
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-leaf-boxes-us",
+                self.shared
+                    .drag_frame_metrics
+                    .host_leaf_boxes_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-leaf-render-us",
+                self.shared
+                    .drag_frame_metrics
+                    .host_leaf_render_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-leaf-repaints",
+                self.shared
+                    .drag_frame_metrics
+                    .host_leaf_repaints
+                    .to_string(),
+            )
+            .with_field(
+                "drag-host-fragments-us",
+                self.shared.drag_frame_metrics.host_fragments_us.to_string(),
+            )
+            .with_field(
+                "drag-host-emit-us",
+                self.shared.drag_frame_metrics.host_emit_us.to_string(),
+            )
+            .with_field(
+                "drag-host-raster-us",
+                self.shared.drag_frame_metrics.host_raster_us.to_string(),
+            )
+            .with_field(
+                "drag-host-acquire-us",
+                self.shared.drag_frame_metrics.host_acquire_us.to_string(),
+            )
+            .with_field(
+                "drag-host-clear-us",
+                self.shared.drag_frame_metrics.host_clear_us.to_string(),
+            )
+            .with_field(
+                "drag-host-compose-us",
+                self.shared.drag_frame_metrics.host_compose_us.to_string(),
+            )
+            .with_field(
+                "drag-host-present-us",
+                self.shared.drag_frame_metrics.host_present_us.to_string(),
+            )
+            .with_field(
+                "drag-host-a11y-us",
+                self.shared.drag_frame_metrics.host_a11y_us.to_string(),
+            )
+            .with_field(
+                "drag-raster-inner-us",
+                self.shared.drag_frame_metrics.raster_inner_us.to_string(),
+            )
+            .with_field(
+                "drag-raster-invalidate-us",
+                self.shared
+                    .drag_frame_metrics
+                    .tile_invalidate_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-raster-rebuild-us",
+                self.shared
+                    .drag_frame_metrics
+                    .dirty_tile_rebuild_us
+                    .to_string(),
+            )
+            .with_field(
+                "drag-raster-master-us",
+                self.shared.drag_frame_metrics.master_compose_us.to_string(),
+            )
+            .with_field(
+                "drag-raster-vello-us",
+                self.shared.drag_frame_metrics.vello_render_us.to_string(),
+            )
+            .with_field(
+                "drag-dirty-tiles",
+                self.shared.drag_frame_metrics.dirty_tiles.to_string(),
+            )
+            .with_field(
+                "drag-max-dirty-tiles",
+                self.shared.drag_frame_metrics.max_dirty_tiles.to_string(),
+            )
             .with_field("relations", observed.relations)
             .with_field("tray-expanded", ui.set_tray_expanded.to_string())
             .with_field("card-expanded", ui.set_graph_card_expanded.to_string())
@@ -425,9 +644,52 @@ impl Automatable for Probe<'_, '_> {
     }
 
     fn act(&mut self, label: &str) -> bool {
+        if label == "reset-dispatch-sync-counts" {
+            self.shared.view_only_dispatches = 0;
+            self.shared.full_dispatch_syncs = 0;
+            self.shared.drag_frame_metrics.reset();
+            self.shared.scenario_drag_origin = None;
+            return true;
+        }
         let mut known = true;
         self.ctx.runner.update(|ui| match label {
             "stage-current" => ui.stage_current(None),
+            "stage-related-pair" => {
+                ui.stage.set_lens(Lens::Chords);
+                if let Some(major) = ui
+                    .stage
+                    .chords()
+                    .iter()
+                    .position(|chord| chord.name == "Major")
+                {
+                    ui.stage.select_chord(major);
+                    ui.stage_current(None);
+                }
+                if let Some(major_seven) = ui
+                    .stage
+                    .chords()
+                    .iter()
+                    .position(|chord| chord.name == "Major 7")
+                {
+                    ui.stage.select_chord(major_seven);
+                    ui.stage_current(None);
+                }
+                ui.set_tray_expanded = true;
+            }
+            "hide-first-stage-relation" => {
+                let snapshot = set_graph_snapshot(ui);
+                if let Some(key) = set_graph_relation_choices(&snapshot, ui)
+                    .first()
+                    .map(|relation| relation.key.clone())
+                {
+                    ui.toggle_set_graph_relation(&snapshot, key);
+                }
+            }
+            "hide-all-stage-relations" => {
+                let snapshot = set_graph_snapshot(ui);
+                ui.hide_all_set_graph_relations(&snapshot);
+            }
+            "show-all-stage-relations" => ui.show_all_set_graph_relations(),
             "expand-tray" => ui.set_tray_expanded = true,
             "collapse-tray" => ui.set_tray_expanded = false,
             "duplicate-selected" => {
@@ -479,6 +741,141 @@ impl Automatable for Probe<'_, '_> {
 }
 
 impl Driveable for Probe<'_, '_> {
+    /// Stage-canvas receipt verbs resolve epoch-qualified identities from the
+    /// live snapshot, then use the ordinary host pointer lifecycle. This keeps
+    /// them distinct from the Related graph, which shares the same CSS classes.
+    fn app_step(&mut self, line: &str) -> Result<(), String> {
+        let mut parts = line.split_whitespace();
+        match parts.next() {
+            Some("click-stage-node") => {
+                let index: usize = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("click-stage-node wants a node index")?;
+                if parts.next().is_some() {
+                    return Err("click-stage-node takes one index".to_string());
+                }
+                let node_key = self
+                    .stage_node_key(index)
+                    .ok_or_else(|| format!("no Stage node at index {index}"))?;
+                let selector =
+                    Selector::class("graph-canvas-swatch-node").with_attr("data-key", node_key);
+                self.click(&selector)
+                    .then_some(())
+                    .ok_or_else(|| format!("click-stage-node missed index {index}"))
+            }
+            Some("click-stage-relation") => {
+                let index: usize = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("click-stage-relation wants a relation index")?;
+                if parts.next().is_some() {
+                    return Err("click-stage-relation takes one index".to_string());
+                }
+                let relation_id = self
+                    .stage_relation_id(index)
+                    .ok_or_else(|| format!("no Stage relation at index {index}"))?;
+                let selector = Selector::class("graph-canvas-swatch-relation")
+                    .with_attr("data-relation-id", relation_id);
+                self.click(&selector)
+                    .then_some(())
+                    .ok_or_else(|| format!("click-stage-relation missed index {index}"))
+            }
+            Some("drag-stage-node") => {
+                let index: usize = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("drag-stage-node wants a node index")?;
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("drag-stage-node wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("drag-stage-node wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("drag-stage-node takes exactly index, dx, and dy".to_string());
+                }
+                let node_key = self
+                    .stage_node_key(index)
+                    .ok_or_else(|| format!("no Stage node at index {index}"))?;
+                let selector =
+                    Selector::class("graph-canvas-swatch-node").with_attr("data-key", node_key);
+                let hit = self
+                    .resolve(&selector)
+                    .ok_or_else(|| format!("drag-stage-node missed index {index}"))?;
+                let start = hit.point;
+                let end = (start.0 + dx, start.1 + dy);
+                self.press(start.0, start.1);
+                self.moved((start.0 + end.0) * 0.5, (start.1 + end.1) * 0.5);
+                self.moved(end.0, end.1);
+                self.release(end.0, end.1);
+                Ok(())
+            }
+            Some("press-stage-node") => {
+                let index: usize = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("press-stage-node wants a node index")?;
+                if parts.next().is_some() {
+                    return Err("press-stage-node takes one index".to_string());
+                }
+                let node_key = self
+                    .stage_node_key(index)
+                    .ok_or_else(|| format!("no Stage node at index {index}"))?;
+                let selector =
+                    Selector::class("graph-canvas-swatch-node").with_attr("data-key", node_key);
+                let hit = self
+                    .resolve(&selector)
+                    .ok_or_else(|| format!("press-stage-node missed index {index}"))?;
+                self.shared.scenario_drag_origin = Some(hit.point);
+                self.press(hit.point.0, hit.point.1);
+                Ok(())
+            }
+            Some("move-stage-node") => {
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("move-stage-node wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("move-stage-node wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("move-stage-node takes x and y deltas".to_string());
+                }
+                let origin = self
+                    .shared
+                    .scenario_drag_origin
+                    .ok_or("move-stage-node has no pressed node")?;
+                self.moved(origin.0 + dx, origin.1 + dy);
+                Ok(())
+            }
+            Some("release-stage-node") => {
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("release-stage-node wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("release-stage-node wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("release-stage-node takes x and y deltas".to_string());
+                }
+                let origin = self
+                    .shared
+                    .scenario_drag_origin
+                    .take()
+                    .ok_or("release-stage-node has no pressed node")?;
+                self.release(origin.0 + dx, origin.1 + dy);
+                Ok(())
+            }
+            _ => Err(format!("unknown verb: {line}")),
+        }
+    }
+
     fn capture(&mut self, name: &str) -> bool {
         let Some(path) = self
             .shared

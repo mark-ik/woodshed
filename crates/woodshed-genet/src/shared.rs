@@ -23,6 +23,210 @@ use crate::midi::MidiHost;
 use crate::scenario::{Observed, ScenarioLane};
 use crate::storage::{HostBackend, open_store_as};
 
+/// Presented-frame timings gathered only while a Set-graph drag is active.
+/// The scenario receipt reads these, but the counters are also useful when a
+/// headed debug run needs to say which phase consumed its frame budget.
+#[derive(Default)]
+pub struct DragFrameMetrics {
+    pending: Option<(std::time::Instant, bool)>,
+    pub samples: u64,
+    pub total_us: u64,
+    pub max_us: u64,
+    pub viewport_us: u64,
+    pub drive_us: u64,
+    pub leaves_us: u64,
+    pub root_rebuilds: u64,
+    pub host_samples: u64,
+    pub host_total_us: u64,
+    pub host_max_us: u64,
+    pub host_relayout_us: u64,
+    pub host_layout_update_us: u64,
+    pub host_layout_tick_us: u64,
+    pub host_layout_apply_us: u64,
+    pub host_layout_rebuild_us: u64,
+    pub host_layout_mutations: u64,
+    pub host_layout_rebuilds: u64,
+    pub host_leaf_boxes_us: u64,
+    pub host_leaf_render_us: u64,
+    pub host_leaf_repaints: u64,
+    pub host_fragments_us: u64,
+    pub host_emit_us: u64,
+    pub host_raster_us: u64,
+    pub host_acquire_us: u64,
+    pub host_clear_us: u64,
+    pub host_compose_us: u64,
+    pub host_present_us: u64,
+    pub host_a11y_us: u64,
+    pub raster_inner_us: u64,
+    pub tile_invalidate_us: u64,
+    pub dirty_tile_rebuild_us: u64,
+    pub master_compose_us: u64,
+    pub vello_render_us: u64,
+    pub dirty_tiles: u64,
+    pub max_dirty_tiles: u64,
+}
+
+impl DragFrameMetrics {
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn begin(&mut self, drag_active: bool) {
+        self.pending = Some((std::time::Instant::now(), drag_active));
+    }
+
+    pub fn note_viewport(&mut self, elapsed: std::time::Duration, rebuilt: bool) {
+        if self.pending.is_some_and(|(_, drag)| drag) {
+            self.viewport_us = self.viewport_us.saturating_add(micros(elapsed));
+            self.root_rebuilds = self.root_rebuilds.saturating_add(u64::from(rebuilt));
+        }
+    }
+
+    pub fn note_drive(&mut self, elapsed: std::time::Duration, rebuilt: bool) {
+        if self.pending.is_some_and(|(_, drag)| drag) {
+            self.drive_us = self.drive_us.saturating_add(micros(elapsed));
+            self.root_rebuilds = self.root_rebuilds.saturating_add(u64::from(rebuilt));
+        }
+    }
+
+    pub fn note_leaves(&mut self, elapsed: std::time::Duration) {
+        if self.pending.is_some_and(|(_, drag)| drag) {
+            self.leaves_us = self.leaves_us.saturating_add(micros(elapsed));
+        }
+    }
+
+    pub fn finish(&mut self, profile: Option<cambium_genet_winit_host::FrameProfile>) {
+        let Some((started, drag_active)) = self.pending.take() else {
+            return;
+        };
+        if !drag_active {
+            return;
+        }
+        let elapsed = micros(started.elapsed());
+        self.samples = self.samples.saturating_add(1);
+        self.total_us = self.total_us.saturating_add(elapsed);
+        self.max_us = self.max_us.max(elapsed);
+        let Some(profile) = profile else {
+            return;
+        };
+        self.host_samples = self.host_samples.saturating_add(1);
+        self.host_total_us = self.host_total_us.saturating_add(profile.total_us);
+        self.host_max_us = self.host_max_us.max(profile.total_us);
+        self.host_relayout_us = self.host_relayout_us.saturating_add(profile.relayout_us);
+        self.host_layout_update_us = self
+            .host_layout_update_us
+            .saturating_add(profile.layout_update_us);
+        self.host_layout_tick_us = self
+            .host_layout_tick_us
+            .saturating_add(profile.layout_tick_us);
+        self.host_layout_apply_us = self
+            .host_layout_apply_us
+            .saturating_add(profile.layout_apply_us);
+        self.host_layout_rebuild_us = self
+            .host_layout_rebuild_us
+            .saturating_add(profile.layout_rebuild_us);
+        self.host_layout_mutations = self
+            .host_layout_mutations
+            .saturating_add(profile.layout_mutations);
+        self.host_layout_rebuilds = self
+            .host_layout_rebuilds
+            .saturating_add(u64::from(profile.layout_rebuilt));
+        self.host_leaf_boxes_us = self
+            .host_leaf_boxes_us
+            .saturating_add(profile.leaf_boxes_us);
+        self.host_leaf_render_us = self
+            .host_leaf_render_us
+            .saturating_add(profile.leaf_render_us);
+        self.host_leaf_repaints = self
+            .host_leaf_repaints
+            .saturating_add(profile.leaf_repaints);
+        self.host_fragments_us = self
+            .host_fragments_us
+            .saturating_add(profile.leaf_fragments_us);
+        self.host_emit_us = self.host_emit_us.saturating_add(profile.emit_scene_us);
+        self.host_raster_us = self.host_raster_us.saturating_add(profile.raster_us);
+        self.host_acquire_us = self.host_acquire_us.saturating_add(profile.acquire_us);
+        self.host_clear_us = self.host_clear_us.saturating_add(profile.clear_us);
+        self.host_compose_us = self.host_compose_us.saturating_add(profile.compose_us);
+        self.host_present_us = self.host_present_us.saturating_add(profile.present_us);
+        self.host_a11y_us = self.host_a11y_us.saturating_add(profile.a11y_us);
+        self.raster_inner_us = self.raster_inner_us.saturating_add(profile.raster_total_us);
+        self.tile_invalidate_us = self
+            .tile_invalidate_us
+            .saturating_add(profile.tile_invalidate_us);
+        self.dirty_tile_rebuild_us = self
+            .dirty_tile_rebuild_us
+            .saturating_add(profile.dirty_tile_rebuild_us);
+        self.master_compose_us = self
+            .master_compose_us
+            .saturating_add(profile.master_compose_us);
+        self.vello_render_us = self.vello_render_us.saturating_add(profile.vello_render_us);
+        self.dirty_tiles = self.dirty_tiles.saturating_add(profile.dirty_tiles);
+        self.max_dirty_tiles = self.max_dirty_tiles.max(profile.dirty_tiles);
+    }
+
+    pub fn average_us(&self) -> u64 {
+        if self.samples == 0 {
+            0
+        } else {
+            self.total_us / self.samples
+        }
+    }
+
+    pub fn host_average_us(&self) -> u64 {
+        if self.host_samples == 0 {
+            0
+        } else {
+            self.host_total_us / self.host_samples
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "drag frames={} avg={}us max={}us viewport={}us drive={}us leaves={}us root-rebuilds={} host-frames={} host-avg={}us host-max={}us relayout={}us layout-update={}us tick={}us apply={}us layout-rebuild={}us layout-mutations={} layout-rebuilds={} leaf-boxes={}us leaf-render={}us leaf-repaints={} fragments={}us emit={}us raster={}us acquire={}us clear={}us compose={}us present={}us a11y={}us raster-inner={}us invalidate={}us rebuild={}us master={}us vello={}us dirty-tiles={} max-dirty-tiles={}",
+            self.samples,
+            self.average_us(),
+            self.max_us,
+            self.viewport_us,
+            self.drive_us,
+            self.leaves_us,
+            self.root_rebuilds,
+            self.host_samples,
+            self.host_average_us(),
+            self.host_max_us,
+            self.host_relayout_us,
+            self.host_layout_update_us,
+            self.host_layout_tick_us,
+            self.host_layout_apply_us,
+            self.host_layout_rebuild_us,
+            self.host_layout_mutations,
+            self.host_layout_rebuilds,
+            self.host_leaf_boxes_us,
+            self.host_leaf_render_us,
+            self.host_leaf_repaints,
+            self.host_fragments_us,
+            self.host_emit_us,
+            self.host_raster_us,
+            self.host_acquire_us,
+            self.host_clear_us,
+            self.host_compose_us,
+            self.host_present_us,
+            self.host_a11y_us,
+            self.raster_inner_us,
+            self.tile_invalidate_us,
+            self.dirty_tile_rebuild_us,
+            self.master_compose_us,
+            self.vello_render_us,
+            self.dirty_tiles,
+            self.max_dirty_tiles,
+        )
+    }
+}
+
+fn micros(elapsed: std::time::Duration) -> u64 {
+    elapsed.as_micros().min(u64::MAX as u128) as u64
+}
+
 /// The application's own state, beside the host's.
 pub struct Shared {
     /// The W0.1 audio seam: cpal on desktop, Web Audio on the web host.
@@ -76,6 +280,14 @@ pub struct Shared {
     pub events: Vec<String>,
     /// The last sampled observation, for diffing into `events`.
     pub observed: Observed,
+    /// Dispatch-tail diagnostics used by the headed interaction receipts.
+    /// View-only graph motion must outnumber the one full sync at release.
+    pub view_only_dispatches: u64,
+    pub full_dispatch_syncs: u64,
+    /// Per-presented-frame drag timings and the live origin used by the
+    /// frame-spaced scenario pointer verbs.
+    pub drag_frame_metrics: DragFrameMetrics,
+    pub scenario_drag_origin: Option<(f32, f32)>,
 }
 
 impl Shared {
@@ -110,6 +322,10 @@ impl Shared {
             capture_dir: ScenarioLane::capture_dir_from_env(),
             events: Vec::new(),
             observed: Observed::default(),
+            view_only_dispatches: 0,
+            full_dispatch_syncs: 0,
+            drag_frame_metrics: DragFrameMetrics::default(),
+            scenario_drag_origin: None,
         }))
     }
 

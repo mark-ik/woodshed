@@ -34,7 +34,8 @@ use sceno::{
 };
 use scenotime::{RelationId, Revision, SceneEpoch, SceneSnapshot};
 use woodshed_graph::{
-    chord_id, exercise_id, relations_between, scale_id, MaterialRelation, RelationKind,
+    chord_id, exercise_id, relations_between, scale_id, MaterialRelation, RelationAuthority,
+    RelationKind,
 };
 use woodshedding::rehearsal::{CardId, Material, Set};
 
@@ -120,6 +121,39 @@ pub struct StageRelationRef {
     pub relation: RelationId,
 }
 
+/// Stable, view-local identity for one derivable relation between staged
+/// occurrences. Unlike [`StageRelationRef`], this survives a new dense scene
+/// epoch: occurrence ids and the open relation kind carry the semantic key.
+/// It is suitable for visibility preferences, never for changing relation
+/// truth.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StageRelationKey {
+    pub from: CardId,
+    pub to: CardId,
+    pub kind: String,
+}
+
+impl StageRelationKey {
+    /// A DOM/scenario-safe diagnostic key. Consumers should retain the typed
+    /// value when they can; this string is only an adapter at text boundaries.
+    pub fn wire_key(&self) -> String {
+        format!("{}:{}:{}", self.from.0, self.to.0, self.kind)
+    }
+}
+
+/// Human-facing disclosure for one routed Stage relation. The route remains
+/// in Scenograph; this record restores the Woodshed meaning the product UI is
+/// responsible for explaining.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StageRelationDetail {
+    pub reference: StageRelationRef,
+    pub key: StageRelationKey,
+    pub label: String,
+    pub explanation: String,
+    pub authority: &'static str,
+    pub weight: u16,
+}
+
 impl StageRelationRef {
     pub fn key(self) -> String {
         format!("{}:{}", self.epoch.0, self.relation.0)
@@ -175,6 +209,55 @@ impl StageGraphSnapshot {
         (reference.epoch == self.epoch())
             .then(|| self.snapshot.active_relation(reference.relation))
             .flatten()
+    }
+
+    /// Stable semantic identity for a relation in this snapshot.
+    pub fn relation_key(&self, reference: StageRelationRef) -> Option<StageRelationKey> {
+        let relation = self.relation(reference)?;
+        Some(StageRelationKey {
+            from: self.card_of(relation.from)?,
+            to: self.card_of(relation.to)?,
+            kind: relation.kind.clone().unwrap_or_else(|| "relation".into()),
+        })
+    }
+
+    /// Explain one relation using the owning Woodshed layer. Set sequence is
+    /// authored Set truth; catalog relations recover their typed reason and
+    /// authority from `woodshed-graph` rather than asking the scene to carry
+    /// product vocabulary.
+    pub fn relation_detail(
+        &self,
+        reference: StageRelationRef,
+        set: &Set,
+    ) -> Option<StageRelationDetail> {
+        let key = self.relation_key(reference)?;
+        if key.kind == SEQUENCE_KIND {
+            return Some(StageRelationDetail {
+                reference,
+                key,
+                label: "sequence".into(),
+                explanation: "Earlier card precedes later card in this Set.".into(),
+                authority: "Set",
+                weight: 100,
+            });
+        }
+
+        let reason = self
+            .reasons(key.from, key.to, set)
+            .into_iter()
+            .find(|reason| relation_slug(reason.kind) == key.kind)?;
+        Some(StageRelationDetail {
+            reference,
+            key,
+            label: reason.kind.label().into(),
+            explanation: reason.explanation,
+            authority: match reason.authority {
+                RelationAuthority::Catalog => "Catalog",
+                RelationAuthority::Computed => "Computed",
+                RelationAuthority::Evidence => "Evidence",
+            },
+            weight: reason.weight,
+        })
     }
 
     pub fn items(&self) -> Vec<(StageInstanceRef, &ProjectedItem)> {
@@ -566,6 +649,18 @@ mod tests {
         )
     }
 
+    fn item_source_count(snapshot: &StageGraphSnapshot) -> usize {
+        snapshot
+            .snapshot
+            .tables
+            .items
+            .iter()
+            .flatten()
+            .map(|item| item.source)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
+
     #[test]
     fn each_staged_occurrence_is_its_own_instance() {
         let set = set_of(&[("one", chord("Major")), ("two", chord("Major"))]);
@@ -577,9 +672,9 @@ mod tests {
             "two occurrences, two items"
         );
         assert_eq!(
-            snapshot.snapshot.tables.sources.iter().flatten().count(),
+            item_source_count(&snapshot),
             1,
-            "one material, interned once"
+            "one material, interned once; the Stage floor is a backdrop source"
         );
         assert_eq!(
             snapshot.snapshot.active_item(InstanceId(0)).unwrap().source,
@@ -684,6 +779,50 @@ mod tests {
     }
 
     #[test]
+    fn relation_inventory_keys_survive_dense_scene_epochs() {
+        let set = set_of(&[("plain", chord("Major")), ("seventh", chord("Major 7"))]);
+        let snake = stage_scene(&set, &StageSceneOptions::default());
+        let circle = stage_scene(
+            &set,
+            &StageSceneOptions {
+                arrangement: GraphArrangement::Circle,
+                ..StageSceneOptions::default()
+            },
+        );
+        assert_ne!(snake.epoch(), circle.epoch());
+
+        let details = |snapshot: &StageGraphSnapshot| {
+            snapshot
+                .relations()
+                .into_iter()
+                .map(|(reference, _)| snapshot.relation_detail(reference, &set).unwrap())
+                .collect::<Vec<_>>()
+        };
+        let snake_details = details(&snake);
+        let circle_details = details(&circle);
+        assert_eq!(
+            snake_details
+                .iter()
+                .map(|detail| detail.key.clone())
+                .collect::<Vec<_>>(),
+            circle_details
+                .iter()
+                .map(|detail| detail.key.clone())
+                .collect::<Vec<_>>(),
+            "view-local visibility keys do not inherit dense table identity"
+        );
+        assert!(snake_details.iter().all(|detail| {
+            !detail.label.is_empty()
+                && !detail.explanation.is_empty()
+                && !detail.authority.is_empty()
+                && detail.weight > 0
+        }));
+        assert!(snake_details
+            .iter()
+            .any(|detail| detail.authority == "Set" && detail.key.kind == SEQUENCE_KIND));
+    }
+
+    #[test]
     fn a_relation_filter_is_a_view_operation() {
         let set = set_of(&[("plain", chord("Major")), ("seventh", chord("Major 7"))]);
         let only_tones = stage_scene(
@@ -727,9 +866,9 @@ mod tests {
 
         assert_eq!(snapshot.snapshot.active_item_count(), 2);
         assert_eq!(
-            snapshot.snapshot.tables.sources.iter().flatten().count(),
+            item_source_count(&snapshot),
             2,
-            "a path carries its own content, so it interns its own source"
+            "a path carries its own content, so the two items use two sources"
         );
         let catalog = snapshot
             .snapshot

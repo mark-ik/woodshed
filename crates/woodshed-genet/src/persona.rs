@@ -11,10 +11,10 @@
 //! existed. What is left is the one case the convention cannot decide: several
 //! personas, none of them chosen.
 
+use persona_picker::PickerEvent;
 use personae::bootstrap::{self, Unlock};
 use personae::roster::{self, Roster};
 use personae::vault::ProfileId;
-use persona_picker::PickerEvent;
 use woodshed_views::persona::{PersonaPick, PickPurpose};
 
 use crate::shared::Shared;
@@ -60,6 +60,22 @@ pub fn roster_now() -> Result<Roster, personae::IdentityError> {
 /// skin, persistence) sees the restored session in the same beat the choice
 /// lands, rather than one frame later.
 pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
+    // Most dispatches have nothing to do with the persona gate. Avoid a
+    // `Runner::update` in that common case: even an empty update rebuilds the
+    // retained root, which used to add a full rebuild to every graph-drag
+    // sample before the storage/audio tail ran.
+    let has_work = {
+        let ui = ctx.runner.state();
+        ui.persona_switch_requested
+            || ui
+                .persona
+                .as_ref()
+                .is_some_and(|pick| pick.outcome.is_some())
+    };
+    if !has_work {
+        return;
+    }
+
     let mut answer = None;
     let mut purpose = PickPurpose::Startup;
     let mut requested = false;
@@ -194,7 +210,6 @@ pub fn seed(shared: &mut Shared, ui: &mut woodshed_views::stage::UiState) {
     ui.persona = shared.pending_roster.take().map(PersonaPick::new);
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,7 +245,11 @@ mod tests {
         let dir = vault(&["work", "alt"]);
         let roster = pending_roster_at(dir.path(), unlock()).expect("the gate must open");
         assert_eq!(roster.entries.len(), 2);
-        assert_eq!(roster.description.is_empty(), false, "the vault says what protects it");
+        assert_eq!(
+            roster.description.is_empty(),
+            false,
+            "the vault says what protects it"
+        );
     }
 
     #[test]
@@ -288,7 +307,11 @@ mod tests {
         std::env::remove_var(roster::PROFILE_ENV);
         let dir = vault(&["work", "alt", "burner"]);
         let roster = pending_roster_at(dir.path(), unlock()).expect("the gate must open");
-        let ids: Vec<&str> = roster.entries.iter().map(|entry| entry.id.0.as_str()).collect();
+        let ids: Vec<&str> = roster
+            .entries
+            .iter()
+            .map(|entry| entry.id.0.as_str())
+            .collect();
         // Sorted by id, so the list does not reorder itself between runs.
         assert_eq!(ids, ["alt", "burner", "work"]);
     }
@@ -331,7 +354,9 @@ mod tests {
         // able to find it through identity the DOM carries.
         let harness = gated_harness(two_persona_roster());
         assert!(
-            harness.resolve(&Selector::class("command-picker")).is_some(),
+            harness
+                .resolve(&Selector::class("command-picker"))
+                .is_some(),
             "the picker itself must resolve"
         );
         assert!(
@@ -419,7 +444,11 @@ mod tests {
             harness.click_on(&Selector::class("command-item").with_attr("data-key", "work")),
             "the row must be clickable where the driver found it"
         );
-        let pick = harness.state().persona.as_ref().expect("the gate is still up");
+        let pick = harness
+            .state()
+            .persona
+            .as_ref()
+            .expect("the gate is still up");
         assert_eq!(
             pick.outcome,
             Some(PickerEvent::Chose(ProfileId("work".into()))),
@@ -450,7 +479,10 @@ mod tests {
         // focus": what matters is that the arrows and Enter do something on the
         // first press, with no Tab in front of them.
         let mut harness = gated_harness(two_persona_roster());
-        assert!(harness.focus().is_some(), "the picker took the caret unasked");
+        assert!(
+            harness.focus().is_some(),
+            "the picker took the caret unasked"
+        );
 
         // Rows are sorted by id, so selection starts on `alt` and one step down
         // is `work`.
@@ -458,7 +490,11 @@ mod tests {
         harness.key_named(NamedKey::Enter);
         harness.relayout();
 
-        let pick = harness.state().persona.as_ref().expect("the host clears it");
+        let pick = harness
+            .state()
+            .persona
+            .as_ref()
+            .expect("the host clears it");
         assert_eq!(
             pick.outcome,
             Some(PickerEvent::Chose(ProfileId("work".into()))),
@@ -474,7 +510,11 @@ mod tests {
         let mut harness = gated_harness(two_persona_roster());
         harness.key_named(NamedKey::Escape);
         harness.relayout();
-        let pick = harness.state().persona.as_ref().expect("the host clears it, not the view");
+        let pick = harness
+            .state()
+            .persona
+            .as_ref()
+            .expect("the host clears it, not the view");
         assert_eq!(
             pick.outcome,
             Some(PickerEvent::Dismissed),
@@ -498,7 +538,11 @@ mod tests {
         let opened = bootstrap::open_storage(dir.path(), unlock()).expect("reopen vault");
         let roster = roster::read_roster(&*opened.storage, dir.path(), opened.description)
             .expect("the switch reads the roster regardless");
-        assert_eq!(roster.entries.len(), 2, "both personas are offered to switch to");
+        assert_eq!(
+            roster.entries.len(),
+            2,
+            "both personas are offered to switch to"
+        );
     }
 
     /// The hazard P2 introduces that P1 could not have: at startup the state
@@ -607,6 +651,9 @@ mod tests {
         let opened = roster::open_profile(dir.path(), unlock(), &ProfileId("alt".into()))
             .expect("open on the chosen persona");
         assert_eq!(opened.profile.0, "alt");
-        assert!(!opened.created, "an existing persona is loaded, never re-minted");
+        assert!(
+            !opened.created,
+            "an existing persona is loaded, never re-minted"
+        );
     }
 }

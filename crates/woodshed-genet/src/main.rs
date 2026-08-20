@@ -39,11 +39,11 @@ use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
 use cambium_genet_winit_host::{
-    run, HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands,
+    HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands, run,
 };
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
-use woodshed_views::stage::{stage_root, UiChild, UiState};
+use woodshed_views::stage::{UiChild, UiState, ViewportClass, stage_root};
 
 use crate::audio::CpalBackend;
 use crate::shared::Shared;
@@ -170,16 +170,22 @@ fn boot_state(
 }
 
 /// Refresh the shared view's transient width band after a resize or DPI change.
-/// The view only rebuilds when crossing a band boundary, so this is cheap to run
-/// every frame — and running it every frame is what lets the host stay ignorant
-/// of the application's viewport shape.
-fn sync_viewport(ctx: &mut Ctx<'_>) {
+/// Returns whether the retained root actually needed rebuilding.
+fn sync_viewport(ctx: &mut Ctx<'_>) -> bool {
     let (width, height) = ctx.logical_size;
+    let changed = {
+        let ui = ctx.runner.state();
+        ui.viewport != ViewportClass::for_width(width) || (ui.viewport_h - height).abs() >= 16.0
+    };
+    if !changed {
+        return false;
+    }
     ctx.runner.update(|ui| {
         // `|` not `||`: both must run, and either change needs a rebuild (the
         // height bounds a vertical board's scroll viewport).
         let _ = ui.set_viewport_width(width) | ui.set_viewport_height(height);
     });
+    true
 }
 
 /// What Escape means, window-wide.
@@ -220,13 +226,33 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
     HostHooks {
         frame: Box::new(move |ctx: &mut Ctx<'_>| {
             let mut shared = frame_shared.borrow_mut();
-            sync_viewport(ctx);
+            let drag_active = ctx.runner.state().set_graph_drag_active;
+            shared.drag_frame_metrics.begin(drag_active);
+            let phase = std::time::Instant::now();
+            let viewport_rebuilt = sync_viewport(ctx);
+            shared
+                .drag_frame_metrics
+                .note_viewport(phase.elapsed(), viewport_rebuilt);
             let mut animating = false;
-            ctx.runner
-                .update(|ui| animating = drive::frame(&mut shared, ui));
+            let phase = std::time::Instant::now();
+            let drive_rebuilt =
+                !drag_active || drive::requires_live_frame(&shared, ctx.runner.state());
+            if drive_rebuilt {
+                ctx.runner
+                    .update(|ui| animating = drive::frame(&mut shared, ui));
+            }
+            shared
+                .drag_frame_metrics
+                .note_drive(phase.elapsed(), drive_rebuilt);
             let (out_enabled, out_playing, out_bpm) = drive::clock_out(ctx.runner.state());
             shared.midi.set_clock_out(out_enabled, out_playing, out_bpm);
-            leaves::sync_all(&mut shared, ctx.runner.state(), ctx.leaves);
+            let phase = std::time::Instant::now();
+            if drag_active && !drive_rebuilt {
+                leaves::sync_set_graph(&mut shared, ctx.runner.state(), ctx.leaves);
+            } else {
+                leaves::sync_all(&mut shared, ctx.runner.state(), ctx.leaves);
+            }
+            shared.drag_frame_metrics.note_leaves(phase.elapsed());
             animating
         }),
         after_dispatch: Box::new(move |ctx: &mut Ctx<'_>| {
@@ -235,6 +261,7 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
         }),
         after_frame: Box::new(move |ctx: &mut Ctx<'_>| {
             let mut shared = after_frame_shared.borrow_mut();
+            shared.drag_frame_metrics.finish(ctx.frame_profile);
             scenario::drive(&mut shared, ctx);
         }),
         after_wake: Box::new(|_ctx| {}),

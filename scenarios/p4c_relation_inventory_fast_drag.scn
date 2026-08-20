@@ -1,0 +1,43 @@
+# P4c follow-up receipt: every derivable relation remains in the scene while the user
+# chooses which edges this graph view presents. The same headed route proves a
+# captured graph drag takes the view-only dispatch tail until release.
+
+log P4c: relation inventory and fast graph drag
+settle 3
+
+act stage-related-pair
+settle 3
+assert snap graph-relations >= 3
+assert snap graph-relation-choices >= 3
+assert snap graph-visible-relations >= 3
+capture 01_all_relations_available
+
+act hide-first-stage-relation
+settle 2
+assert snap graph-relations >= 3
+assert snap graph-relation-choices >= 3
+assert snap graph-visible-relations >= 2
+capture 02_one_relation_withheld
+
+act hide-all-stage-relations
+settle 2
+assert snap graph-relations >= 3
+assert snap graph-relation-choices >= 3
+assert snap graph-visible-relations == 0
+capture 03_all_relations_withheld
+
+act show-all-stage-relations
+settle 2
+assert snap graph-visible-relations >= 3
+assert snap graph-moved-nodes == 0
+
+act reset-dispatch-sync-counts
+drag-stage-node 0 110 -28
+settle 3
+assert snap graph-drag-active == false
+assert snap graph-moved-nodes == 1
+assert snap view-only-dispatches >= 3
+assert snap full-dispatch-syncs == 1
+capture 04_fast_drag_released
+
+log P4c relation-inventory receipt complete

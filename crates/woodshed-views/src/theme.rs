@@ -334,6 +334,7 @@ pub fn stage_css(p: &Palette) -> String {
 /* Cambium graph-canvas-swatch: the painted leaf shows the nodes and emphasis;
    the buttons are transparent hit targets. A small quiet Expand button. */
 .graph-canvas-swatch-node {{ background-color: transparent; border-width: 0; cursor: pointer; }}
+.graph-canvas-swatch-relation {{ background-color: transparent; border-width: 0; padding: 0; cursor: pointer; }}
 .graph-canvas-swatch-expand {{ background-color: {surface}; color: {text_dim}; border-width: 0; border-radius: 4px; font-size: 10px; padding: 2px 5px; cursor: pointer; }}
 .graph-canvas-swatch-expand:hover {{ color: {text}; }}
 .related-history {{ margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 1px; border-bottom-color: {surface_2}; }}
@@ -353,7 +354,19 @@ pub fn stage_css(p: &Palette) -> String {
 .set-graph-heading {{ color: {text_dim}; font-size: 10px; width: 100%; text-transform: uppercase; }}
 /* The swatch paints node labels past its own box, so a control beside it gets
    overdrawn (seen in the P4a receipt). Give the controls their own row. */
+.set-graph-relation {{ width: 100%; color: {text_dim}; font-size: 11px; }}
 .set-graph-controls {{ width: 100%; display: flex; gap: 8px; }}
+.set-relation-inventory {{ width: 100%; border-top-width: 1px; border-top-color: {surface_2}; padding-top: 8px; }}
+.set-relation-toolbar {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
+.set-relation-heading {{ color: {text}; font-size: 11px; font-weight: 700; margin-right: auto; }}
+.set-relation-list {{ max-height: 184px; overflow-y: auto; }}
+.set-relation-row {{ display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom-width: 1px; border-bottom-color: {surface_2}; }}
+.set-relation-toggle {{ flex: 0 0 52px; background-color: {surface_2}; color: {text_dim}; border-width: 0; border-radius: 4px; padding: 4px 5px; font-size: 10px; text-align: center; cursor: pointer; }}
+.set-relation-toggle-on {{ background-color: {tertiary}; color: {on_primary}; }}
+.set-relation-copy {{ flex: 1; min-width: 0; }}
+.set-relation-pair {{ color: {text}; font-size: 11px; }}
+.set-relation-kind {{ color: {text_dim}; font-size: 10px; margin-top: 2px; }}
+.set-relation-explanation {{ color: {text_dim}; font-size: 10px; margin-top: 2px; }}
 .set-toolbar {{ display: flex; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }}
 .set-heading {{ color: {text}; font-size: 15px; font-weight: 700; margin-right: auto; padding-right: 10px; }}
 .set-cards {{ display: flex; flex-wrap: wrap; }}

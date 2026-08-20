@@ -11,6 +11,24 @@ use woodshed_views::stage::UiState;
 
 use crate::shared::Shared;
 
+/// Whether a graph drag still needs the full time-driven state pass.
+///
+/// Pointer dispatch has already rebuilt the retained tree for the moved node.
+/// A static practice surface can therefore paint that result directly. Live
+/// audio, transport, calibration, and MIDI surfaces still need their ordinary
+/// frame updates while the pointer is held.
+pub fn requires_live_frame(shared: &Shared, ui: &UiState) -> bool {
+    ui.tuner.enabled
+        || ui.song_playing
+        || ui.rehearsal_running
+        || ui.stage.arpeggio_playing
+        || ui.stage.exercise_playing
+        || ui.stage.scale_run_playing
+        || ui.calib_active
+        || (shared.midi.connected_input().is_some()
+            && (ui.midi.clock_slave || ui.section == woodshed_core::storage::AppSection::Settings))
+}
+
 /// Advance the live clocks against `ui`. Returns `true` while something is
 /// animating.
 pub fn frame(shared: &mut Shared, ui: &mut UiState) -> bool {

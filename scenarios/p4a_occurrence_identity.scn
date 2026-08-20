@@ -26,9 +26,9 @@ assert snap graph-nodes == 3
 assert snap graph-edges == 2
 capture 01_three_occurrences
 
-# Select the second occurrence through the identity the DOM carries, not by
-# position and not by its (duplicated) label.
-click .graph-canvas-swatch-node @data-key=set-card-2
+# Resolve the second occurrence through the SceneSnapshot identity the DOM
+# carries, then click its epoch-qualified target through the host pointer path.
+click-stage-node 1
 settle 2
 assert snap cursor-id == 2
 assert snap cursor-number == 2

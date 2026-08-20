@@ -175,3 +175,42 @@ ipc-channel = { git = "https://github.com/merely-made/genet.git", branch = "main
 # from genet or netrender, so every app workspace restates it. Retires by
 # deletion when upstream ships a wgpu-30 vello.
 vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-30" }
+
+# The app remains an ordinary debuggable dev build, but the retained UI and
+# renderer beneath it are runtime infrastructure. At opt-level 0 a headed
+# 2464x1504 drag receipt spends tens of milliseconds per presented frame in
+# this stack after Woodshed's own work has fallen below one millisecond. Keep
+# the application crates quick to rebuild while compiling the hot layout,
+# paint, and GPU submission path as the code it is meant to exercise.
+[profile.dev.package.cambium]
+opt-level = 2
+[profile.dev.package.cambium-rootstock]
+opt-level = 2
+[profile.dev.package.genet-layout]
+opt-level = 2
+[profile.dev.package.genet-render-host]
+opt-level = 2
+[profile.dev.package.genet-scripted-dom]
+opt-level = 2
+[profile.dev.package.genet-stylo]
+opt-level = 2
+[profile.dev.package.netrender]
+opt-level = 2
+[profile.dev.package.netrender_device]
+opt-level = 2
+[profile.dev.package.paint_list_api]
+opt-level = 2
+[profile.dev.package.paint_list_render]
+opt-level = 2
+[profile.dev.package.sprigging]
+opt-level = 2
+[profile.dev.package.vello]
+opt-level = 2
+[profile.dev.package.vello_encoding]
+opt-level = 2
+[profile.dev.package.wgpu]
+opt-level = 2
+[profile.dev.package.wgpu-core]
+opt-level = 2
+[profile.dev.package.wgpu-hal]
+opt-level = 2

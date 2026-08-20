@@ -35,6 +35,17 @@ pub fn after_dispatch(shared: &mut Shared, ctx: &mut Ctx<'_>) {
     // First, so that everything below sees the session the chosen persona
     // unsealed rather than the empty one that stood in for it.
     crate::persona::after_dispatch(shared, ctx);
+    // Graph motion changes only transient projection state. Pointer Down and
+    // Move leave this set; Up clears it before this hook and therefore runs the
+    // ordinary tail once. Skipping here avoids three retained-root rebuilds,
+    // two serializations, audio/MIDI polling, and two synchronous store writes
+    // for every sampled position while preserving the existing commit path at
+    // gesture release.
+    if ctx.runner.state().set_graph_drag_active {
+        shared.view_only_dispatches = shared.view_only_dispatches.saturating_add(1);
+        return;
+    }
+    shared.full_dispatch_syncs = shared.full_dispatch_syncs.saturating_add(1);
     push_backend(shared, ctx);
     // Window verbs used to be drained here from four `UiState` flags. The
     // host owns them now: the caption buttons call `WindowCommands` directly

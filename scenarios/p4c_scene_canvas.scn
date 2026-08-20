@@ -1,0 +1,39 @@
+# P4c receipt: one Stage scene drives both graph views and real interaction.
+#
+# Major and Major 7 carry the sequence relation plus several computed catalog
+# relations. The receipt activates one routed cell and drags one rendered node
+# through the host pointer queue before collapsing the same scene projection.
+
+log P4c: Stage scene canvas, relation activation, and node drag
+settle 3
+
+act stage-related-pair
+settle 3
+assert snap set-cards == 2
+assert snap tray-expanded == true
+assert snap graph-nodes == 2
+assert snap graph-relations >= 3
+capture 01_expanded_fanned_relations
+
+click-stage-relation 0
+settle 2
+assert snap graph-selected-relation == true
+capture 02_relation_activated
+
+drag-stage-node 0 110 -28
+settle 3
+assert snap graph-moved-nodes == 1
+assert snap set-cards == 2
+assert snap graph-nodes == 2
+capture 03_node_dragged
+
+act collapse-tray
+settle 3
+assert snap tray-expanded == false
+assert snap graph-nodes == 2
+assert snap graph-relations >= 3
+assert snap graph-selected-relation == false
+assert snap graph-moved-nodes == 1
+capture 04_compact_same_scene
+
+log P4c receipt complete

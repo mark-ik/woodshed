@@ -5,7 +5,10 @@ use cambium::{
     GraphCanvasEvent, clickable, el, graph_canvas, map_state, text, text_field,
 };
 
-use super::{set_graph_snapshot, set_graph_swatch_from_snapshot, UiChild, UiState};
+use super::{
+    set_graph_relation_choices, set_graph_snapshot, set_graph_swatch_from_snapshot, UiChild,
+    UiState,
+};
 
 /// Label for one relation family's visibility toggle. The family is named, so
 /// adding the harmonic or evidence layer reads as another entry rather than a
@@ -183,13 +186,112 @@ pub(super) fn view(ui: &UiState) -> UiChild {
             ui.handle_set_graph_event(&event_snapshot, event);
         },
     );
+    let relation_choices = set_graph_relation_choices(&snapshot, ui);
+    let visible_relations = relation_choices
+        .iter()
+        .filter(|relation| relation.visible)
+        .count();
+    let relation_rows: Vec<UiChild> = relation_choices
+        .iter()
+        .cloned()
+        .map(|choice| {
+            let key = choice.key.clone();
+            let wire_key = key.wire_key();
+            let toggle_snapshot = snapshot.clone();
+            let toggle_class = if choice.visible {
+                "set-relation-toggle set-relation-toggle-on"
+            } else {
+                "set-relation-toggle"
+            };
+            Box::new(
+                el(
+                    "div",
+                    (
+                        clickable(
+                            el(
+                                "div",
+                                text(if choice.visible { "Shown" } else { "Hidden" }),
+                            )
+                            .attr("class", toggle_class)
+                            .attr("aria-pressed", choice.visible.to_string()),
+                            move |ui: &mut UiState, _| {
+                                ui.toggle_set_graph_relation(&toggle_snapshot, key.clone());
+                            },
+                        ),
+                        el(
+                            "div",
+                            (
+                                el("div", text(choice.pair))
+                                    .attr("class", "set-relation-pair"),
+                                el(
+                                    "div",
+                                    text(format!(
+                                        "{} · {} · {}%",
+                                        choice.relation, choice.authority, choice.weight
+                                    )),
+                                )
+                                .attr("class", "set-relation-kind"),
+                                el("div", text(choice.explanation))
+                                    .attr("class", "set-relation-explanation"),
+                            ),
+                        )
+                        .attr("class", "set-relation-copy"),
+                    ),
+                )
+                .attr("class", "set-relation-row")
+                .attr("data-relation-key", wire_key),
+            ) as UiChild
+        })
+        .collect();
+    let hide_snapshot = snapshot.clone();
+    let relation_inventory: UiChild = Box::new(
+        el(
+            "div",
+            (
+                el(
+                    "div",
+                    (
+                        el(
+                            "div",
+                            text(format!(
+                                "Relations · {visible_relations} of {} shown",
+                                relation_choices.len()
+                            )),
+                        )
+                        .attr("class", "set-relation-heading"),
+                        clickable(
+                            el("div", text("Show all")).attr("class", "t-btn"),
+                            |ui: &mut UiState, _| ui.show_all_set_graph_relations(),
+                        ),
+                        clickable(
+                            el("div", text("Hide all")).attr("class", "t-btn"),
+                            move |ui: &mut UiState, _| {
+                                ui.hide_all_set_graph_relations(&hide_snapshot);
+                            },
+                        ),
+                    ),
+                )
+                .attr("class", "set-relation-toolbar"),
+                el("div", relation_rows).attr("class", "set-relation-list"),
+            ),
+        )
+        .attr("class", "set-relation-inventory"),
+    );
     let relation_detail: UiChild = ui
         .set_graph_relation
-        .and_then(|reference| snapshot.relation(reference))
+        .and_then(|reference| snapshot.relation_detail(reference, &ui.set))
         .map(|relation| {
-            let kind = relation.kind.as_deref().unwrap_or("relation");
             Box::new(
-                el("div", text(format!("Selected relation · {kind}")))
+                el(
+                    "div",
+                    text(format!(
+                        "Selected · {} · {} · {}% · {}",
+                        relation.label,
+                        relation.authority,
+                        relation.weight,
+                        relation.explanation
+                    )),
+                )
                     .attr("class", "set-graph-relation"),
             ) as UiChild
         })
@@ -209,6 +311,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                         el("div", text("Set graph")).attr("class", "set-graph-heading"),
                         graph,
                         relation_detail,
+                        relation_inventory,
                         el(
                             "div",
                             clickable(
@@ -221,6 +324,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                                     ui.app_settings
                                         .stage
                                         .toggle_relation(SetGraphEdgeKind::Next);
+                                    ui.set_graph_relation = None;
                                 },
                             ),
                         )

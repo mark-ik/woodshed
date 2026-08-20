@@ -386,7 +386,10 @@ fn stage_page(ui: &UiState) -> UiChild {
                     text(format!("Set {} edges: {state}", kind.label().to_lowercase())),
                 )
                 .attr("class", "side-item"),
-                move |ui: &mut UiState, _| ui.app_settings.stage.toggle_relation(kind),
+                move |ui: &mut UiState, _| {
+                    ui.app_settings.stage.toggle_relation(kind);
+                    ui.set_graph_relation = None;
+                },
             )) as UiChild
         })
         .collect();

@@ -44,6 +44,15 @@ pub fn sync_all(shared: &mut Shared, ui: &UiState, leaves: &mut LeafRegistry<u64
     sync_rehearsal_fretboard(shared, ui, leaves);
 }
 
+/// Refresh only the Set graph leaf during a view-local node drag.
+///
+/// The pointer dispatch already rebuilt Woodshed's retained tree. Related and
+/// both fretboards cannot change from this gesture, so reconstructing their
+/// projections before every presented move only adds latency.
+pub fn sync_set_graph(shared: &mut Shared, ui: &UiState, leaves: &mut LeafRegistry<u64>) {
+    sync_set_graph_swatch(shared, ui, leaves);
+}
+
 /// Paint the Related graph swatch's leaf from the shared swatch model (built by
 /// the view layer), rebuilding only when the paint changes (node
 /// positions/kinds, hovered emphasis, or size). The palette lives here so

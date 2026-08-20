@@ -1023,10 +1023,84 @@ receipts are recorded before those platforms are advertised.
   that keyed layer**, and deriving those relations is its own slice rather
   than something the adapter should have faked.
 
-  Still open in P4: the fanned *rendering* (this lands the data, and a host
-  must now draw and hit-test fanned cells rather than one line per pair),
-  retiring `related_swatch`'s hand-rolled radial placement onto
-  `scenomise::relax`, and the fretboard `Space` mapping (string, fret) to
-  screen so picking resolves through `scenotime` rather than woodshed
-  hit-testing.
+  Still open in P4: retiring `related_swatch`'s hand-rolled arrangement onto
+  `scenomise::relax`, the keyed-instance relation layer, and the fretboard
+  `Space` mapping (string, fret) to screen so picking resolves through
+  `scenotime` rather than woodshed hit-testing.
 
+- **2026-08-19, P4c scene canvas and headed receipt:** Woodshed now adapts the
+  Stage scene into Cambium's existing graph canvas for both compact and
+  expanded Set views. Epoch-qualified `InstanceId` and `RelationId` values
+  reach native hit targets; parallel relations are independently routed and
+  selectable; node motion is retained as view-local position state. The new
+  `scenarios/p4c_scene_canvas.scn` stages Major and Major 7, proves one snapshot
+  yields two nodes and several relation cells in both sizes, activates a real
+  relation target, drags a real node through host pointer capture, and records
+  four presented-frame PNGs. P4a, P4b, and P4c all return `RESULT ok` at
+  1500x1200. Verified 74 core, 26 views, and 20 desktop-host tests.
+
+  The first screenshots found two presentation defects. The Related mere tried
+  to draw its whole induced graph inside a 300px swatch, and native relation
+  buttons inherited visible control chrome. The swatch now discloses a bounded,
+  weighted spanning neighborhood, summarizes parallel reasons in compact form,
+  expands them into independent cells, and keeps every relation hit target
+  transparent. A selected Stage relation also gets its own row so its caption
+  cannot overdraw a node label.
+
+- **2026-08-19, P4c relation inventory and drag fast path:** The expanded Set
+  graph now lists every derivable relation with pair, kind, authority, weight,
+  explanation, and a view-local Shown/Hidden choice. Individual withholding,
+  Hide all, and Show all change the graph presentation without editing Set or
+  scene truth; stable semantic relation keys survive dense scene epochs.
+
+  Captured graph motion now skips persona work, audio/MIDI synchronization,
+  serialization, and storage writes on pointer Down/Move, then runs the full
+  host tail once on release. `scenarios/p4c_relation_inventory_fast_drag.scn`
+  proves at least three view-only dispatches and exactly one full release sync,
+  along with all/one/zero/all visible-relation states. Its first headed run
+  exposed a target-publication race after Show all; a zero-position assertion
+  now waits for and verifies the published graph before the drag. Seven
+  consecutive 1500x1200 runs return `RESULT ok` with four presented-frame PNGs.
+  Verified 75 core, 27 views, and 20 desktop-host tests.
+
+- **2026-08-20, P4c presented-drag performance:** The frame-spaced
+  `scenarios/p4c_drag_performance.scn` now delivers Down, eight Moves, and Up
+  on separate presented frames and publishes app-authored phase timings in its
+  sentinel. The first 27-frame debug receipt averaged 106,548 us, peaked at
+  317,509 us, and found 54 redundant retained-root rebuilds in the frame hook.
+
+  The drag path now skips unchanged viewport and static live-drive rebuilds,
+  refreshes only the Set graph leaf, and uses Cambium's opt-in deferred Move
+  rebuild: pointer capture holds the original native target while the custom
+  leaf follows live view state, then Up reconciles targets and labels once.
+  Woodshed also compiles the hot external layout, paint, and GPU submission
+  packages at opt-level 2 in an otherwise ordinary debug profile.
+
+  On the same requested 1500x1200 run, captured at 2464x1504 physical pixels,
+  two warm receipts average 26,999 us and 24,999 us. The latter peaks at
+  85,449 us; Woodshed's viewport, drive, and leaf phases total only 4,134 us
+  across all 27 frames, and the frame hook performs zero retained-root
+  rebuilds. That is an observed 4.3x average improvement, not a 60 fps claim:
+  the remaining presentation spikes belong to the shared host/render path and
+  stay visible as follow-up evidence rather than being hidden by an average.
+  A later confirmation under 12 concurrent Cargo and 21 rustc processes varied
+  from 39,421 us to 133,852 us average, so these debug-machine receipts establish
+  the fast-path boundary and regression counters rather than a stable benchmark.
+
+  Shared-host profiling then located the avoidable work. During pointer capture,
+  `pointer_moved` still dispatched hover against the stale element underneath the
+  dragged node. Several Move frames consequently applied six to eight attribute
+  mutations and spent about 33 ms in incremental layout. Captured motion now
+  keeps hover on the gesture target until release; a host input-routing test
+  covers that contract.
+
+  The final 27-frame headed receipt averages 13,690 us wall time and 13,158 us
+  inside the shared host, down from the immediate pre-fix 17,911 us and 17,140 us
+  receipts. Its only layout rebuild and 11 mutations occur at gesture setup.
+  Subsequent Move frames apply zero mutations and present in roughly 11.3-13.0
+  ms on the quiet debug machine. Retained rendering was already working: each
+  moving frame dirties one tile, with zero tile invalidation or rebuild work on
+  the retained-fragment path. The remaining steady CPU-side costs are chiefly
+  Vello submission, scene emission, and accessibility synchronization. These
+  measurements do not include GPU timestamps. The one-time Down frame still
+  peaks near 59 ms and remains a separate optimization target.
