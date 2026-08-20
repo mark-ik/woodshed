@@ -278,7 +278,7 @@ fn relation_slug(kind: RelationKind) -> &'static str {
     }
 }
 
-/// Project a Set into the frozen scene contract.
+/// Project a Set into the portable scene contract.
 ///
 /// Placement is a lane along x in Set order, which is honest for material
 /// whose order is authoritative and gives the scene real bounds without a
@@ -412,7 +412,34 @@ pub fn stage_scene(set: &Set, options: &StageSceneOptions) -> StageGraphSnapshot
         }
     }
     scene.relations = relations;
-    scene.bounds = lane_bounds(&scene, options.card_size);
+    let item_bounds = lane_bounds(&scene, options.card_size);
+    let floor_padding = 48.0;
+    let floor_bounds = Rect::new(
+        Vec2::new(
+            item_bounds.origin.x - floor_padding,
+            item_bounds.origin.y - floor_padding,
+        ),
+        Size2::new(
+            item_bounds.size.w + floor_padding * 2.0,
+            item_bounds.size.h + floor_padding * 2.0,
+        ),
+    );
+    let floor_source = scene.intern_source(SourceRef::new(ADAPTER, "stage-floor"));
+    scene.backdrops.push(sceno::Backdrop {
+        source: floor_source,
+        space: Scene::WORLD,
+        transform: Transform2::translation(
+            floor_bounds.origin.x + floor_bounds.size.w * 0.5,
+            floor_bounds.origin.y + floor_bounds.size.h * 0.5,
+        ),
+        footprint: Footprint::Rect {
+            size: floor_bounds.size,
+        },
+        kind: "woodshed:stage-floor".into(),
+        visible: true,
+        collidable: false,
+    });
+    scene.bounds = floor_bounds;
     let epoch = dense_epoch(&scene, &cards);
     let snapshot = SceneSnapshot::from_dense(epoch, Revision(0), scene)
         .unwrap_or_else(|error| panic!("Woodshed produced an invalid Stage scene: {error:?}"));
@@ -454,6 +481,21 @@ fn dense_epoch(scene: &Scene, cards: &[CardId]) -> SceneEpoch {
             write(&(channel.len() as u64).to_le_bytes());
             write(channel.as_bytes());
             write(&value.to_bits().to_le_bytes());
+        }
+    }
+    for backdrop in &scene.backdrops {
+        write(&backdrop.source.0.to_le_bytes());
+        write(&backdrop.space.0.to_le_bytes());
+        write(&backdrop.transform.translate.x.to_bits().to_le_bytes());
+        write(&backdrop.transform.translate.y.to_bits().to_le_bytes());
+        write(&backdrop.transform.scale.to_bits().to_le_bytes());
+        write(&backdrop.transform.rotate.to_bits().to_le_bytes());
+        write(&(backdrop.kind.len() as u64).to_le_bytes());
+        write(backdrop.kind.as_bytes());
+        write(&[backdrop.visible.into(), backdrop.collidable.into()]);
+        if let Footprint::Rect { size } = &backdrop.footprint {
+            write(&size.w.to_bits().to_le_bytes());
+            write(&size.h.to_bits().to_le_bytes());
         }
     }
     for relation in &scene.relations {
