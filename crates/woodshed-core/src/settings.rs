@@ -268,11 +268,26 @@ impl Default for AccessibilitySettings {
     }
 }
 
+/// Desktop window placement remembered as an application preference.
+///
+/// This stays free of host types so the portable core can serialize it while
+/// the desktop adapter converts at its boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WindowSettings {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub maximized: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
     #[serde(rename = "settings_page")]
     pub page: SettingsPage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<WindowSettings>,
     #[serde(flatten)]
     pub appearance: AppearanceSettings,
     #[serde(flatten)]
@@ -295,4 +310,29 @@ pub struct AppSettings {
     pub audio_midi: AudioMidiSettings,
     #[serde(flatten)]
     pub accessibility: AccessibilitySettings,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_geometry_is_optional_and_round_trips() {
+        let default_json = serde_json::to_value(AppSettings::default()).unwrap();
+        assert!(default_json.get("window").is_none());
+
+        let mut settings = AppSettings::default();
+        settings.window = Some(WindowSettings {
+            x: 120.0,
+            y: 80.0,
+            width: 900.0,
+            height: 640.0,
+            maximized: true,
+        });
+        let json = serde_json::to_string(&settings).unwrap();
+        assert_eq!(
+            serde_json::from_str::<AppSettings>(&json).unwrap(),
+            settings
+        );
+    }
 }

@@ -43,6 +43,7 @@ use cambium_genet_winit_host::{
 };
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
+use woodshed_core::settings::WindowSettings;
 use woodshed_views::stage::{UiChild, UiState, ViewportClass, stage_root};
 
 use crate::audio::CpalBackend;
@@ -219,10 +220,56 @@ fn escape_policy(runner: &mut Runner<UiState, Logic, UiChild>, press: &KeyPress)
     true
 }
 
+fn to_host_geometry(settings: WindowSettings) -> cambium_genet_winit_host::WindowGeometry {
+    cambium_genet_winit_host::WindowGeometry {
+        position: (settings.x, settings.y),
+        size: (settings.width, settings.height),
+        maximized: settings.maximized,
+    }
+}
+
+fn to_window_settings(geometry: cambium_genet_winit_host::WindowGeometry) -> WindowSettings {
+    WindowSettings {
+        x: geometry.position.0,
+        y: geometry.position.1,
+        width: geometry.size.0,
+        height: geometry.size.1,
+        maximized: geometry.maximized,
+    }
+}
+
+fn initial_window_geometry(
+    shared: &Rc<RefCell<Shared>>,
+) -> Option<cambium_genet_winit_host::WindowGeometry> {
+    shared
+        .borrow()
+        .storage
+        .as_ref()
+        .and_then(session::load_settings)
+        .and_then(|settings| settings.window)
+        .map(to_host_geometry)
+}
+
+fn persist_window_geometry(
+    shared: &mut Shared,
+    ctx: &mut Ctx<'_>,
+    geometry: cambium_genet_winit_host::WindowGeometry,
+) {
+    let mut json = None;
+    ctx.runner.update(|ui| {
+        ui.app_settings.window = Some(to_window_settings(geometry));
+        json = serde_json::to_string(&ui.app_settings).ok();
+    });
+    if let (Some(storage), Some(json)) = (shared.storage.as_ref(), json) {
+        storage.save_settings(&json);
+    }
+}
+
 fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
     let frame_shared = shared.clone();
     let dispatch_shared = shared.clone();
     let after_frame_shared = shared.clone();
+    let close_shared = shared.clone();
     HostHooks {
         frame: Box::new(move |ctx: &mut Ctx<'_>| {
             let mut shared = frame_shared.borrow_mut();
@@ -265,7 +312,12 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
             scenario::drive(&mut shared, ctx);
         }),
         after_wake: Box::new(|_ctx| {}),
-        close_request: Box::new(|_ctx, _request| cambium_genet_winit_host::CloseDisposition::Exit),
+        close_request: Box::new(move |ctx, _request| {
+            if let Some(geometry) = ctx.geometry {
+                persist_window_geometry(&mut close_shared.borrow_mut(), ctx, geometry);
+            }
+            cambium_genet_winit_host::CloseDisposition::Exit
+        }),
         focused_text: Box::new(text::focused_text),
         key_intercept: Box::new(escape_policy),
     }
@@ -274,12 +326,14 @@ fn hooks(shared: &Rc<RefCell<Shared>>) -> HostHooks<UiState, Logic, UiChild> {
 fn main() {
     let shared = Shared::boot();
     let init_shared = shared.clone();
+    let initial_geometry = initial_window_geometry(&shared);
     let options = HostOptions {
         title: "Woodshed".into(),
         // CSD: the app draws its own chrome (title row, window buttons, drag
         // surface); the host supplies the edge-resize grab margins and cursors.
         decorations: false,
         initial_logical_size: (1_100.0, 664.0),
+        initial_geometry,
         // A scenario run asks for a deterministic window: a receipt captured at
         // a different size is a different layout.
         size_env: Some(("WOODSHED_WIDTH".into(), "WOODSHED_HEIGHT".into())),
@@ -291,4 +345,19 @@ fn main() {
         hooks(&shared),
     )
     .expect("run app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_geometry_conversion_preserves_every_axis() {
+        let host = cambium_genet_winit_host::WindowGeometry {
+            position: (120.5, 80.25),
+            size: (900.0, 640.0),
+            maximized: true,
+        };
+        assert_eq!(to_host_geometry(to_window_settings(host)), host);
+    }
 }

@@ -711,6 +711,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "buckram"
+version = "0.0.1"
+dependencies = [
+ "taffy 0.13.0",
+]
+
+[[package]]
 name = "built"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -764,12 +771,6 @@ dependencies = [
  "quote",
  "syn 3.0.3",
 ]
-
-[[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "byteorder-lite"
@@ -845,7 +846,6 @@ dependencies = [
  "cambium-rootstock",
  "cambium-winit",
  "cambium-winit-a11y",
- "genet-layout",
  "genet-probe",
  "genet-render-host",
  "genet-scripted-dom",
@@ -870,7 +870,8 @@ version = "0.1.0"
 dependencies = [
  "cambium",
  "cambium-winit",
- "genet-layout",
+ "genet-livery",
+ "genet-render",
  "genet-render-host",
  "genet-scripted-dom",
  "layout-dom-api",
@@ -898,7 +899,7 @@ version = "0.3.0"
 dependencies = [
  "accesskit",
  "cambium-rootstock",
- "genet-layout",
+ "genet-render",
  "genet-scripted-dom",
  "genet-winit-host",
  "layout-dom-api",
@@ -1380,40 +1381,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "darling"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
-dependencies = [
- "darling_core",
- "darling_macro",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
-dependencies = [
- "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "darling_macro"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
-dependencies = [
- "darling_core",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,7 +1593,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75030f3c4f45dafd7586dd6780965a8c7e8e285a5ecb86713e63a79c5b2766f3"
 dependencies = [
  "cfg-if",
- "serde",
 ]
 
 [[package]]
@@ -1640,9 +1606,7 @@ name = "engine-observables-api"
 version = "0.1.1"
 dependencies = [
  "genet-paint-types",
- "malloc_size_of_derive",
  "serde",
- "servo-malloc-size-of",
 ]
 
 [[package]]
@@ -1819,12 +1783,6 @@ name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
-
-[[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
@@ -2026,46 +1984,22 @@ name = "genet-host-api"
 version = "0.1.0"
 
 [[package]]
-name = "genet-layout"
-version = "0.2.0"
+name = "genet-livery"
+version = "0.0.2"
 dependencies = [
- "accesskit",
- "app_units",
- "atomic_refcell",
+ "buckram",
  "cssparser",
  "data-url",
- "engine-observables-api",
  "euclid",
- "fontique",
  "genet-document-resources",
- "genet-paint-types",
- "genet-stylo",
- "genet-stylo-atoms",
- "genet-stylo-dom",
- "genet-stylo-static-prefs",
- "genet-stylo-traits",
- "html5ever",
  "image",
  "layout-dom-api",
- "malloc_size_of_derive",
- "markup5ever",
+ "livery",
  "paint_list_api",
  "parley",
- "rayon",
- "resvg",
- "rustc-hash 2.1.3",
  "selectors",
  "serde",
- "servo-malloc-size-of",
- "servo-pixels",
- "servo-url",
- "servo_arc",
- "skrifa 0.42.1",
- "stylo_taffy",
- "taffy 0.12.1",
- "tracing",
- "url",
- "web-time",
+ "taffy 0.13.0",
 ]
 
 [[package]]
@@ -2083,9 +2017,23 @@ dependencies = [
 name = "genet-probe"
 version = "0.1.0"
 dependencies = [
- "genet-layout",
+ "genet-livery",
  "genet-scripted-dom",
  "layout-dom-api",
+]
+
+[[package]]
+name = "genet-render"
+version = "0.2.0"
+dependencies = [
+ "accesskit",
+ "genet-livery",
+ "genet-scripted-dom",
+ "inker",
+ "layout-dom-api",
+ "netrender",
+ "paint_list_api",
+ "paint_list_render",
 ]
 
 [[package]]
@@ -2115,114 +2063,6 @@ dependencies = [
  "html5ever",
  "layout-dom-api",
  "xml5ever",
-]
-
-[[package]]
-name = "genet-stylo"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b36275159f8d41f3828e9ed3f171cd88b87fdbfc6495625900d1da6e80b57db"
-dependencies = [
- "app_units",
- "arrayvec",
- "atomic_refcell",
- "bitflags 2.13.1",
- "byteorder",
- "cssparser",
- "derive_more",
- "encoding_rs",
- "euclid",
- "genet-stylo-atoms",
- "genet-stylo-dom",
- "genet-stylo-static-prefs",
- "genet-stylo-traits",
- "icu_segmenter",
- "indexmap",
- "itertools 0.14.0",
- "itoa",
- "log",
- "malloc_size_of_derive",
- "mime",
- "new_debug_unreachable",
- "num-derive",
- "num-integer",
- "num-traits",
- "num_cpus",
- "parking_lot",
- "precomputed-hash",
- "rayon",
- "rayon-core",
- "rustc-hash 2.1.3",
- "selectors",
- "serde",
- "servo_arc",
- "smallbitvec",
- "smallvec",
- "static_assertions",
- "string_cache",
- "strum",
- "strum_macros",
- "stylo_derive",
- "stylo_malloc_size_of",
- "thin-vec",
- "to_shmem",
- "to_shmem_derive",
- "uluru",
- "url",
- "void",
- "walkdir",
- "web_atoms",
-]
-
-[[package]]
-name = "genet-stylo-atoms"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8507e322ed27aaf22aea06869f33babb0e29a7e3a4a0d7ef5fcf421c7e271bd6"
-dependencies = [
- "string_cache",
- "string_cache_codegen",
-]
-
-[[package]]
-name = "genet-stylo-dom"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fce97d56bfdd4086bb0161632a39717f3a5dff18b09975ec4ec226d94999ed13"
-dependencies = [
- "bitflags 2.13.1",
- "stylo_malloc_size_of",
-]
-
-[[package]]
-name = "genet-stylo-static-prefs"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f01654d6cb98b58443745c93b1cd1e015372a48219a51f87796a0ab353e6504"
-dependencies = [
- "toml",
-]
-
-[[package]]
-name = "genet-stylo-traits"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b22d4bac11c892f9406eb20fcd47525dbbcdc0e76e1ad443d547c346991784"
-dependencies = [
- "app_units",
- "bitflags 2.13.1",
- "cssparser",
- "euclid",
- "genet-stylo-atoms",
- "malloc_size_of_derive",
- "selectors",
- "serde",
- "servo_arc",
- "stylo_malloc_size_of",
- "thin-vec",
- "to_shmem",
- "to_shmem_derive",
- "url",
 ]
 
 [[package]]
@@ -2422,12 +2262,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "heck"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
 name = "hermit-abi"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2586,7 +2420,6 @@ version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82d07aafccd67af15d02512a6adf5896fbc5ed00f2e99b471d2efa14016db3db"
 dependencies = [
- "core_maths",
  "icu_collections",
  "icu_locale_fallback",
  "icu_provider",
@@ -2602,12 +2435,6 @@ name = "icu_segmenter_data"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae293c039020f9ec10710af98d29ce6aa2051486638b49c9a6409f3b4a9e98ad"
-
-[[package]]
-name = "ident_case"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
@@ -2682,6 +2509,16 @@ checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+]
+
+[[package]]
+name = "inker"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "serde",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2999,6 +2836,17 @@ name = "litrs"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
+
+[[package]]
+name = "livery"
+version = "0.0.2"
+dependencies = [
+ "cssparser",
+ "precomputed-hash",
+ "selectors",
+ "serde",
+ "toml",
+]
 
 [[package]]
 name = "lock_api"
@@ -3398,16 +3246,6 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
-]
-
-[[package]]
-name = "num_cpus"
-version = "1.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
-dependencies = [
- "hermit-abi",
- "libc",
 ]
 
 [[package]]
@@ -4961,8 +4799,6 @@ dependencies = [
  "rustc-hash 2.1.3",
  "servo_arc",
  "smallvec",
- "to_shmem",
- "to_shmem_derive",
 ]
 
 [[package]]
@@ -5045,51 +4881,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "servo-base"
-version = "0.2.0"
-dependencies = [
- "accesskit",
- "crossbeam-channel",
- "genet-paint-types",
- "ipc-channel",
- "libc",
- "log",
- "mach2",
- "malloc_size_of_derive",
- "parking_lot",
- "rayon",
- "regex",
- "serde",
- "serde_json",
- "servo-config",
- "servo-malloc-size-of",
- "time",
- "unicode-segmentation",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "servo-config"
-version = "0.2.0"
-dependencies = [
- "genet-stylo-static-prefs",
- "serde",
- "serde_json",
- "servo-config-macro",
- "strum",
-]
-
-[[package]]
-name = "servo-config-macro"
-version = "0.2.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "synstructure",
-]
-
-[[package]]
 name = "servo-malloc-size-of"
 version = "0.2.0"
 dependencies = [
@@ -5100,8 +4891,6 @@ dependencies = [
  "data-url",
  "encoding_rs",
  "euclid",
- "genet-stylo",
- "genet-stylo-dom",
  "http",
  "icu_locale_core",
  "indexmap",
@@ -5128,39 +4917,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "servo-pixels"
-version = "0.2.0"
-dependencies = [
- "euclid",
- "genet-paint-types",
- "image",
- "log",
- "malloc_size_of_derive",
- "serde",
- "servo-base",
- "servo-malloc-size-of",
-]
-
-[[package]]
-name = "servo-url"
-version = "0.2.0"
-dependencies = [
- "encoding_rs",
- "malloc_size_of_derive",
- "serde",
- "servo-malloc-size-of",
- "servo_arc",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "servo_arc"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "170fb83ab34de17dc69aa7c67482b22218ddb85da56546f9bd6b929e32a05930"
 dependencies = [
- "serde",
  "stable_deref_trait",
 ]
 
@@ -5416,40 +5177,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "strum"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
-dependencies = [
- "strum_macros",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "stylo_derive"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e39f4962458b9e9efc91684666509a1811bc690f90188508108583187d19e83c"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "synstructure",
-]
-
-[[package]]
 name = "stylo_malloc_size_of"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5462,19 +5189,8 @@ dependencies = [
  "servo_arc",
  "smallbitvec",
  "smallvec",
- "string_cache",
  "thin-vec",
  "void",
-]
-
-[[package]]
-name = "stylo_taffy"
-version = "0.3.0-beta.1"
-source = "git+https://github.com/merely-made/genet.git?branch=main#1fd6a4f552481bb5d194bd9f46c3d6c14daa98bf"
-dependencies = [
- "genet-stylo",
- "genet-stylo-atoms",
- "taffy 0.12.1",
 ]
 
 [[package]]
@@ -5546,13 +5262,12 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.12.1"
-source = "git+https://github.com/merely-made/genet.git?branch=main#1fd6a4f552481bb5d194bd9f46c3d6c14daa98bf"
+version = "0.13.0"
 dependencies = [
  "arrayvec",
- "grid",
  "serde",
  "slotmap",
+ "smallvec",
 ]
 
 [[package]]
@@ -5770,33 +5485,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
-name = "to_shmem"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8c81cee0d28327337a94f3f32a1a77c03bbfd926510f3b42956f9d914e7810c"
-dependencies = [
- "cssparser",
- "servo_arc",
- "smallbitvec",
- "smallvec",
- "string_cache",
- "thin-vec",
-]
-
-[[package]]
-name = "to_shmem_derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ba1f5563024b63bb6acb4558452d9ba737518c1d11fcc1861febe98d1e31cf4"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "synstructure",
-]
-
-[[package]]
 name = "tokio"
 version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5933,15 +5621,6 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "uluru"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c8a2469e56e6e5095c82ccd3afb98dad95f7af7929aab6d8ba8d6e0f73657da"
-dependencies = [
- "arrayvec",
 ]
 
 [[package]]
@@ -7522,8 +7201,8 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "netfetcher"
-version = "0.1.1"
+name = "stylo_taffy"
+version = "0.3.0-beta.1"
 
 [[patch.unused]]
 name = "armillary"
@@ -7576,3 +7255,11 @@ version = "0.1.2"
 [[patch.unused]]
 name = "vates"
 version = "0.1.2"
+
+[[patch.unused]]
+name = "genet-layout"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"

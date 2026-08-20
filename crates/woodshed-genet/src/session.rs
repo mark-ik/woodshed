@@ -6,10 +6,26 @@
 //! the restore has two callers and one run, and it lives here rather than in
 //! either of them.
 
+use woodshed_core::settings::AppSettings;
 use woodshed_core::storage::SessionStore;
 use woodshed_views::stage::UiState;
 
 use crate::storage::HostBackend;
+
+/// Read the settings slot without applying it. Window creation happens before
+/// [`restore`], so the desktop entrypoint uses this same decoder to supply the
+/// host's initial geometry.
+pub fn load_settings(storage: &SessionStore<HostBackend>) -> Option<AppSettings> {
+    storage
+        .load_settings()
+        .and_then(|json| match serde_json::from_str(&json) {
+            Ok(settings) => Some(settings),
+            Err(error) => {
+                eprintln!("[woodshed-genet] ignoring corrupt application settings: {error}");
+                None
+            }
+        })
+}
 
 /// Apply the stored session and application settings to a fresh [`UiState`].
 ///
@@ -21,26 +37,24 @@ use crate::storage::HostBackend;
 /// Settings ride in through [`UiState::apply_persisted`] rather than being
 /// assigned, because several pieces of state are derived from them (the
 /// transport's bpm, the tuning and root dropdowns, the legacy relation-set
-/// migration). That is also why a store holding settings but no session applies
-/// neither: the derivations live on the session path. Faithful to what
-/// `boot_state` did before this extraction, and worth a look on its own.
+/// migration). A settings-only store applies them over a default session, so a
+/// preference file remains authoritative even when the practice artifact has
+/// not been written yet.
 pub fn restore(storage: &SessionStore<HostBackend>, ui: &mut UiState) {
-    let mut app_settings = storage
-        .load_settings()
-        .and_then(|json| match serde_json::from_str(&json) {
-            Ok(settings) => Some(settings),
-            Err(error) => {
-                eprintln!("[woodshed-genet] ignoring corrupt application settings: {error}");
-                None
-            }
-        })
-        .unwrap_or_default();
+    let stored_settings = load_settings(storage);
+    let mut app_settings = stored_settings.clone().unwrap_or_default();
     let Some(json) = storage.load() else {
+        if stored_settings.is_some() {
+            ui.apply_persisted(
+                &woodshed_core::storage::PersistedSession::default(),
+                app_settings,
+            );
+        }
         return;
     };
     match woodshed_core::storage::decode_session(&json) {
         Ok(loaded) => {
-            if storage.load_settings().is_none() {
+            if stored_settings.is_none() {
                 if let Some(legacy) = loaded.legacy_settings {
                     app_settings = legacy;
                 }
@@ -48,5 +62,32 @@ pub fn restore(storage: &SessionStore<HostBackend>, ui: &mut UiState) {
             ui.apply_persisted(&loaded.session, app_settings);
         }
         Err(error) => eprintln!("[woodshed-genet] ignoring corrupt session: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use woodshed_core::settings::WindowSettings;
+
+    #[test]
+    fn settings_apply_without_a_practice_session() {
+        let backend: HostBackend = Box::new(muniment::MemoryBackend::default());
+        let storage = SessionStore::new(backend);
+        let mut settings = AppSettings::default();
+        settings.appearance.theme = "Ember".into();
+        settings.window = Some(WindowSettings {
+            x: 120.0,
+            y: 80.0,
+            width: 900.0,
+            height: 640.0,
+            maximized: false,
+        });
+        storage.save_settings(&serde_json::to_string(&settings).unwrap());
+
+        let mut ui = UiState::new();
+        restore(&storage, &mut ui);
+
+        assert_eq!(ui.app_settings, settings);
     }
 }
