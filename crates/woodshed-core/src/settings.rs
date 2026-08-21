@@ -11,6 +11,13 @@ use woodshedding::rehearsal::SetGraphEdgeKind;
 
 use crate::arrangement::GraphArrangement;
 
+pub const DEFAULT_SET_GRAPH_WIDTH: u32 = 520;
+pub const DEFAULT_SET_GRAPH_HEIGHT: u32 = 260;
+pub const MIN_SET_GRAPH_WIDTH: u32 = 360;
+pub const MIN_SET_GRAPH_HEIGHT: u32 = 240;
+pub const MAX_SET_GRAPH_WIDTH: u32 = 960;
+pub const MAX_SET_GRAPH_HEIGHT: u32 = 720;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SettingsPage {
     #[default]
@@ -53,7 +60,9 @@ pub struct AppearanceSettings {
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
-        Self { theme: "Slate".into() }
+        Self {
+            theme: "Slate".into(),
+        }
     }
 }
 
@@ -124,6 +133,10 @@ pub struct StageSettings {
     /// Arrangement for the staged Set surface. The same ten-item catalog is
     /// available to the joined-mere swatch above.
     pub set_arrangement: GraphArrangement,
+    /// User-sized expanded Set canvas in logical pixels. The direct resize
+    /// handle and the Settings reset both write these durable values.
+    pub set_graph_width: u32,
+    pub set_graph_height: u32,
     /// Which projected relation families the Set graph draws. A set rather
     /// than a flag per family, so the harmonic, evidence, and suggestion
     /// layers join it by becoming members. Visibility is a view state: hiding
@@ -142,6 +155,8 @@ impl Default for StageSettings {
         Self {
             related: RelatedSettings::default(),
             set_arrangement: GraphArrangement::Snake,
+            set_graph_width: DEFAULT_SET_GRAPH_WIDTH,
+            set_graph_height: DEFAULT_SET_GRAPH_HEIGHT,
             visible_set_relations: SetGraphEdgeKind::ALL.into_iter().collect(),
             show_set_sequence_edges: None,
         }
@@ -149,6 +164,25 @@ impl Default for StageSettings {
 }
 
 impl StageSettings {
+    pub fn set_graph_size(&self) -> (u32, u32) {
+        (
+            self.set_graph_width
+                .clamp(MIN_SET_GRAPH_WIDTH, MAX_SET_GRAPH_WIDTH),
+            self.set_graph_height
+                .clamp(MIN_SET_GRAPH_HEIGHT, MAX_SET_GRAPH_HEIGHT),
+        )
+    }
+
+    pub fn resize_set_graph(&mut self, width: u32, height: u32) {
+        self.set_graph_width = width.clamp(MIN_SET_GRAPH_WIDTH, MAX_SET_GRAPH_WIDTH);
+        self.set_graph_height = height.clamp(MIN_SET_GRAPH_HEIGHT, MAX_SET_GRAPH_HEIGHT);
+    }
+
+    pub fn reset_set_graph_size(&mut self) {
+        self.set_graph_width = DEFAULT_SET_GRAPH_WIDTH;
+        self.set_graph_height = DEFAULT_SET_GRAPH_HEIGHT;
+    }
+
     /// Fold the pre-P4a boolean into the relation set. Idempotent: the legacy
     /// field is taken, so a later save writes only the set.
     pub fn adopt_legacy_relation_visibility(&mut self) {
@@ -333,6 +367,26 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<AppSettings>(&json).unwrap(),
             settings
+        );
+    }
+
+    #[test]
+    fn stage_canvas_size_migrates_and_clamps_at_the_settings_boundary() {
+        let mut settings = serde_json::from_str::<AppSettings>("{}").unwrap();
+        assert_eq!(
+            settings.stage.set_graph_size(),
+            (DEFAULT_SET_GRAPH_WIDTH, DEFAULT_SET_GRAPH_HEIGHT)
+        );
+
+        settings.stage.resize_set_graph(1, u32::MAX);
+        assert_eq!(
+            settings.stage.set_graph_size(),
+            (MIN_SET_GRAPH_WIDTH, MAX_SET_GRAPH_HEIGHT)
+        );
+        settings.stage.reset_set_graph_size();
+        assert_eq!(
+            settings.stage.set_graph_size(),
+            (DEFAULT_SET_GRAPH_WIDTH, DEFAULT_SET_GRAPH_HEIGHT)
         );
     }
 }

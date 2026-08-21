@@ -1,0 +1,55 @@
+# P4d receipt: the expanded Card occupies the selected node's projected
+# region, and the surrounding graph canvas is directly resizable.
+
+log P4d: resizable Stage canvas and Card-in-node expansion
+settle 3
+
+act stage-related-pair
+settle 3
+assert snap graph-nodes == 2
+assert snap graph-width == 520
+assert snap graph-height == 260
+assert snap card-expanded == false
+assert snap graph-node-cards == 0
+assert snap graph-card-anchored-relations == 0
+capture 01_compact_nodes
+
+# Activation keeps the occurrence identity and replaces that node's point with
+# the existing editable Card rather than opening a detached editor below it.
+click-stage-node 0
+settle 3
+assert snap cursor-number == 1
+assert snap card-expanded == true
+assert snap graph-node-cards == 1
+assert snap graph-card-incident-relations == 4
+assert snap graph-card-anchored-relations == 4
+capture 02_card_in_node_region
+
+# The bottom-right handle uses the host's captured pointer path. Frame-spaced
+# moves expand 520x260 by 140x100, and the durable Stage setting drives the
+# rebuilt canvas, hit targets, labels, and Card region together.
+press-stage-graph-resize
+settle 1
+assert snap pointer-capture == resize-handle
+move-stage-graph-resize 70 50
+settle 1
+assert snap graph-width == 590
+assert snap graph-height == 310
+move-stage-graph-resize 140 100
+settle 1
+release-stage-graph-resize 140 100
+settle 3
+assert snap graph-width == 660
+assert snap graph-height == 360
+assert snap graph-node-cards == 1
+assert snap graph-card-anchored-relations == 4
+capture 03_resized_with_card
+
+click .graph-card-collapse
+settle 3
+assert snap card-expanded == false
+assert snap graph-node-cards == 0
+assert snap graph-card-anchored-relations == 0
+capture 04_collapsed_same_node
+
+log P4d receipt complete

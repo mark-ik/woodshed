@@ -153,7 +153,7 @@ pub fn stage_css(p: &Palette) -> String {
     let secondary = color_to_hex(p.secondary);
     let tertiary = color_to_hex(p.tertiary);
     let danger = color_to_hex(p.danger);
-    format!(
+    let themed = format!(
         r#"
 .root {{ width: 100%; height: 100%; box-sizing: border-box;
         display: flex; flex-direction: column;
@@ -350,8 +350,24 @@ pub fn stage_css(p: &Palette) -> String {
 .settings-page {{ flex: 1; min-height: 300px; }}
 .settings-options {{ margin-top: 10px; }}
 .set-tray {{ margin-top: 14px; background-color: {surface}; border-radius: 10px; padding: 12px; }}
-.set-graph {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }}
-.set-graph-heading {{ color: {text_dim}; font-size: 10px; width: 100%; text-transform: uppercase; }}
+.set-graph {{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; max-width: 100%; }}
+.set-graph-compact {{ width: 300px; }}
+.set-graph-toolbar {{ display: flex; align-items: center; gap: 8px; width: 100%; }}
+.set-graph-heading {{ color: {text_dim}; flex: 1; font-size: 10px; text-transform: uppercase; }}
+.set-graph-layout-label {{ color: {text_dim}; font-size: 10px; }}
+.set-graph-toolbar .select {{ min-width: 112px; z-index: 2; }}
+.set-graph-canvas-row {{ display: flex; align-items: flex-end; max-width: 100%; }}
+.set-graph-canvas-stack {{ position: relative; max-width: 100%; }}
+.set-graph-resize-grip {{ position: relative; flex: 0 0 18px; width: 18px; height: 18px; }}
+.resize-handle {{ background-color: {tertiary}; border-radius: 3px 0 6px 0; cursor: nwse-resize; opacity: 0.86; z-index: 6; }}
+.resize-handle:focus {{ outline-width: 1px; outline-color: {text}; }}
+.set-graph-card-root {{ position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }}
+.set-graph-node-card-layer {{ position: absolute; pointer-events: none; z-index: 4; }}
+.set-graph-node-card {{ position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: auto; box-sizing: border-box; overflow: hidden; padding: 10px; background-color: {surface_2}; border-width: 1px; border-color: {tertiary}; border-radius: 9px; z-index: 4; }}
+.set-graph-node-card .set-editor {{ align-content: flex-start; border-top-width: 0; gap: 6px; padding-top: 0; }}
+.set-graph-node-card .set-editor-label {{ padding-right: 100px; width: 100%; }}
+.set-graph-node-card .card-rename {{ margin-bottom: 3px; width: 100%; }}
+.graph-card-collapse {{ position: absolute; right: 8px; top: 8px; z-index: 2; }}
 /* The swatch paints node labels past its own box, so a control beside it gets
    overdrawn (seen in the P4a receipt). Give the controls their own row. */
 .set-graph-relation {{ width: 100%; color: {text_dim}; font-size: 11px; }}
@@ -517,6 +533,11 @@ pub fn stage_css(p: &Palette) -> String {
 .viewport-narrow .recipe-grid {{ display: flex; flex-direction: column; }}
 .viewport-narrow .recipe-tile {{ width: 100%; box-sizing: border-box; }}
 "#
+    );
+    format!(
+        "{}\n{}\n{themed}",
+        cambium::GRAPH_CANVAS_SWATCH_CSS,
+        cambium::RESIZE_HANDLE_CSS,
     )
 }
 

@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use cambium::{
     clickable, custom_leaf, el, map_state, select, text, text_field, AnyView, GenetCtx,
     GenetElement, GraphCanvasEvent, GraphCanvasNode, GraphCanvasRelation, GraphCanvasSubgraph,
-    GraphCanvasSwatch, SelectState, TextInput,
+    GraphCanvasSwatch, GraphViewport, SelectState, TextInput,
 };
-use woodshed_core::arrangement::arrange_graph;
+use woodshed_core::arrangement::{arrange_graph, GraphArrangement};
 use woodshed_core::audio::{AudioRequest, CalibrationStatus, TransportState, TunerState};
 use woodshed_core::history::{catalog_id_for_card, EngagementKind, PracticeHistory};
 use woodshed_core::mere::{woodshed_mere, MereScope, WoodshedMereSnapshot};
@@ -34,8 +34,8 @@ use crate::fretboard_leaf::{BoardGeom, Orientation, FRETBOARD_LEAF_KEY};
 use crate::theme::ThemeMode;
 
 mod looper;
-mod related;
 mod rehearsal;
+mod related;
 mod set_tray;
 mod settings;
 mod templates;
@@ -78,11 +78,7 @@ pub fn related_swatch_from_snapshot(
     expanded: bool,
 ) -> GraphCanvasSwatch<String, &'static str> {
     let selected = ui.stage.catalog_id();
-    let projected = swatch_projection(
-        snapshot,
-        selected.as_deref(),
-        if expanded { 12 } else { 7 },
-    );
+    let projected = swatch_projection(snapshot, selected.as_deref(), if expanded { 12 } else { 7 });
     let edges = projected.edges();
     let focus = selected.as_deref().and_then(|id| projected.node_index(id));
     let positions = arrange_graph(
@@ -354,8 +350,16 @@ pub fn set_graph_relation_choices(
         .into_iter()
         .filter_map(|(reference, _)| {
             let detail = snapshot.relation_detail(reference, &ui.set)?;
-            let from = ui.set.cards.iter().position(|card| card.id == detail.key.from)?;
-            let to = ui.set.cards.iter().position(|card| card.id == detail.key.to)?;
+            let from = ui
+                .set
+                .cards
+                .iter()
+                .position(|card| card.id == detail.key.from)?;
+            let to = ui
+                .set
+                .cards
+                .iter()
+                .position(|card| card.id == detail.key.to)?;
             let from_card = &ui.set.cards[from];
             let to_card = &ui.set.cards[to];
             let visible = set_graph_relation_visible(ui, &detail.key);
@@ -485,9 +489,8 @@ pub fn set_graph_swatch_from_snapshot(
             })
         })
         .collect();
-    let rows = nodes.len().div_ceil(6).max(1);
     let (width, height) = if expanded {
-        (520, (rows as u32 * 72).clamp(144, 320))
+        ui.app_settings.stage.set_graph_size()
     } else {
         (300, 104)
     };
@@ -504,15 +507,25 @@ pub fn set_graph_swatch_from_snapshot(
     .with_expand(false)
     .with_node_labels(expanded && !ui.set_graph_drag_active)
     .with_deferred_drag_rebuild(true);
+    swatch.viewport = ui.set_graph_viewport;
     swatch.selected = ui
         .set
         .cursor_id()
         .and_then(|card| snapshot.instance_ref_of(card));
+    if expanded && ui.set_graph_card_expanded {
+        if let Some(selected) = swatch.selected {
+            swatch =
+                swatch.with_node_footprint(selected, SET_GRAPH_CARD_WIDTH, SET_GRAPH_CARD_HEIGHT);
+        }
+    }
     // Focus and hover emphasis are the canvas component's own state (it reads
     // native focus from its node buttons, so the ring is never painted where
     // the keyboard is not). This view supplies only the Set's truth.
     swatch
 }
+
+const SET_GRAPH_CARD_WIDTH: f32 = 300.0;
+const SET_GRAPH_CARD_HEIGHT: f32 = 200.0;
 
 pub fn set_graph_swatch(ui: &UiState) -> GraphCanvasSwatch<StageInstanceRef, &'static str> {
     let snapshot = set_graph_snapshot(ui);
@@ -693,6 +706,9 @@ pub struct UiState {
     pub audio_error: Option<String>,
     pub tuning_dd: SelectState,
     pub root_dd: SelectState,
+    /// Direct arrangement picker for the expanded Set graph. The durable value
+    /// stays in `AppSettings`; this is only the dropdown's open/selected state.
+    pub set_arrangement_dd: SelectState,
     /// Corpus search field (a small always-available field in the nav row).
     pub search: TextInput,
     /// Rename buffer for the selected card's label. A text field owns a
@@ -737,6 +753,9 @@ pub struct UiState {
     /// Node positions moved in this view. They override the arrangement in the
     /// Cambium adapter and never alter Set order or persisted material truth.
     pub set_graph_positions: BTreeMap<CardId, (f32, f32)>,
+    /// View-local camera for background pan and wheel zoom. Card expansion and
+    /// layout changes preserve it because neither operation changes graph truth.
+    pub set_graph_viewport: GraphViewport,
     /// A captured Set-graph gesture is in progress. The desktop host reads
     /// this to keep pointer motion on the view-only fast path; Up clears it and
     /// permits the ordinary backend/persistence tail once for the gesture.
@@ -792,10 +811,13 @@ impl Default for UiState {
 impl UiState {
     pub fn new() -> Self {
         let stage = StageState::new();
+        let app_settings = AppSettings::default();
+        let set_arrangement_dd = SelectState::new(app_settings.stage.set_arrangement.index())
+            .with_label("Set arrangement");
         Self {
             set: Set::default(),
             practice_history: PracticeHistory::default(),
-            app_settings: AppSettings::default(),
+            app_settings,
             rehearsal_running: false,
             song: SongDoc::default(),
             song_playing: false,
@@ -812,6 +834,7 @@ impl UiState {
             audio_error: None,
             tuning_dd: SelectState::new(stage.tuning_idx),
             root_dd: SelectState::new(stage.root_idx),
+            set_arrangement_dd,
             search: TextInput::new(""),
             card_rename: TextInput::new(""),
             card_rename_for: None,
@@ -825,8 +848,9 @@ impl UiState {
             set_tray_expanded: true,
             now_ms: None,
             card_started_ms: None,
-            set_graph_card_expanded: true,
+            set_graph_card_expanded: false,
             set_graph_positions: BTreeMap::new(),
+            set_graph_viewport: GraphViewport::default(),
             set_graph_drag_active: false,
             set_graph_hidden_relations: BTreeSet::new(),
             set_graph_relation: None,
@@ -889,6 +913,14 @@ impl UiState {
                         (self.set_graph_relation != Some(reference)).then_some(reference);
                 }
             }
+            GraphCanvasEvent::Pan { delta } => {
+                self.set_graph_viewport.pan.0 += delta.0;
+                self.set_graph_viewport.pan.1 += delta.1;
+            }
+            GraphCanvasEvent::Zoom { factor } => {
+                self.set_graph_viewport.zoom =
+                    (self.set_graph_viewport.zoom * factor).clamp(0.25, 8.0);
+            }
             GraphCanvasEvent::Expand => self.set_tray_expanded = true,
         }
     }
@@ -931,10 +963,12 @@ impl UiState {
 
     /// Withhold every currently derivable relation from this graph view.
     pub fn hide_all_set_graph_relations(&mut self, snapshot: &StageGraphSnapshot) {
-        self.set_graph_hidden_relations
-            .extend(snapshot.relations().into_iter().filter_map(|(reference, _)| {
-                snapshot.relation_key(reference)
-            }));
+        self.set_graph_hidden_relations.extend(
+            snapshot
+                .relations()
+                .into_iter()
+                .filter_map(|(reference, _)| snapshot.relation_key(reference)),
+        );
         self.set_graph_relation = None;
     }
 
@@ -996,6 +1030,19 @@ impl UiState {
         self.stage.set_tuning(self.tuning_dd.selected);
         self.app_settings.tuning.tuning_idx = self.stage.tuning_idx;
         self.stage.set_root(self.root_dd.selected);
+        let arrangement = GraphArrangement::at(self.set_arrangement_dd.selected);
+        if arrangement != self.app_settings.stage.set_arrangement {
+            self.set_graph_arrangement(arrangement);
+        }
+    }
+
+    /// Apply a durable Set layout and release positions pinned under the old
+    /// one. Musical order and relation truth are untouched.
+    pub fn set_graph_arrangement(&mut self, arrangement: GraphArrangement) {
+        self.app_settings.stage.set_arrangement = arrangement;
+        self.set_arrangement_dd.selected = arrangement.index();
+        self.set_graph_positions.clear();
+        self.set_graph_relation = None;
     }
 
     pub fn theme(&self) -> ThemeMode {
@@ -1198,14 +1245,19 @@ impl UiState {
     }
 
     pub fn cycle_card_touch(&mut self) {
-        let Some(cursor) = self.selected_card_index() else { return };
+        let Some(cursor) = self.selected_card_index() else {
+            return;
+        };
         let card = &mut self.set.cards[cursor];
         card.touch = match &card.touch {
             Touch::Block => Touch::Arpeggiate {
                 direction: Default::default(),
                 inversion: 0,
             },
-            Touch::Arpeggiate { direction, inversion } => {
+            Touch::Arpeggiate {
+                direction,
+                inversion,
+            } => {
                 use woodshed_core::arpeggio::ArpeggioDirection as D;
                 match direction {
                     D::UpDown => Touch::Arpeggiate {
@@ -1224,7 +1276,9 @@ impl UiState {
     }
 
     pub fn cycle_card_hold(&mut self) {
-        let Some(cursor) = self.selected_card_index() else { return };
+        let Some(cursor) = self.selected_card_index() else {
+            return;
+        };
         let card = &mut self.set.cards[cursor];
         card.timing.hold = match card.timing.hold {
             Hold::Manual => Hold::Bars(2),
@@ -1236,14 +1290,18 @@ impl UiState {
     }
 
     pub fn nudge_card_bpm(&mut self, delta: f32) {
-        let Some(cursor) = self.selected_card_index() else { return };
+        let Some(cursor) = self.selected_card_index() else {
+            return;
+        };
         let card = &mut self.set.cards[cursor];
         let base = card.timing.bpm.unwrap_or(self.transport.bpm);
         card.timing.bpm = Some((base + delta).clamp(30.0, 300.0));
     }
 
     pub fn shift_card_window(&mut self, delta: i8) {
-        let Some(cursor) = self.selected_card_index() else { return };
+        let Some(cursor) = self.selected_card_index() else {
+            return;
+        };
         let max_fret = self.stage.fret_count;
         let card = &mut self.set.cards[cursor];
         let window = card
@@ -1263,7 +1321,9 @@ impl UiState {
     }
 
     pub fn clear_card_window(&mut self) {
-        let Some(cursor) = self.selected_card_index() else { return };
+        let Some(cursor) = self.selected_card_index() else {
+            return;
+        };
         self.set.cards[cursor].setting.fret_window = None;
     }
 
@@ -1311,8 +1371,13 @@ impl UiState {
             self.stage.catalog_id()
         };
         if let Some(subject_id) = subject_id {
-            self.practice_history
-                .record(self.now_ms, subject_id, EngagementKind::Previewed, None, None);
+            self.practice_history.record(
+                self.now_ms,
+                subject_id,
+                EngagementKind::Previewed,
+                None,
+                None,
+            );
         }
         self.request(AudioRequest::PreviewVoicing);
     }
@@ -1328,8 +1393,13 @@ impl UiState {
         if let Some(card) = self.stage.card_from_lens() {
             self.set.push(card);
             if let Some(subject_id) = subject_id {
-                self.practice_history
-                    .record(self.now_ms, subject_id, EngagementKind::Staged, from_id, None);
+                self.practice_history.record(
+                    self.now_ms,
+                    subject_id,
+                    EngagementKind::Staged,
+                    from_id,
+                    None,
+                );
             }
         }
     }
@@ -1395,11 +1465,7 @@ impl UiState {
 
     /// Restore a persisted session (indices clamp; unknown theme names
     /// fall back to the default).
-    pub fn apply_persisted(
-        &mut self,
-        session: &PersistedSession,
-        app_settings: AppSettings,
-    ) {
+    pub fn apply_persisted(&mut self, session: &PersistedSession, app_settings: AppSettings) {
         session.restore(&mut self.stage, &app_settings);
         self.set = session.set.clone();
         self.song = session.song.clone();
@@ -1420,6 +1486,8 @@ impl UiState {
         self.transport.bpm = self.app_settings.metronome.bpm.clamp(30.0, 300.0);
         self.tuning_dd = SelectState::new(self.stage.tuning_idx);
         self.root_dd = SelectState::new(self.stage.root_idx);
+        self.set_arrangement_dd = SelectState::new(self.app_settings.stage.set_arrangement.index())
+            .with_label("Set arrangement");
     }
 }
 
@@ -1670,7 +1738,6 @@ fn sidebar(ui: &UiState) -> UiChild {
     Box::new(el("div", items).attr("class", "side"))
 }
 
-
 /// Render a transport lens's board (Arpeggio / Exercise / Progression) on the
 /// painted leaf, so it shares the crisp neck, orientation, marker style, and
 /// scroll viewport that Scale / Chord use. `controls` sits above the neck (a
@@ -1745,7 +1812,10 @@ fn leaf_section_board(
                 )
                 .attr("class", board_viewport_class(geom.orientation))
                 .attr("aria-label", aria)
-                .attr("style", board_viewport_style(geom.orientation, w, h, ui.viewport_h)),
+                .attr(
+                    "style",
+                    board_viewport_style(geom.orientation, w, h, ui.viewport_h),
+                ),
                 el("div", text(caption)).attr("class", "scale-name"),
             ),
         )
@@ -1922,7 +1992,11 @@ fn arpeggio_board_view(ui: &UiState) -> UiChild {
         board.step + 1,
         board.walk_len,
     );
-    let aria = format!("{} arpeggio, {} notes", state.material_name(), board.dots.len());
+    let aria = format!(
+        "{} arpeggio, {} notes",
+        state.material_name(),
+        board.dots.len()
+    );
     leaf_section_board(ui, &ui.stage.lens_markers().0, deck, caption, aria)
 }
 
@@ -2088,8 +2162,7 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                 .map(|d| note_card(d, string_count))
         })
         .collect();
-    let card_strip =
-        (!cards.is_empty()).then(|| el("div", cards).attr("class", "note-card-strip"));
+    let card_strip = (!cards.is_empty()).then(|| el("div", cards).attr("class", "note-card-strip"));
     Box::new(
         el(
             "div",
@@ -2127,7 +2200,10 @@ pub(super) fn board(ui: &UiState) -> UiChild {
                         state.fret_count
                     ),
                 )
-                .attr("style", board_viewport_style(geom.orientation, w, h, ui.viewport_h)),
+                .attr(
+                    "style",
+                    board_viewport_style(geom.orientation, w, h, ui.viewport_h),
+                ),
                 card_strip,
                 el(
                     "div",
@@ -2257,7 +2333,12 @@ fn stage_screen(ui: &UiState) -> UiChild {
     if ui.stage_page == StagePage::Templates {
         return Box::new(el(
             "div",
-            (header(ui), lens_strip(ui), templates::screen(ui), set_tray::view(ui)),
+            (
+                header(ui),
+                lens_strip(ui),
+                templates::screen(ui),
+                set_tray::view(ui),
+            ),
         ));
     }
     // The wide three-column arm is viewport-bounded: the screen is a column
@@ -2288,7 +2369,13 @@ fn stage_screen(ui: &UiState) -> UiChild {
     };
     let screen = el(
         "div",
-        (header(ui), transport(ui), lens_strip(ui), body, set_tray::view(ui)),
+        (
+            header(ui),
+            transport(ui),
+            lens_strip(ui),
+            body,
+            set_tray::view(ui),
+        ),
     );
     Box::new(if wide3 {
         screen.attr("class", "stage-screen")
@@ -2430,6 +2517,54 @@ mod evidence_tests {
             (compact.width, compact.height),
             (expanded.width, expanded.height)
         );
+        assert_eq!(
+            (expanded.width, expanded.height),
+            ui.app_settings.stage.set_graph_size()
+        );
+
+        ui.app_settings.stage.resize_set_graph(700, 420);
+        let resized = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
+        assert_eq!((resized.width, resized.height), (700, 420));
+    }
+
+    #[test]
+    fn the_set_arrangement_picker_changes_projection_and_releases_manual_pins() {
+        let mut ui = staged_set();
+        ui.stage_current(None);
+        let card = ui.set.cards[0].id;
+        ui.set_graph_positions.insert(card, (0.2, 0.8));
+        ui.set_graph_relation = set_graph_snapshot(&ui)
+            .relations()
+            .first()
+            .map(|item| item.0);
+
+        ui.set_arrangement_dd.selected = GraphArrangement::Circle.index();
+        ui.sync();
+
+        assert_eq!(
+            ui.app_settings.stage.set_arrangement,
+            GraphArrangement::Circle
+        );
+        assert!(ui.set_graph_positions.is_empty());
+        assert_eq!(ui.set_graph_relation, None);
+        let circle = set_graph_swatch(&ui)
+            .graph
+            .nodes
+            .iter()
+            .map(|node| node.position)
+            .collect::<Vec<_>>();
+
+        ui.set_graph_arrangement(GraphArrangement::Snake);
+        let snake = set_graph_swatch(&ui)
+            .graph
+            .nodes
+            .iter()
+            .map(|node| node.position)
+            .collect::<Vec<_>>();
+        assert_ne!(
+            circle, snake,
+            "layout changes placement, not graph identity"
+        );
     }
 
     #[test]
@@ -2493,6 +2628,60 @@ mod evidence_tests {
     }
 
     #[test]
+    fn stage_graph_pan_and_zoom_stay_view_local_and_bounded() {
+        let mut ui = staged_set();
+        let snapshot = set_graph_snapshot(&ui);
+        let order = ui.set.cards.iter().map(|card| card.id).collect::<Vec<_>>();
+
+        ui.handle_set_graph_event(
+            &snapshot,
+            GraphCanvasEvent::Pan {
+                delta: (0.12, -0.08),
+            },
+        );
+        ui.handle_set_graph_event(&snapshot, GraphCanvasEvent::Zoom { factor: 2.0 });
+        assert_eq!(ui.set_graph_viewport.pan, (0.12, -0.08));
+        assert_eq!(ui.set_graph_viewport.zoom, 2.0);
+        assert_eq!(
+            ui.set.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
+            order,
+            "camera gestures cannot reorder Set truth"
+        );
+
+        ui.handle_set_graph_event(&snapshot, GraphCanvasEvent::Zoom { factor: 100.0 });
+        assert_eq!(ui.set_graph_viewport.zoom, 8.0);
+        ui.handle_set_graph_event(&snapshot, GraphCanvasEvent::Zoom { factor: 0.001 });
+        assert_eq!(ui.set_graph_viewport.zoom, 0.25);
+    }
+
+    #[test]
+    fn selected_node_activation_expands_and_collapses_the_same_card_region() {
+        let mut ui = staged_set();
+        let snapshot = set_graph_snapshot(&ui);
+        let card = ui.set.cursor_id().expect("selected card");
+        let instance = snapshot.instance_ref_of(card).expect("instance");
+        assert!(!ui.set_graph_card_expanded);
+
+        ui.handle_set_graph_event(&snapshot, GraphCanvasEvent::Activate(instance));
+        assert!(ui.set_graph_card_expanded);
+        let swatch = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
+        let region = swatch
+            .projected_node_footprint(&instance)
+            .expect("selected card region");
+        assert!(region.left >= 0.0 && region.top >= 0.0);
+        assert!(region.left + region.width <= swatch.width as f32);
+        assert!(region.top + region.height <= swatch.height as f32);
+
+        ui.handle_set_graph_event(&snapshot, GraphCanvasEvent::Activate(instance));
+        assert!(!ui.set_graph_card_expanded);
+        assert_eq!(
+            ui.set.cursor_id(),
+            Some(card),
+            "collapse preserves identity"
+        );
+    }
+
+    #[test]
     fn relation_inventory_withholds_edges_without_editing_scene_truth() {
         let mut ui = UiState::new();
         ui.stage.set_lens(Lens::Chords);
@@ -2532,7 +2721,10 @@ mod evidence_tests {
             choices.len(),
             "visibility never removes source relations"
         );
-        assert_eq!(ui.set_graph_relation, None, "a hidden hit target is deselected");
+        assert_eq!(
+            ui.set_graph_relation, None,
+            "a hidden hit target is deselected"
+        );
         assert_eq!(
             set_graph_relation_choices(&snapshot, &ui)
                 .iter()
@@ -2551,21 +2743,17 @@ mod evidence_tests {
         );
 
         ui.show_all_set_graph_relations();
-        assert!(
-            set_graph_relation_choices(&snapshot, &ui)
-                .iter()
-                .all(|choice| choice.visible)
-        );
+        assert!(set_graph_relation_choices(&snapshot, &ui)
+            .iter()
+            .all(|choice| choice.visible));
         ui.hide_all_set_graph_relations(&snapshot);
-        assert!(
-            set_graph_relation_choices(&snapshot, &ui)
-                .iter()
-                .all(|choice| !choice.visible)
-        );
+        assert!(set_graph_relation_choices(&snapshot, &ui)
+            .iter()
+            .all(|choice| !choice.visible));
     }
 
     #[test]
-    fn stage_scene_parallel_relations_reach_cambium_as_distinct_routes() {
+    fn stage_scene_parallel_relations_reach_cambium_as_distinct_card_anchored_routes() {
         let mut ui = UiState::new();
         ui.stage.set_lens(Lens::Chords);
         let major = ui
@@ -2585,6 +2773,7 @@ mod evidence_tests {
         ui.stage.select_chord(major_seven);
         ui.stage_current(None);
 
+        ui.set_graph_card_expanded = true;
         let snapshot = set_graph_snapshot(&ui);
         let swatch = set_graph_swatch_from_snapshot(&snapshot, &ui, true);
         let routes = swatch.projected_relations();
@@ -2599,6 +2788,36 @@ mod evidence_tests {
             routes.len(),
             "Cambium fans every relation cell onto its own visible route"
         );
+        let selected = swatch.selected.expect("selected occurrence");
+        let region = swatch
+            .projected_node_footprint(&selected)
+            .expect("selected Card footprint");
+        let right = region.left + region.width;
+        let bottom = region.top + region.height;
+        let incident = routes
+            .iter()
+            .filter_map(|(relation, route)| {
+                if relation.from == selected {
+                    route.first().copied()
+                } else if relation.to == selected {
+                    route.last().copied()
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !incident.is_empty(),
+            "the selected occurrence has relations"
+        );
+        assert!(incident.iter().all(|point| {
+            let on_vertical =
+                (point.0 - region.left).abs() < 0.01 || (point.0 - right).abs() < 0.01;
+            let on_horizontal =
+                (point.1 - region.top).abs() < 0.01 || (point.1 - bottom).abs() < 0.01;
+            (on_vertical && point.1 >= region.top && point.1 <= bottom)
+                || (on_horizontal && point.0 >= region.left && point.0 <= right)
+        }));
     }
 
     #[test]

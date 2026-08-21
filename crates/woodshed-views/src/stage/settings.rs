@@ -7,7 +7,7 @@ use woodshed_core::audio::{AudioRequest, CalibrationStatus};
 use woodshedding::rehearsal::SetGraphEdgeKind;
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
-use crate::settings_provider::{APPEARANCE_REFERENCE, WoodshedSettingsProvider};
+use crate::settings_provider::{WoodshedSettingsProvider, APPEARANCE_REFERENCE};
 
 /// MIDI device panel (audio-depth slice 13): port pickers, clock-slave /
 /// clock-master toggles, and a live status + event readout. The host
@@ -332,7 +332,9 @@ fn tuning_page(ui: &UiState) -> UiChild {
                 el("div", picker).attr("class", "settings-options"),
                 el(
                     "div",
-                    text("This is the same tuning used by Stage, Fretboard, Rehearsal, and Looper."),
+                    text(
+                        "This is the same tuning used by Stage, Fretboard, Rehearsal, and Looper.",
+                    ),
                 )
                 .attr("class", "settings-line"),
             ),
@@ -368,6 +370,8 @@ fn stage_page(ui: &UiState) -> UiChild {
         "Set arrangement: {}",
         ui.app_settings.stage.set_arrangement.label()
     );
+    let (set_graph_width, set_graph_height) = ui.app_settings.stage.set_graph_size();
+    let set_graph_size = format!("Set canvas: {set_graph_width} × {set_graph_height} · reset");
     let hidden_count = ui.app_settings.stage.related.dismissed_ids.len();
     // One entry per derivable relation family, so the Set graph's visible
     // relations are configured here rather than through a single switch that
@@ -383,7 +387,10 @@ fn stage_page(ui: &UiState) -> UiChild {
             Box::new(clickable(
                 el(
                     "div",
-                    text(format!("Set {} edges: {state}", kind.label().to_lowercase())),
+                    text(format!(
+                        "Set {} edges: {state}",
+                        kind.label().to_lowercase()
+                    )),
                 )
                 .attr("class", "side-item"),
                 move |ui: &mut UiState, _| {
@@ -438,11 +445,12 @@ fn stage_page(ui: &UiState) -> UiChild {
                 clickable(
                     el("div", text(set_arrangement)).attr("class", "side-item"),
                     |ui: &mut UiState, _| {
-                        let stage = &mut ui.app_settings.stage;
-                        stage.set_arrangement = stage.set_arrangement.next();
-                        ui.set_graph_positions.clear();
-                        ui.set_graph_relation = None;
+                        ui.set_graph_arrangement(ui.app_settings.stage.set_arrangement.next());
                     },
+                ),
+                clickable(
+                    el("div", text(set_graph_size)).attr("class", "side-item"),
+                    |ui: &mut UiState, _| ui.app_settings.stage.reset_set_graph_size(),
                 ),
                 clickable(
                     el("div", text(format!("Restore hidden ({hidden_count})")))
@@ -477,7 +485,11 @@ fn fretboard_page(ui: &UiState) -> UiChild {
         .iter()
         .map(|&name| {
             let active = ui.app_settings.fretboard.marker_style.as_str() == name;
-            let class = if active { "side-item side-active" } else { "side-item" };
+            let class = if active {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
             Box::new(clickable(
                 el("div", text(name)).attr("class", class),
                 move |ui: &mut UiState, _| {
@@ -533,7 +545,11 @@ fn fretboard_page(ui: &UiState) -> UiChild {
         .iter()
         .map(|&name| {
             let active = ui.app_settings.fretboard.orientation.as_str() == name;
-            let class = if active { "side-item side-active" } else { "side-item" };
+            let class = if active {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
             Box::new(clickable(
                 el("div", text(name)).attr("class", class),
                 move |ui: &mut UiState, _| {
@@ -597,7 +613,11 @@ fn tuner_page(ui: &UiState) -> UiChild {
                 clickable(
                     el(
                         "div",
-                        text(if ui.tuner.enabled { "Listening: on" } else { "Listening: off" }),
+                        text(if ui.tuner.enabled {
+                            "Listening: on"
+                        } else {
+                            "Listening: off"
+                        }),
                     )
                     .attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
@@ -644,7 +664,11 @@ fn looper_page(ui: &UiState) -> UiChild {
                 clickable(
                     el(
                         "div",
-                        text(if ui.song_record_replace { "Record: replace" } else { "Record: overdub" }),
+                        text(if ui.song_record_replace {
+                            "Record: replace"
+                        } else {
+                            "Record: overdub"
+                        }),
                     )
                     .attr("class", "t-btn"),
                     |ui: &mut UiState, _| {
@@ -653,7 +677,9 @@ fn looper_page(ui: &UiState) -> UiChild {
                 ),
                 el(
                     "div",
-                    text("Count-in, unresolved-Card timing, and WAV export defaults will live here."),
+                    text(
+                        "Count-in, unresolved-Card timing, and WAV export defaults will live here.",
+                    ),
                 )
                 .attr("class", "settings-line"),
             ),
@@ -684,7 +710,11 @@ fn accessibility_page(ui: &UiState) -> UiChild {
             .into_iter()
             .map(|(label, val)| {
                 let active = on_now == val;
-                let class = if active { "side-item side-active" } else { "side-item" };
+                let class = if active {
+                    "side-item side-active"
+                } else {
+                    "side-item"
+                };
                 Box::new(clickable(
                     el("div", text(label)).attr("class", class),
                     move |ui: &mut UiState, _| set_on(ui, val),
@@ -702,7 +732,11 @@ fn accessibility_page(ui: &UiState) -> UiChild {
         .iter()
         .map(|&name| {
             let active = ui.app_settings.accessibility.text_scale.as_str() == name;
-            let class = if active { "side-item side-active" } else { "side-item" };
+            let class = if active {
+                "side-item side-active"
+            } else {
+                "side-item"
+            };
             Box::new(clickable(
                 el("div", text(name)).attr("class", class),
                 move |ui: &mut UiState, _| {
@@ -768,7 +802,10 @@ mod tests {
         });
         let line = persona_line(&ui);
         assert!(line.contains("work"), "{line}");
-        assert!(line.contains("OS auto-unlock"), "the backend's own words: {line}");
+        assert!(
+            line.contains("OS auto-unlock"),
+            "the backend's own words: {line}"
+        );
     }
 
     #[test]
@@ -797,7 +834,10 @@ mod tests {
         crate::persona::practise_unsaved(&mut ui);
         let line = persona_line(&ui);
         assert!(line.contains("No persona chosen"), "{line}");
-        assert!(!line.contains("work"), "the stale persona must not survive: {line}");
+        assert!(
+            !line.contains("work"),
+            "the stale persona must not survive: {line}"
+        );
     }
 
     #[test]

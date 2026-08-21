@@ -32,14 +32,14 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use cambium_genet_winit_host::{Frame, HostPointer, read_frame};
+use cambium_genet_winit_host::{read_frame, Frame, HostPointer};
 use genet_probe::{
     Automatable, AutomatableExt, Driveable, ProbeSnapshot, ProbeSurface, Progress, Scenario,
     Selector,
 };
 use woodshed_core::Lens;
 use woodshed_views::stage::{
-    UiState, set_graph_relation_choices, set_graph_snapshot, set_graph_swatch_from_snapshot,
+    set_graph_relation_choices, set_graph_snapshot, set_graph_swatch_from_snapshot, UiState,
 };
 
 use crate::shared::Shared;
@@ -307,6 +307,50 @@ impl Probe<'_, '_> {
             .unwrap_or_else(|| "none".to_string())
     }
 
+    fn graph_label_placements(&self) -> (usize, usize) {
+        use layout_dom_api::LayoutDom;
+        let dom = self.ctx.runner.dom();
+        let dom = dom.borrow();
+        dom.all_with_class(dom.document(), "graph-canvas-swatch-label")
+            .into_iter()
+            .fold((0, 0), |(above, side), node| {
+                let placement = dom.attribute(
+                    node,
+                    &layout_dom_api::Namespace::from(""),
+                    &layout_dom_api::LocalName::from("data-label-placement"),
+                );
+                match placement {
+                    Some("above") => (above + 1, side),
+                    Some("left" | "right") => (above, side + 1),
+                    _ => (above, side),
+                }
+            })
+    }
+
+    fn graph_node_card_count(&self) -> usize {
+        use layout_dom_api::LayoutDom;
+        let dom = self.ctx.runner.dom();
+        let dom = dom.borrow();
+        dom.all_with_class(dom.document(), "set-graph-node-card")
+            .len()
+    }
+
+    fn pointer_capture_class(&self) -> String {
+        use layout_dom_api::LayoutDom;
+        let Some(node) = self.ctx.runner.pointer_capture() else {
+            return "none".to_string();
+        };
+        let dom = self.ctx.runner.dom();
+        let dom = dom.borrow();
+        dom.attribute(
+            node,
+            &layout_dom_api::Namespace::from(""),
+            &layout_dom_api::LocalName::from("class"),
+        )
+        .unwrap_or("unclassed")
+        .to_string()
+    }
+
     fn stage_node_key(&self, index: usize) -> Option<String> {
         let ui = self.ctx.runner.state();
         let snapshot = set_graph_snapshot(ui);
@@ -348,6 +392,46 @@ impl Automatable for Probe<'_, '_> {
         let stage_snapshot = set_graph_snapshot(ui);
         let stage_swatch =
             set_graph_swatch_from_snapshot(&stage_snapshot, ui, ui.set_tray_expanded);
+        let routed_lanes = stage_swatch
+            .projected_relations()
+            .iter()
+            .filter(|(_, route)| route.len() == 4)
+            .count();
+        let (card_incident_relations, card_anchored_relations) = stage_swatch
+            .selected
+            .as_ref()
+            .and_then(|selected| {
+                let region = stage_swatch.projected_node_footprint(selected)?;
+                let right = region.left + region.width;
+                let bottom = region.top + region.height;
+                let mut incident = 0;
+                let mut anchored = 0;
+                for (relation, route) in stage_swatch.projected_relations() {
+                    let endpoint = if &relation.from == selected {
+                        route.first().copied()
+                    } else if &relation.to == selected {
+                        route.last().copied()
+                    } else {
+                        None
+                    };
+                    let Some(point) = endpoint else {
+                        continue;
+                    };
+                    incident += 1;
+                    let on_vertical =
+                        (point.0 - region.left).abs() < 0.01 || (point.0 - right).abs() < 0.01;
+                    let on_horizontal =
+                        (point.1 - region.top).abs() < 0.01 || (point.1 - bottom).abs() < 0.01;
+                    if (on_vertical && point.1 >= region.top && point.1 <= bottom)
+                        || (on_horizontal && point.0 >= region.left && point.0 <= right)
+                    {
+                        anchored += 1;
+                    }
+                }
+                Some((incident, anchored))
+            })
+            .unwrap_or_default();
+        let (labels_above, labels_side) = self.graph_label_placements();
         let relation_choices = set_graph_relation_choices(&stage_snapshot, ui);
         let cursor_label = ui
             .set
@@ -363,6 +447,25 @@ impl Automatable for Probe<'_, '_> {
             .with_field("graph-nodes", ui.set.graph().nodes.len().to_string())
             .with_field("graph-edges", observed.edges.to_string())
             .with_field("graph-relations", stage_swatch.relations.len().to_string())
+            .with_field(
+                "graph-arrangement",
+                ui.app_settings.stage.set_arrangement.label(),
+            )
+            .with_field("graph-routed-lanes", routed_lanes.to_string())
+            .with_field("graph-labels-above", labels_above.to_string())
+            .with_field("graph-labels-side", labels_side.to_string())
+            .with_field("graph-width", stage_swatch.width.to_string())
+            .with_field("graph-height", stage_swatch.height.to_string())
+            .with_field("graph-node-cards", self.graph_node_card_count().to_string())
+            .with_field(
+                "graph-card-incident-relations",
+                card_incident_relations.to_string(),
+            )
+            .with_field(
+                "graph-card-anchored-relations",
+                card_anchored_relations.to_string(),
+            )
+            .with_field("pointer-capture", self.pointer_capture_class())
             .with_field(
                 "graph-visible-relations",
                 relation_choices
@@ -747,6 +850,27 @@ impl Driveable for Probe<'_, '_> {
     fn app_step(&mut self, line: &str) -> Result<(), String> {
         let mut parts = line.split_whitespace();
         match parts.next() {
+            Some("open-stage-arrangement") => {
+                if parts.next().is_some() {
+                    return Err("open-stage-arrangement takes no arguments".to_string());
+                }
+                let selector = Selector::role("combobox").containing("Set arrangement");
+                self.click(&selector)
+                    .then_some(())
+                    .ok_or_else(|| "open-stage-arrangement missed the picker".to_string())
+            }
+            Some("choose-stage-arrangement") => {
+                let label = parts
+                    .next()
+                    .ok_or("choose-stage-arrangement wants one arrangement label")?;
+                if parts.next().is_some() {
+                    return Err("choose-stage-arrangement takes one arrangement label".to_string());
+                }
+                let selector = Selector::role("option").containing(label);
+                self.click(&selector)
+                    .then_some(())
+                    .ok_or_else(|| format!("choose-stage-arrangement missed {label}"))
+            }
             Some("click-stage-node") => {
                 let index: usize = parts
                     .next()
@@ -811,6 +935,81 @@ impl Driveable for Probe<'_, '_> {
                 self.moved((start.0 + end.0) * 0.5, (start.1 + end.1) * 0.5);
                 self.moved(end.0, end.1);
                 self.release(end.0, end.1);
+                Ok(())
+            }
+            Some("drag-stage-graph-resize") => {
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("drag-stage-graph-resize wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("drag-stage-graph-resize wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("drag-stage-graph-resize takes exactly dx and dy".to_string());
+                }
+                let selector = Selector::class("resize-handle");
+                let hit = self
+                    .resolve(&selector)
+                    .ok_or("drag-stage-graph-resize missed the handle")?;
+                let start = hit.point;
+                let end = (start.0 + dx, start.1 + dy);
+                self.press(start.0, start.1);
+                self.moved((start.0 + end.0) * 0.5, (start.1 + end.1) * 0.5);
+                self.moved(end.0, end.1);
+                self.release(end.0, end.1);
+                Ok(())
+            }
+            Some("press-stage-graph-resize") => {
+                if parts.next().is_some() {
+                    return Err("press-stage-graph-resize takes no arguments".to_string());
+                }
+                let selector = Selector::class("resize-handle");
+                let hit = self
+                    .resolve(&selector)
+                    .ok_or("press-stage-graph-resize missed the handle")?;
+                self.shared.scenario_drag_origin = Some(hit.point);
+                self.press(hit.point.0, hit.point.1);
+                Ok(())
+            }
+            Some("move-stage-graph-resize") => {
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("move-stage-graph-resize wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("move-stage-graph-resize wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("move-stage-graph-resize takes x and y deltas".to_string());
+                }
+                let origin = self
+                    .shared
+                    .scenario_drag_origin
+                    .ok_or("move-stage-graph-resize has no pressed handle")?;
+                self.moved(origin.0 + dx, origin.1 + dy);
+                Ok(())
+            }
+            Some("release-stage-graph-resize") => {
+                let dx: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("release-stage-graph-resize wants an x delta")?;
+                let dy: f32 = parts
+                    .next()
+                    .and_then(|value| value.parse().ok())
+                    .ok_or("release-stage-graph-resize wants a y delta")?;
+                if parts.next().is_some() {
+                    return Err("release-stage-graph-resize takes x and y deltas".to_string());
+                }
+                let origin = self
+                    .shared
+                    .scenario_drag_origin
+                    .take()
+                    .ok_or("release-stage-graph-resize has no pressed handle")?;
+                self.release(origin.0 + dx, origin.1 + dy);
                 Ok(())
             }
             Some("press-stage-node") => {

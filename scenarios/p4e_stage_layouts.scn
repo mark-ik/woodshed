@@ -1,0 +1,32 @@
+# P4e receipt: one Stage graph changes deterministic arrangements through
+# its visible picker. Horizontal and vertical layouts publish different
+# label-clear anchors while preserving graph contents and independent routes.
+
+log P4e: selectable Stage arrangements and label-clear relation lanes
+settle 3
+
+act stage-related-pair
+settle 3
+assert snap graph-arrangement == Snake
+assert snap graph-nodes == 2
+assert snap graph-visible-relations >= 3
+assert snap graph-routed-lanes >= 3
+assert snap graph-labels-above == 2
+capture 01_snake_horizontal_lanes
+
+open-stage-arrangement
+settle 2
+capture 02_ten_layout_picker
+
+choose-stage-arrangement Circle
+settle 3
+assert snap graph-arrangement == Circle
+assert snap graph-nodes == 2
+assert snap graph-visible-relations >= 3
+assert snap graph-routed-lanes >= 3
+assert snap graph-labels-above == 0
+assert snap graph-labels-side == 2
+assert snap graph-moved-nodes == 0
+capture 03_circle_vertical_lanes
+
+log P4e layout receipt complete

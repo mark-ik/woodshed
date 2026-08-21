@@ -1,9 +1,14 @@
-use woodshedding::rehearsal::{Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
-use woodshed_core::storage::AppSection;
-use woodshed_core::stage_scene::StageInstanceRef;
 use cambium::{
-    GraphCanvasEvent, clickable, el, graph_canvas, map_state, text, text_field,
+    clickable, el, graph_canvas, map_state, resize_handle, select, text, text_field,
+    GraphCanvasEvent, GraphCanvasSwatch, ResizeBounds,
 };
+use woodshed_core::arrangement::GraphArrangement;
+use woodshed_core::settings::{
+    MAX_SET_GRAPH_HEIGHT, MAX_SET_GRAPH_WIDTH, MIN_SET_GRAPH_HEIGHT, MIN_SET_GRAPH_WIDTH,
+};
+use woodshed_core::stage_scene::StageInstanceRef;
+use woodshed_core::storage::AppSection;
+use woodshedding::rehearsal::{Hold, LoopMode, Recipe, SetGraphEdgeKind, Touch};
 
 use super::{
     set_graph_relation_choices, set_graph_snapshot, set_graph_swatch_from_snapshot, UiChild,
@@ -80,11 +85,8 @@ pub(super) fn card_editor(ui: &UiState) -> UiChild {
                 )
                 .attr("class", "card-rename"),
                 clickable(
-                    el(
-                        "div",
-                        text(format!("Touch: {}", touch_label(&card.touch))),
-                    )
-                    .attr("class", "t-btn"),
+                    el("div", text(format!("Touch: {}", touch_label(&card.touch))))
+                        .attr("class", "t-btn"),
                     |ui: &mut UiState, _| ui.cycle_card_touch(),
                 ),
                 clickable(
@@ -123,6 +125,47 @@ pub(super) fn card_editor(ui: &UiState) -> UiChild {
     )
 }
 
+fn graph_node_card(
+    ui: &UiState,
+    snapshot: &woodshed_core::stage_scene::StageGraphSnapshot,
+    swatch: &GraphCanvasSwatch<StageInstanceRef, &'static str>,
+) -> UiChild {
+    if !ui.set_graph_card_expanded {
+        return Box::new(el("div", ()));
+    }
+    let Some(reference) = ui
+        .set
+        .cursor_id()
+        .and_then(|card| snapshot.instance_ref_of(card))
+    else {
+        return Box::new(el("div", ()));
+    };
+    let Some(region) = swatch.projected_node_footprint(&reference) else {
+        return Box::new(el("div", ()));
+    };
+    let style = format!(
+        "left:{:.1}px;top:{:.1}px;width:{:.1}px;height:{:.1}px;",
+        region.left, region.top, region.width, region.height
+    );
+    let card = el(
+        "div",
+        (
+            clickable(
+                el("div", text("Collapse card")).attr("class", "t-btn graph-card-collapse"),
+                |ui: &mut UiState, _| ui.set_graph_card_expanded = false,
+            ),
+            card_editor(ui),
+        ),
+    )
+    .attr("class", "set-graph-node-card")
+    .attr("data-card-instance", reference.instance.0.to_string());
+    Box::new(
+        el("div", card)
+            .attr("class", "set-graph-node-card-layer")
+            .attr("style", style),
+    )
+}
+
 pub(super) fn view(ui: &UiState) -> UiChild {
     let loop_label = match ui.set.loop_mode {
         LoopMode::Off => "Loop set: off",
@@ -144,8 +187,11 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                 el(
                     "div",
                     (
-                        el("div", text(format!("{} · {}", index + 1, card.material.tag())))
-                            .attr("class", "set-card-kind"),
+                        el(
+                            "div",
+                            text(format!("{} · {}", index + 1, card.material.tag())),
+                        )
+                        .attr("class", "set-card-kind"),
                         el("div", text(card.label.clone())).attr("class", "set-card-title"),
                         el(
                             "div",
@@ -171,14 +217,14 @@ pub(super) fn view(ui: &UiState) -> UiChild {
 
     let body: UiChild = if cards.is_empty() {
         Box::new(
-            el("div", text("Stage catalog material to build this Set."))
-                .attr("class", "set-empty"),
+            el("div", text("Stage catalog material to build this Set.")).attr("class", "set-empty"),
         )
     } else {
         Box::new(el("div", cards).attr("class", "set-cards"))
     };
     let snapshot = set_graph_snapshot(ui);
     let swatch = set_graph_swatch_from_snapshot(&snapshot, ui, ui.set_tray_expanded);
+    let graph_size = (swatch.width, swatch.height);
     let event_snapshot = snapshot.clone();
     let graph = graph_canvas(
         &swatch,
@@ -187,6 +233,14 @@ pub(super) fn view(ui: &UiState) -> UiChild {
         },
     );
     let relation_choices = set_graph_relation_choices(&snapshot, ui);
+    let arrangement_names = GraphArrangement::ALL
+        .iter()
+        .map(|arrangement| arrangement.label())
+        .collect::<Vec<_>>();
+    let arrangement_picker = map_state(
+        select(&ui.set_arrangement_dd, &arrangement_names),
+        |ui: &mut UiState| &mut ui.set_arrangement_dd,
+    );
     let visible_relations = relation_choices
         .iter()
         .filter(|relation| relation.visible)
@@ -208,12 +262,9 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     "div",
                     (
                         clickable(
-                            el(
-                                "div",
-                                text(if choice.visible { "Shown" } else { "Hidden" }),
-                            )
-                            .attr("class", toggle_class)
-                            .attr("aria-pressed", choice.visible.to_string()),
+                            el("div", text(if choice.visible { "Shown" } else { "Hidden" }))
+                                .attr("class", toggle_class)
+                                .attr("aria-pressed", choice.visible.to_string()),
                             move |ui: &mut UiState, _| {
                                 ui.toggle_set_graph_relation(&toggle_snapshot, key.clone());
                             },
@@ -221,8 +272,7 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                         el(
                             "div",
                             (
-                                el("div", text(choice.pair))
-                                    .attr("class", "set-relation-pair"),
+                                el("div", text(choice.pair)).attr("class", "set-relation-pair"),
                                 el(
                                     "div",
                                     text(format!(
@@ -286,30 +336,60 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                     "div",
                     text(format!(
                         "Selected · {} · {} · {}% · {}",
-                        relation.label,
-                        relation.authority,
-                        relation.weight,
-                        relation.explanation
+                        relation.label, relation.authority, relation.weight, relation.explanation
                     )),
                 )
-                    .attr("class", "set-graph-relation"),
+                .attr("class", "set-graph-relation"),
             ) as UiChild
         })
         .unwrap_or_else(|| Box::new(el("div", ())) as UiChild);
     let content: UiChild = if ui.set_tray_expanded {
-        let expanded_card: UiChild = if ui.set_graph_card_expanded {
-            card_editor(ui)
-        } else {
-            Box::new(el("div", ()))
-        };
+        let graph_card = graph_node_card(ui, &snapshot, &swatch);
+        let resize = resize_handle(
+            graph_size,
+            ResizeBounds::new(
+                MIN_SET_GRAPH_WIDTH,
+                MIN_SET_GRAPH_HEIGHT,
+                MAX_SET_GRAPH_WIDTH,
+                MAX_SET_GRAPH_HEIGHT,
+            ),
+            "Resize Set graph. Use arrow keys, Home, or End.",
+            |ui: &mut UiState, event| {
+                let (width, height) = event.size();
+                ui.app_settings.stage.resize_set_graph(width, height);
+            },
+        );
+        let card_root = el("div", graph_card)
+            .attr("class", "set-graph-card-root")
+            .attr(
+                "style",
+                format!("width:{}px;height:{}px;", graph_size.0, graph_size.1),
+            );
+        let graph_stack = el("div", (graph, card_root))
+            .attr("class", "set-graph-canvas-stack")
+            .attr(
+                "style",
+                format!("width:{}px;height:{}px;", graph_size.0, graph_size.1),
+            );
+        let resize_grip = el("div", resize).attr("class", "set-graph-resize-grip");
+        let canvas_row =
+            el("div", (graph_stack, resize_grip)).attr("class", "set-graph-canvas-row");
         Box::new(el(
             "div",
             (
                 el(
                     "div",
                     (
-                        el("div", text("Set graph")).attr("class", "set-graph-heading"),
-                        graph,
+                        el(
+                            "div",
+                            (
+                                el("div", text("Set graph")).attr("class", "set-graph-heading"),
+                                el("div", text("Layout")).attr("class", "set-graph-layout-label"),
+                                arrangement_picker,
+                            ),
+                        )
+                        .attr("class", "set-graph-toolbar"),
+                        canvas_row,
                         relation_detail,
                         relation_inventory,
                         el(
@@ -331,8 +411,8 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                         .attr("class", "set-graph-controls"),
                     ),
                 )
-                .attr("class", "set-graph"),
-                expanded_card,
+                .attr("class", "set-graph")
+                .attr("style", format!("width:{}px;", graph_size.0 + 18)),
                 body,
             ),
         ))
@@ -347,15 +427,16 @@ pub(super) fn view(ui: &UiState) -> UiChild {
                 el(
                     "div",
                     (
-                        el(
-                            "div",
-                            text(format!("Set · {} cards", ui.set.cards.len())),
-                        )
-                        .attr("class", "set-heading"),
+                        el("div", text(format!("Set · {} cards", ui.set.cards.len())))
+                            .attr("class", "set-heading"),
                         clickable(
                             el(
                                 "div",
-                                text(if ui.set_tray_expanded { "Collapse" } else { "Expand" }),
+                                text(if ui.set_tray_expanded {
+                                    "Collapse"
+                                } else {
+                                    "Expand"
+                                }),
                             )
                             .attr("class", "t-btn"),
                             |ui: &mut UiState, _| {

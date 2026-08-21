@@ -56,8 +56,16 @@ impl GraphArrangement {
     }
 
     pub fn next(self) -> Self {
-        let index = Self::ALL.iter().position(|item| *item == self).unwrap_or(0);
+        let index = self.index();
         Self::ALL[(index + 1) % Self::ALL.len()]
+    }
+
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|item| *item == self).unwrap_or(0)
+    }
+
+    pub fn at(index: usize) -> Self {
+        Self::ALL.get(index).copied().unwrap_or_default()
     }
 }
 
@@ -291,6 +299,9 @@ mod tests {
             .map(GraphArrangement::label)
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(labels.len(), 10);
+        for arrangement in GraphArrangement::ALL {
+            assert_eq!(GraphArrangement::at(arrangement.index()), arrangement);
+        }
     }
 
     #[test]

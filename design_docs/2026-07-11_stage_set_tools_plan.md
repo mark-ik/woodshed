@@ -587,12 +587,11 @@ receipts are recorded before those platforms are advertised.
 
 - The existing portable `Set` and `Card` model already carries material,
   setting, touch, timing, provenance, cursor, and loop mode.
-- `Set::graph()` now addresses occurrences by stable `CardId` and filters by a
-  serializable relation set (P4a, 2026-07-24). What remains of the original
-  finding still stands: it derives only `Next`, lays occurrences out in a
-  hardcoded serpentine grid, and opens the shared Card editor beside the graph
-  rather than in the node's own region. P4b-P4d name the remaining
-  relationship, layout, and inline-representation work.
+- `Set::graph()` addresses occurrences by stable `CardId` and filters by a
+  serializable relation set (P4a, 2026-07-24). The Stage scene now carries
+  typed parallel relations, ten deterministic arrangements, direct canvas
+  sizing, and a selected Card assigned to its node's projected region
+  (P4b-P4e). Keyed-instance relations and multi-node semantic zoom remain.
 - Card is a sound domain unit, but the current UI should not force one visual
   card treatment across Stage, Set tray, Rehearsal, and Looper.
 - Chisel is a good fit for custom-painted material projections. Its semantic
@@ -1104,3 +1103,71 @@ receipts are recorded before those platforms are advertised.
   Vello submission, scene emission, and accessibility synchronization. These
   measurements do not include GPU timestamps. The one-time Down frame still
   peaks near 59 ms and remains a separate optimization target.
+
+- **2026-08-20, P4e selectable layouts and label-clear routing:** Cambium's
+  graph canvas now places visible labels on the quieter axis derived from each
+  node's incident relations. Horizontal lanes label above or below their nodes;
+  vertical lanes label beside them. Each label occupies a bounded, clipped box
+  inside the canvas, so long names cannot run through an edge or escape the
+  viewport.
+
+  Parallel endpoint relations now fan into pixel-stable 12 px lanes with a
+  held interior segment instead of converging through one V-shaped midpoint.
+  Relation identity, visibility, activation, and authored routes are unchanged.
+  The generic Cambium geometry has focused tests for label placement and lane
+  spacing.
+
+  Woodshed exposes its existing ten-arrangement catalog directly on the
+  expanded Set graph. The picker writes the durable Stage arrangement, releases
+  manual positions pinned under the previous layout, and leaves Set order and
+  relation truth alone. The graph subsection now fits its 520 px canvas rather
+  than claiming the window width. `scenarios/p4e_stage_layouts.scn` proves the
+  same two-node, four-relation graph in horizontal Snake and vertical Circle
+  layouts, including the open ten-item picker and the corresponding label
+  anchors. The final 1500x1200 headed run returns `RESULT ok` with three
+  presented-frame PNGs.
+
+  Pattern matching can recommend one of these deterministic arrangements
+  later; it should not silently replace a user's chosen or pinned layout.
+
+- **2026-08-20, P4d resizable canvas and Card-in-node expansion:** Cambium now
+  provides a retained two-axis resize handle. The caller owns durable geometry;
+  the handle owns only pointer capture and keyboard interaction, clamps through
+  caller-supplied bounds, and emits live and final sizes. Its focused tests
+  cover pointer motion, arrow/Home/End operation, and clamping. GraphCanvas also
+  publishes a node region from the same viewport projection used by paint and
+  native hit targets, with clamping that keeps a requested Card inside the
+  canvas. A consumer can now declare that region as the node's rectangular
+  footprint. Cambium clips incoming and outgoing relation routes to its
+  perimeter in leaf pixels, then sends that same route to Sprigging paint and
+  native relation targets. Compact graphs and each fanned route's interior stay
+  unchanged.
+
+  Woodshed stores the expanded Set canvas size in `AppSettings::stage` with
+  360x240 and 960x720 bounds, a 520x260 default, and a reset on the Stage
+  Settings page. The visible grip sits immediately beyond the canvas corner so
+  the graph's deeper positioned layers cannot obscure its native hit target.
+  The selected epoch-qualified occurrence expands into the existing editable
+  Card inside its projected node region and collapses back to the same node.
+  Nested overlay roots keep Card controls above graph geometry under the
+  current retained stacking model.
+
+  `scenarios/p4d_stage_node_cards.scn` proves a real captured resize from
+  520x260 to 660x360, one selected Card region, retained selection identity,
+  all four visible relations anchored at the Card perimeter, and collapse back
+  to the compact node. The stable-host 1500x1200 run returns `RESULT ok` with
+  four presented-frame PNGs. The P4e ten-layout receipt and the relation
+  inventory receipt also remain green. The frame-spaced P4c performance receipt
+  remains green with zero drag-time root rebuilds and one host layout rebuild;
+  its 27 frames averaged 16,561 us and peaked at 76,513 us. The peak is the
+  one-time layout setup, so this remains regression evidence rather than a
+  stable frame-rate claim.
+
+  The headed binary was built in an isolated Woodshed worktree against stable
+  Genet `fd59b6e` plus this Cambium slice. The prior claim that current Genet
+  could not link is stale: it now builds Woodshed. The active Genet checkout is
+  also carrying an unfinished Buckram/Livery lane, and a current-checkout P4d
+  run exposes that lane's headed regression: the Stage fretboard and Card
+  controls overdraw the canvas, the resize resolves as 960x240, and the collapse
+  target misses. The footprint assertions still report all four routes anchored,
+  but that failed frame is not a layout receipt for this slice.
