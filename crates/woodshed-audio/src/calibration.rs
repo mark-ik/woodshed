@@ -175,11 +175,8 @@ impl CalibrationSession {
         onset.reset();
         onset.set_enabled(true);
 
-        let pattern = SequencerPattern::metronome(
-            self.bpm,
-            TimeSignature::new(4, 4),
-            Subdivision::QUARTER,
-        );
+        let pattern =
+            SequencerPattern::metronome(self.bpm, TimeSignature::new(4, 4), Subdivision::QUARTER);
         engine.set_pattern(pattern);
         engine.play();
 
@@ -219,11 +216,7 @@ impl CalibrationSession {
         }
 
         let now = Instant::now();
-        let clicks_fired = self
-            .expected_clicks
-            .iter()
-            .filter(|&&t| t <= now)
-            .count();
+        let clicks_fired = self.expected_clicks.iter().filter(|&&t| t <= now).count();
 
         // Give a settle window equal to the match window after the
         // last expected click so a late onset on the final click
@@ -246,8 +239,7 @@ impl CalibrationSession {
         self.phase = CalibrationPhase::Finished;
 
         let snapshot = onset.snapshot();
-        let onset_instants: Vec<Instant> =
-            snapshot.recent.iter().map(|o| o.at).collect();
+        let onset_instants: Vec<Instant> = snapshot.recent.iter().map(|o| o.at).collect();
         // Require at least half the clicks to have matched.
         let minimum = self.total_clicks / 2;
         match estimate_latency_from_pairs(&self.expected_clicks, &onset_instants, minimum) {

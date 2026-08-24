@@ -4,7 +4,7 @@
 //! 2026-07-04). Replaced by real `AppState`-driven views in S1; keep this
 //! module free of app state on purpose so S0 only proves the host stack.
 
-use cambium::{AnyView, GenetCtx, GenetElement, View, el, text};
+use cambium::{el, text, AnyView, GenetCtx, GenetElement, View};
 
 /// Boxed heterogeneous child view (the meerkat `NoteChild` pattern).
 pub type Child = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
@@ -33,45 +33,59 @@ pub const DEMO_SHEET: &str = r#"
 
 /// A minor-pentatonic-ish scatter: (string, fret, is_root) per dot.
 const DOTS: &[(usize, usize, bool)] = &[
-    (0, 0, false), (0, 3, false), (1, 0, false), (1, 3, true),
-    (2, 0, false), (2, 2, true), (3, 0, false), (3, 2, false),
-    (4, 0, true), (4, 3, false), (5, 0, false), (5, 3, false),
+    (0, 0, false),
+    (0, 3, false),
+    (1, 0, false),
+    (1, 3, true),
+    (2, 0, false),
+    (2, 2, true),
+    (3, 0, false),
+    (3, 2, false),
+    (4, 0, true),
+    (4, 3, false),
+    (5, 0, false),
+    (5, 3, false),
 ];
 
 fn string_row(string: usize) -> Child {
-    let frets: Vec<Child> = (0..6)
-        .map(|fret| {
-            let dot = DOTS.iter().find(|(s, f, _)| *s == string && *f == fret);
-            match dot {
-                Some((_, _, is_root)) => {
-                    let class = if *is_root { "dot root-dot" } else { "dot" };
-                    Box::new(
-                        el(
-                            "div",
-                            (el("div", text(if *is_root { "R" } else { "" }))
-                                .attr("class", class),),
-                        )
-                        .attr("class", "fret"),
-                    ) as Child
+    let frets: Vec<Child> =
+        (0..6)
+            .map(|fret| {
+                let dot = DOTS.iter().find(|(s, f, _)| *s == string && *f == fret);
+                match dot {
+                    Some((_, _, is_root)) => {
+                        let class = if *is_root { "dot root-dot" } else { "dot" };
+                        Box::new(
+                            el(
+                                "div",
+                                (el("div", text(if *is_root { "R" } else { "" }))
+                                    .attr("class", class),),
+                            )
+                            .attr("class", "fret"),
+                        ) as Child
+                    }
+                    None => Box::new(el("div", ()).attr("class", "fret")) as Child,
                 }
-                None => Box::new(el("div", ()).attr("class", "fret")) as Child,
-            }
-        })
-        .collect();
+            })
+            .collect();
     Box::new(el("div", frets).attr("class", "string"))
 }
 
 fn pill(label: &str, active: bool) -> Child {
-    Box::new(el("span", text(label.to_string())).attr(
-        "class",
-        if active { "pill pill-active" } else { "pill" },
-    ))
+    Box::new(
+        el("span", text(label.to_string()))
+            .attr("class", if active { "pill pill-active" } else { "pill" }),
+    )
 }
 
 fn side_item(label: &str, active: bool) -> Child {
     Box::new(el("div", text(label.to_string())).attr(
         "class",
-        if active { "side-item side-active" } else { "side-item" },
+        if active {
+            "side-item side-active"
+        } else {
+            "side-item"
+        },
     ))
 }
 

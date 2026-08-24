@@ -1163,11 +1163,11 @@ receipts are recorded before those platforms are advertised.
   one-time layout setup, so this remains regression evidence rather than a
   stable frame-rate claim.
 
-  The headed binary was built in an isolated Woodshed worktree against stable
-  Genet `fd59b6e` plus this Cambium slice. The prior claim that current Genet
-  could not link is stale: it now builds Woodshed. The active Genet checkout is
-  also carrying an unfinished Buckram/Livery lane, and a current-checkout P4d
-  run exposes that lane's headed regression: the Stage fretboard and Card
-  controls overdraw the canvas, the resize resolves as 960x240, and the collapse
-  target misses. The footprint assertions still report all four routes anchored,
-  but that failed frame is not a layout receipt for this slice.
+  **2026-08-21 current-stack receipt:** the isolated post-Stylo worktree ran
+  the scenario against the active Buckram/Livery sources at 1500x1200 and
+  returned `RESULT ok`. The four presented-frame PNGs in
+  `C:\t\woodshed-p4d-final-20260821-0700` show the graph under the Card,
+  the Card covering its assigned node region, preserved graph paint after the
+  520x260 to 660x360 resize, and the compact graph after collapse. This closes
+  the prior current-checkout paint and hit-test regression; it is not a claim
+  about a separate retained-fragment compositor contract.

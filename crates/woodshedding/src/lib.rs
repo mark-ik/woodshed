@@ -13,13 +13,13 @@
 //! model of pitches, intervals, tunings, scales, chords, progressions,
 //! exercises, fretboard mappings, voicings, and practice sets.
 
-pub mod pitch;
-pub mod interval;
-pub mod tuning;
-pub mod scale;
 pub mod chord;
-pub mod fretboard;
 pub mod exercise;
-pub mod progression;
+pub mod fretboard;
+pub mod interval;
+pub mod pitch;
 pub mod practice;
+pub mod progression;
 pub mod rehearsal;
+pub mod scale;
+pub mod tuning;

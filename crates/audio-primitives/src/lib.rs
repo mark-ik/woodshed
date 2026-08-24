@@ -35,10 +35,10 @@ pub mod onset;
 pub mod waveform;
 
 pub use buffer::{apply_gain, normalize, reverse};
-pub use calibration::{MATCH_WINDOW, count_matches, estimate_latency_from_pairs};
+pub use calibration::{count_matches, estimate_latency_from_pairs, MATCH_WINDOW};
 pub use click::{
     click_sample, frames_per_bar, frames_per_beat, render_click_bar, render_click_bar_in_meter,
 };
 pub use meter::{MeterBallistics, MeterReading, PeakMeterSmoother};
-pub use onset::{OnsetDetector, estimate_bpm};
-pub use waveform::{WaveformPeak, min_max_peaks};
+pub use onset::{estimate_bpm, OnsetDetector};
+pub use waveform::{min_max_peaks, WaveformPeak};

@@ -12,8 +12,8 @@
 pub mod demo;
 pub mod fretboard_leaf;
 pub mod persona;
-pub mod stage;
 pub mod settings_provider;
+pub mod stage;
 pub mod theme;
 
 pub use cambium;

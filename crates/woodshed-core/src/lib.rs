@@ -15,8 +15,8 @@ pub mod audio;
 pub mod history;
 pub mod mere;
 pub mod midi;
-pub mod search;
 pub mod sealed_backend;
+pub mod search;
 pub mod settings;
 pub mod song;
 pub mod stage_scene;
@@ -24,17 +24,15 @@ pub mod storage;
 
 use arpeggio::{generate_shapes, ArpeggioDirection, ArpeggioRun};
 use woodshedding::chord::{catalog as chord_catalog, ChordFormula};
-use woodshedding::exercise::{
-    catalog as exercise_catalog, Exercise, ExerciseParams,
-};
+use woodshedding::exercise::{catalog as exercise_catalog, Exercise, ExerciseParams};
 use woodshedding::fretboard::{Fretboard, Position};
 use woodshedding::interval::Interval;
-use woodshedding::pitch::{Pitch, Spelling};
 use woodshedding::pitch::PitchClass;
+use woodshedding::pitch::{Pitch, Spelling};
+use woodshedding::practice::{PracticeItem, PracticeSet};
 use woodshedding::progression::{
     catalog as progression_catalog, ChordRole, Progression, RoleQuality,
 };
-use woodshedding::practice::{PracticeItem, PracticeSet};
 use woodshedding::rehearsal::{
     Card, CardId, FretWindow, LoopMode, MarkMode, Material, Recipe, Set, Setting, Timing, Touch,
 };
@@ -775,7 +773,9 @@ impl StageState {
             Lens::Chords => woodshed_graph::chord_id(self.chord().name),
             Lens::Arpeggios => woodshed_graph::arpeggio_id(self.arpeggio_chord().name),
             Lens::Progressions => {
-                let Some(idx) = self.progression_idx else { return Vec::new() };
+                let Some(idx) = self.progression_idx else {
+                    return Vec::new();
+                };
                 woodshed_graph::progression_id(self.progressions()[idx].name)
             }
             Lens::Exercises => woodshed_graph::exercise_id(self.exercise().name),
@@ -788,11 +788,15 @@ impl StageState {
                 let (kind, target) = match item.kind {
                     CatalogKind::Scale => (
                         "Scale",
-                        RelatedTarget::Scale(self.scales().iter().position(|x| x.name == item.name)?),
+                        RelatedTarget::Scale(
+                            self.scales().iter().position(|x| x.name == item.name)?,
+                        ),
                     ),
                     CatalogKind::Chord => (
                         "Chord",
-                        RelatedTarget::Chord(self.chords().iter().position(|x| x.name == item.name)?),
+                        RelatedTarget::Chord(
+                            self.chords().iter().position(|x| x.name == item.name)?,
+                        ),
                     ),
                     CatalogKind::Arpeggio => (
                         "Arpeggio",
@@ -803,7 +807,9 @@ impl StageState {
                     CatalogKind::Progression => (
                         "Progression",
                         RelatedTarget::Progression(
-                            self.progressions().iter().position(|x| x.name == item.name)?,
+                            self.progressions()
+                                .iter()
+                                .position(|x| x.name == item.name)?,
                         ),
                     ),
                     CatalogKind::Exercise => (
@@ -841,7 +847,9 @@ impl StageState {
         history: &history::PracticeHistory,
         limit: usize,
     ) -> Vec<RelatedSuggestion> {
-        let Some(selected_id) = self.catalog_id() else { return Vec::new() };
+        let Some(selected_id) = self.catalog_id() else {
+            return Vec::new();
+        };
         let mut ranked: Vec<(usize, usize, RelatedSuggestion)> = self
             .related_material(usize::MAX)
             .into_iter()
@@ -908,17 +916,39 @@ impl StageState {
     pub fn related_target_for_id(&self, id: &str) -> Option<RelatedTarget> {
         let (kind, name) = id.split_once(':')?;
         match kind {
-            "scale" => self.scales().iter().position(|item| item.name == name).map(RelatedTarget::Scale),
-            "chord" => self.chords().iter().position(|item| item.name == name).map(RelatedTarget::Chord),
-            "arpeggio" => self.chords().iter().position(|item| item.name == name).map(RelatedTarget::Arpeggio),
-            "progression" => self.progressions().iter().position(|item| item.name == name).map(RelatedTarget::Progression),
-            "exercise" => self.exercises().iter().position(|item| item.name == name).map(RelatedTarget::Exercise),
+            "scale" => self
+                .scales()
+                .iter()
+                .position(|item| item.name == name)
+                .map(RelatedTarget::Scale),
+            "chord" => self
+                .chords()
+                .iter()
+                .position(|item| item.name == name)
+                .map(RelatedTarget::Chord),
+            "arpeggio" => self
+                .chords()
+                .iter()
+                .position(|item| item.name == name)
+                .map(RelatedTarget::Arpeggio),
+            "progression" => self
+                .progressions()
+                .iter()
+                .position(|item| item.name == name)
+                .map(RelatedTarget::Progression),
+            "exercise" => self
+                .exercises()
+                .iter()
+                .position(|item| item.name == name)
+                .map(RelatedTarget::Exercise),
             _ => None,
         }
     }
 
     pub fn select_catalog_id(&mut self, id: &str) -> bool {
-        let Some(target) = self.related_target_for_id(id) else { return false };
+        let Some(target) = self.related_target_for_id(id) else {
+            return false;
+        };
         self.select_related(target);
         true
     }
@@ -951,7 +981,9 @@ impl StageState {
         settings: &storage::RelatedSettings,
         limit: usize,
     ) -> NeighborhoodSnapshot {
-        let Some(center_id) = self.catalog_id() else { return NeighborhoodSnapshot::default() };
+        let Some(center_id) = self.catalog_id() else {
+            return NeighborhoodSnapshot::default();
+        };
         let center_title = center_id
             .split_once(':')
             .map(|(_, title)| title)
@@ -1335,9 +1367,7 @@ impl StageState {
                 let root_pc = root.value() as i32;
                 return positions
                     .iter()
-                    .filter(|(s, f)| {
-                        *s < strings && *f >= self.fret_start && *f <= self.fret_count
-                    })
+                    .filter(|(s, f)| *s < strings && *f >= self.fret_start && *f <= self.fret_count)
                     .map(|&(s, f)| {
                         let pitch = board.pitch_at(s, f);
                         let semis = (pitch.pitch_class() as i32 - root_pc).rem_euclid(12);
@@ -1409,10 +1439,7 @@ impl StageState {
             .enumerate()
             .map(|(i, c)| ProgressionCard {
                 numeral: format_role(&c.role),
-                chord_label: format!(
-                    "{}{}{}",
-                    c.root.name, c.root.accidental, c.formula.symbol
-                ),
+                chord_label: format!("{}{}{}", c.root.name, c.root.accidental, c.formula.symbol),
                 is_expanded: i == expanded,
             })
             .collect();
@@ -1420,11 +1447,7 @@ impl StageState {
         let board = Fretboard::new(self.tuning(), self.fret_count);
         let dots = board
             .positions_for_chord(chord.formula, chord.root)
-            .map(|ps| {
-                ps.into_iter()
-                    .map(FretDot::from_position)
-                    .collect()
-            })
+            .map(|ps| ps.into_iter().map(FretDot::from_position).collect())
             .unwrap_or_default();
         let expanded_label = format!(
             "{} ({})",
@@ -1605,8 +1628,7 @@ impl StageState {
     /// The inversion's bass tone (the run's starting chord tone).
     fn arpeggio_bass(&self) -> Interval {
         let formula = self.arpeggio_chord();
-        let inv = (self.arpeggio_inversion as usize)
-            .min(formula.intervals.len().saturating_sub(1));
+        let inv = (self.arpeggio_inversion as usize).min(formula.intervals.len().saturating_sub(1));
         formula
             .intervals
             .get(inv)
@@ -1622,7 +1644,9 @@ impl StageState {
         let board = Fretboard::new(self.tuning(), self.fret_count);
         let shapes = generate_shapes(&board, formula, self.root(), bass);
         let shape_count = shapes.len();
-        let position_idx = self.arpeggio_position_idx.min(shape_count.saturating_sub(1));
+        let position_idx = self
+            .arpeggio_position_idx
+            .min(shape_count.saturating_sub(1));
         let shape = &shapes[position_idx];
         let run = ArpeggioRun::new(&shape.positions, bass, self.arpeggio_direction);
         let current = run.position_at(self.arpeggio_step_idx);
@@ -1638,8 +1662,7 @@ impl StageState {
                 label: format!("{}{}", p.pitch.name, p.pitch.accidental),
             })
             .collect();
-        let inv = (self.arpeggio_inversion as usize)
-            .min(formula.intervals.len().saturating_sub(1));
+        let inv = (self.arpeggio_inversion as usize).min(formula.intervals.len().saturating_sub(1));
         let inversion_label = match inv {
             0 => "Inv: Root".to_string(),
             1 => "Inv: 1st".to_string(),
@@ -1766,11 +1789,21 @@ impl StageState {
             ps.iter().map(|p| p.frequency() as f32).collect()
         }
         match self.lens {
-            Lens::Scales => self.scale().apply_to(self.root()).map(to_hz).unwrap_or_default(),
-            Lens::Chords => self.chord().apply_to(self.root()).map(to_hz).unwrap_or_default(),
-            Lens::Arpeggios => {
-                self.arpeggio_chord().apply_to(self.root()).map(to_hz).unwrap_or_default()
-            }
+            Lens::Scales => self
+                .scale()
+                .apply_to(self.root())
+                .map(to_hz)
+                .unwrap_or_default(),
+            Lens::Chords => self
+                .chord()
+                .apply_to(self.root())
+                .map(to_hz)
+                .unwrap_or_default(),
+            Lens::Arpeggios => self
+                .arpeggio_chord()
+                .apply_to(self.root())
+                .map(to_hz)
+                .unwrap_or_default(),
             Lens::Progressions => self.progression_expanded_pitches().unwrap_or_default(),
             Lens::Exercises => Vec::new(),
         }
@@ -1810,8 +1843,7 @@ impl StageState {
         fn to_hz(ps: Vec<Pitch>) -> Vec<f32> {
             ps.iter().map(|p| p.frequency() as f32).collect()
         }
-        let root_of =
-            |pc: &PitchClass| Pitch::from_midi(48 + pc.value() as i32, Spelling::Sharps);
+        let root_of = |pc: &PitchClass| Pitch::from_midi(48 + pc.value() as i32, Spelling::Sharps);
         let (pitches, scale_like) = match &card.material {
             Material::Scale { name, root } => (
                 scale_catalog()
@@ -1871,8 +1903,7 @@ impl StageState {
             MarkMode::Solo => {
                 // Play only the marked positions, as their actual fretboard
                 // pitches — isolate the shape you selected.
-                let set: std::collections::HashSet<(usize, u8)> =
-                    marked.iter().copied().collect();
+                let set: std::collections::HashSet<(usize, u8)> = marked.iter().copied().collect();
                 let mut hz: Vec<f32> = self
                     .dots_for_card(card)
                     .into_iter()
@@ -1927,7 +1958,10 @@ impl StageState {
         let shape = &shapes[position_idx];
         let run = ArpeggioRun::new(&shape.positions, bass, self.arpeggio_direction);
         let current = run.position_at(self.arpeggio_step_idx)?;
-        shape.positions.get(current).map(|p| p.pitch.frequency() as f32)
+        shape
+            .positions
+            .get(current)
+            .map(|p| p.pitch.frequency() as f32)
     }
 
     /// Frequency (Hz) of the exercise step-through's current note.
@@ -1974,7 +2008,11 @@ mod tests {
             .expect("Major in catalog");
         s.select_scale(major);
         assert_eq!(s.scale().name, "Major");
-        assert_ne!(s.dots().len(), before, "major has more tones than pentatonic");
+        assert_ne!(
+            s.dots().len(),
+            before,
+            "major has more tones than pentatonic"
+        );
     }
 
     #[test]
@@ -2002,10 +2040,7 @@ mod tests {
         s.set_lens(Lens::Scales);
         let mut card = s.card_from_lens().unwrap();
         let all = s.dots_for_card(&card).len();
-        card.setting.fret_window = Some(woodshedding::rehearsal::FretWindow {
-            start: 5,
-            span: 4,
-        });
+        card.setting.fret_window = Some(woodshedding::rehearsal::FretWindow { start: 5, span: 4 });
         let windowed = s.dots_for_card(&card);
         assert!(!windowed.is_empty());
         assert!(windowed.len() < all, "window narrows the position set");
@@ -2033,10 +2068,10 @@ mod tests {
         let ps = &catalog[0];
         let set = set_from_practice(ps);
         assert_eq!(set.cards.len(), ps.items.len());
-        assert!(set.cards.iter().all(|c| matches!(
-            c.from,
-            Some(Recipe::PracticeSet { .. })
-        )));
+        assert!(set
+            .cards
+            .iter()
+            .all(|c| matches!(c.from, Some(Recipe::PracticeSet { .. }))));
         assert!(set.cards.iter().all(|c| c.setting.fret_window.is_some()));
         // Every card resolves on the board.
         let s = StageState::new();
@@ -2117,11 +2152,7 @@ mod tests {
         assert!(!b0.dots.is_empty());
         assert!(b0.walk_len >= 1);
         assert_eq!(b0.dots.iter().filter(|d| d.is_current).count(), 1);
-        let cur0: Vec<_> = b0
-            .dots
-            .iter()
-            .map(|d| d.is_current)
-            .collect();
+        let cur0: Vec<_> = b0.dots.iter().map(|d| d.is_current).collect();
         s.arpeggio_advance();
         let b1 = s.arpeggio_board();
         let cur1: Vec<_> = b1.dots.iter().map(|d| d.is_current).collect();
@@ -2145,7 +2176,10 @@ mod tests {
         s.set_lens(Lens::Arpeggios);
         assert!(s.voicing_pitches().len() >= 3, "arpeggio tones voiced");
         s.set_lens(Lens::Exercises);
-        assert!(s.voicing_pitches().is_empty(), "exercises don't voice a chord");
+        assert!(
+            s.voicing_pitches().is_empty(),
+            "exercises don't voice a chord"
+        );
     }
 
     #[test]
@@ -2164,7 +2198,10 @@ mod tests {
     fn progression_voicing_after_selection() {
         let mut s = StageState::new();
         s.set_lens(Lens::Progressions);
-        assert!(s.voicing_pitches().is_empty(), "cold start, nothing to voice");
+        assert!(
+            s.voicing_pitches().is_empty(),
+            "cold start, nothing to voice"
+        );
         s.select_progression(0);
         assert!(s.voicing_pitches().len() >= 2, "expanded chord voiced");
     }
@@ -2285,7 +2322,10 @@ mod tests {
         let dots = s.dots();
         let strings = s.string_count();
 
-        let root = dots.iter().find(|d| d.is_root).expect("a root on the board");
+        let root = dots
+            .iter()
+            .find(|d| d.is_root)
+            .expect("a root on the board");
         let label = marker_a11y_label(root, strings);
         assert!(label.starts_with('A'), "names the note: {label}");
         assert!(label.contains("root"), "names its role: {label}");
@@ -2294,7 +2334,10 @@ mod tests {
         // An open-string marker says "open", never "fret 0".
         if let Some(open) = dots.iter().find(|d| d.fret == 0) {
             let l = marker_a11y_label(open, strings);
-            assert!(l.contains("open") && !l.contains("fret 0"), "open string: {l}");
+            assert!(
+                l.contains("open") && !l.contains("fret 0"),
+                "open string: {l}"
+            );
         }
         // A non-root tone names its interval, not "root".
         if let Some(other) = dots
@@ -2316,7 +2359,10 @@ mod tests {
         for &(string, fret) in &[(0usize, 5u8), (1, 7), (2, 5)] {
             s.append_to_path(string, fret);
         }
-        assert!(s.can_shift_path(12), "a 24-fret neck has room for the octave");
+        assert!(
+            s.can_shift_path(12),
+            "a 24-fret neck has room for the octave"
+        );
         assert!(!s.can_shift_path(-12), "there is no room below fret 5");
         let before = s.effective_run_path();
         s.shift_path(12);
@@ -2403,7 +2449,11 @@ mod tests {
             .iter()
             .find(|item| item.kind == "Scale" && item.title == "Major")
             .expect("Major 7 relates to Major");
-        assert!(major.reason().contains("Fits Major"), "{:?}", major.reasons());
+        assert!(
+            major.reason().contains("Fits Major"),
+            "{:?}",
+            major.reasons()
+        );
         s.select_related(major.target);
         assert_eq!(s.lens, Lens::Scales);
         assert_eq!(s.scale().name, "Major");
@@ -2423,10 +2473,8 @@ mod tests {
         let settings = storage::RelatedSettings::default();
         let shown = s.related_material_configured(&history, &settings, 6);
         assert_eq!(shown.len(), 6);
-        let families: std::collections::BTreeSet<_> = shown
-            .iter()
-            .map(|item| item.relations[0].kind)
-            .collect();
+        let families: std::collections::BTreeSet<_> =
+            shown.iter().map(|item| item.relations[0].kind).collect();
         assert!(
             families.len() >= 3,
             "the panel shows several relation families: {:?}",
@@ -2445,7 +2493,11 @@ mod tests {
     fn related_history_promotes_a_prior_stage_path() {
         let mut s = StageState::new();
         s.set_lens(Lens::Scales);
-        let dorian = s.scales().iter().position(|scale| scale.name == "Dorian").unwrap();
+        let dorian = s
+            .scales()
+            .iter()
+            .position(|scale| scale.name == "Dorian")
+            .unwrap();
         s.select_scale(dorian);
         let mut history = history::PracticeHistory::default();
         history.record(
@@ -2480,7 +2532,11 @@ mod tests {
     fn related_settings_disable_history_and_hide_stable_identities() {
         let mut s = StageState::new();
         s.set_lens(Lens::Scales);
-        let dorian = s.scales().iter().position(|scale| scale.name == "Dorian").unwrap();
+        let dorian = s
+            .scales()
+            .iter()
+            .position(|scale| scale.name == "Dorian")
+            .unwrap();
         s.select_scale(dorian);
         let mut history = history::PracticeHistory::default();
         history.record(
@@ -2499,10 +2555,8 @@ mod tests {
         let related = s.related_material_configured(&history, &settings, 5);
         assert!(related.iter().all(|item| item.title != "Minor 7"));
         assert!(related.iter().all(|item| !item.has_evidence()));
-        assert!(
-            related
-                .iter()
-                .all(|item| !item.reasons().iter().any(|r| r.contains("Previously")))
-        );
+        assert!(related
+            .iter()
+            .all(|item| !item.reasons().iter().any(|r| r.contains("Previously"))));
     }
 }

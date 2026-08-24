@@ -51,7 +51,11 @@ pub enum CalibrationStatus {
     /// Playing clicks and listening for the player's taps.
     Running { clicks_fired: usize, total: usize },
     /// Finished — a measured round-trip latency to accept.
-    Success { latency_ms: f32, matched: usize, total: usize },
+    Success {
+        latency_ms: f32,
+        matched: usize,
+        total: usize,
+    },
     /// Finished but too few hits matched; offer a retry.
     Insufficient { matched: usize, total: usize },
     /// The audio engines aren't available (no mic, etc.).

@@ -19,8 +19,8 @@
 //! want to say who they are.
 
 use cambium::{el, lens, map_action, text, CommandState};
-use personae::roster::Roster;
 use persona_picker::{persona_picker_focused, picker_state, PickerEvent};
+use personae::roster::Roster;
 
 use crate::stage::{UiChild, UiState};
 
@@ -125,7 +125,10 @@ impl PracticeSeal {
     /// The one-line reading for Settings.
     pub fn summary(&self) -> String {
         match self {
-            Self::Sealed { persona, protection } => {
+            Self::Sealed {
+                persona,
+                protection,
+            } => {
                 format!("Practising as {persona}. Sealed with {protection}.")
             }
             Self::Unsealed { reason } => {
@@ -222,8 +225,7 @@ pub fn persona_gate(pick: &PersonaPick) -> UiChild {
                     // What protects the vault, as the backend reports it. Shown
                     // rather than guessed: it is the honest answer to "where did
                     // these come from", and it changes per machine.
-                    el("div", text(pick.roster.description.clone()))
-                        .attr("class", "persona-vault"),
+                    el("div", text(pick.roster.description.clone())).attr("class", "persona-vault"),
                     Box::new(picker) as UiChild,
                     notice,
                     el(
@@ -234,7 +236,9 @@ pub fn persona_gate(pick: &PersonaPick) -> UiChild {
                             }
                             // Nothing is pending behind a switch: the session
                             // on screen belongs to somebody already.
-                            PickPurpose::Switch => "Escape keeps practising as the current persona.",
+                            PickPurpose::Switch => {
+                                "Escape keeps practising as the current persona."
+                            }
                         }),
                     )
                     .attr("class", "persona-hint"),
@@ -280,7 +284,10 @@ mod tests {
     fn a_choice_is_recorded_for_the_host_to_act_on() {
         let mut pick = PersonaPick::new(roster(&[("work", 2, false), ("alt", 0, false)]));
         pick.record(PickerEvent::Chose(ProfileId("alt".into())));
-        assert_eq!(pick.outcome, Some(PickerEvent::Chose(ProfileId("alt".into()))));
+        assert_eq!(
+            pick.outcome,
+            Some(PickerEvent::Chose(ProfileId("alt".into())))
+        );
     }
 
     #[test]
@@ -299,7 +306,10 @@ mod tests {
         let mut pick = PersonaPick::new(roster(&[("work", 2, false), ("alt", 0, false)]));
         pick.record(PickerEvent::CreateRequested);
         assert!(pick.outcome.is_none(), "the gate stays open");
-        assert!(pick.notice.as_deref().is_some_and(|n| n.contains("personae-vault")));
+        assert!(pick
+            .notice
+            .as_deref()
+            .is_some_and(|n| n.contains("personae-vault")));
     }
 
     #[test]
@@ -318,13 +328,19 @@ mod tests {
     fn a_vault_that_will_not_answer_still_puts_its_reason_on_the_gate() {
         // The Settings row is a deliberate act; it cannot answer with nothing.
         let pick = PersonaPick::switch(roster(&[])).with_notice("the vault would not open");
-        assert!(pick.notice.as_deref().is_some_and(|n| n.contains("would not open")));
+        assert!(pick
+            .notice
+            .as_deref()
+            .is_some_and(|n| n.contains("would not open")));
     }
 
     #[test]
     fn declining_takes_the_gate_down_and_stops_saving() {
         let mut ui = UiState::new();
-        ui.persona = Some(PersonaPick::new(roster(&[("work", 2, false), ("alt", 0, false)])));
+        ui.persona = Some(PersonaPick::new(roster(&[
+            ("work", 2, false),
+            ("alt", 0, false),
+        ])));
         assert!(ui.practice_saved, "an ordinary session saves");
         practise_unsaved(&mut ui);
         assert!(ui.persona.is_none(), "the gate does not stay up");

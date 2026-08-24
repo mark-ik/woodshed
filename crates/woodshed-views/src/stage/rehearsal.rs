@@ -1,6 +1,6 @@
+use cambium::{clickable, custom_leaf, el, on_hover, text, HoverEvent, HoverPhase};
 use woodshed_core::step_set;
 use woodshedding::rehearsal::{LoopMode, MarkMode, Recipe};
-use cambium::{clickable, custom_leaf, el, on_hover, text, HoverEvent, HoverPhase};
 
 use super::{UiChild, UiState};
 use crate::fretboard_leaf::{BoardGeom, Orientation, REHEARSAL_FRETBOARD_LEAF_KEY};
@@ -19,11 +19,8 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
         return Box::new(
             el(
                 "div",
-                el(
-                    "div",
-                    text("The set is empty. Stage material to begin."),
-                )
-                .attr("class", "placeholder"),
+                el("div", text("The set is empty. Stage material to begin."))
+                    .attr("class", "placeholder"),
             )
             .attr("class", "board"),
         );
@@ -238,12 +235,10 @@ pub(super) fn screen(ui: &UiState) -> UiChild {
                         cy - mh / 2.0 - 6.0 - CARD_H
                     };
                     let left = (cx - CARD_W / 2.0).max(2.0);
-                    Box::new(
-                        el("div", super::note_card(d, string_count)).attr(
-                            "style",
-                            format!("position:absolute; left:{left:.1}px; top:{top:.1}px;"),
-                        ),
-                    ) as UiChild
+                    Box::new(el("div", super::note_card(d, string_count)).attr(
+                        "style",
+                        format!("position:absolute; left:{left:.1}px; top:{top:.1}px;"),
+                    )) as UiChild
                 })
         })
         .into_iter()

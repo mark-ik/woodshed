@@ -225,7 +225,11 @@ impl SongEngineHandle {
         s.last_chord_bar = -1;
         s.count_in_pos = 0;
         s.count_in_remaining = if s.song.click_enabled {
-            let idx = s.song.cursor.bar_idx.min(s.song.bars.len().saturating_sub(1));
+            let idx = s
+                .song
+                .cursor
+                .bar_idx
+                .min(s.song.bars.len().saturating_sub(1));
             let bar = &s.song.bars[idx];
             let num = bar.time_signature.numerator.max(1) as f32;
             let secs_per_beat = 60.0 / bar.bpm.max(1.0);
@@ -433,7 +437,8 @@ fn process_song_buffer(s: &mut SongEngineInternals, output: &mut [f32]) {
             };
             if beat != s.last_click_beat {
                 let downbeat = beat == 0;
-                s.voices.push(Voice::new(Sound::click(), downbeat, s.voice_clock));
+                s.voices
+                    .push(Voice::new(Sound::click(), downbeat, s.voice_clock));
                 s.last_click_beat = beat;
             }
             let mut sample_value = 0.0_f32;
@@ -508,10 +513,7 @@ fn process_song_buffer(s: &mut SongEngineInternals, output: &mut [f32]) {
                     bar_idx,
                 );
                 if let Some(buf) = buf {
-                    let chord_sound = Sound::sample_with_buffer(
-                        format!("song-bar-{bar_idx}"),
-                        buf,
-                    );
+                    let chord_sound = Sound::sample_with_buffer(format!("song-bar-{bar_idx}"), buf);
                     s.voices.push(Voice::new(chord_sound, false, s.voice_clock));
                 }
             }
@@ -554,10 +556,7 @@ fn process_song_buffer(s: &mut SongEngineInternals, output: &mut [f32]) {
                 // record (changing buffer length on the fly is rare
                 // but it'd otherwise read/write past the end).
                 if buf.len() != bar_len_samples {
-                    *buf = SampleBuffer::new(
-                        vec![0.0; bar_len_samples],
-                        sample_rate as u32,
-                    );
+                    *buf = SampleBuffer::new(vec![0.0; bar_len_samples], sample_rate as u32);
                 }
                 // `Arc::make_mut` clones the underlying Vec if any
                 // other Arc still references it (e.g. the UI holds a
@@ -720,9 +719,14 @@ mod tests {
 
     #[test]
     fn set_song_replaces_arrangement_cleanly() {
-        let internals =
-            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
-        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        let internals = Arc::new(Mutex::new(SongEngineInternals::new(
+            Song::new(),
+            48_000.0,
+            1,
+        )));
+        let handle = SongEngineHandle {
+            inner: Arc::clone(&internals),
+        };
 
         let mut new_song = Song::new();
         new_song.add_bar();
@@ -739,9 +743,14 @@ mod tests {
 
     #[test]
     fn with_song_lets_caller_edit_under_lock() {
-        let internals =
-            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
-        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        let internals = Arc::new(Mutex::new(SongEngineInternals::new(
+            Song::new(),
+            48_000.0,
+            1,
+        )));
+        let handle = SongEngineHandle {
+            inner: Arc::clone(&internals),
+        };
         handle.with_song(|s| {
             s.add_bar();
             s.bar_mut(1).unwrap().bpm = 90.0;
@@ -769,9 +778,14 @@ mod tests {
 
     #[test]
     fn play_chord_now_sounds_while_stopped() {
-        let internals =
-            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
-        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        let internals = Arc::new(Mutex::new(SongEngineInternals::new(
+            Song::new(),
+            48_000.0,
+            1,
+        )));
+        let handle = SongEngineHandle {
+            inner: Arc::clone(&internals),
+        };
         // A C-major triad preview.
         handle.play_chord_now(&[261.63, 329.63, 392.00], 0.5, 18.0);
         assert!(
@@ -788,9 +802,14 @@ mod tests {
 
     #[test]
     fn play_chord_now_ignores_empty_and_silent_pitches() {
-        let internals =
-            Arc::new(Mutex::new(SongEngineInternals::new(Song::new(), 48_000.0, 1)));
-        let handle = SongEngineHandle { inner: Arc::clone(&internals) };
+        let internals = Arc::new(Mutex::new(SongEngineInternals::new(
+            Song::new(),
+            48_000.0,
+            1,
+        )));
+        let handle = SongEngineHandle {
+            inner: Arc::clone(&internals),
+        };
         handle.play_chord_now(&[], 0.5, 0.0);
         handle.play_chord_now(&[0.0, -20.0], 0.5, 0.0);
         assert!(

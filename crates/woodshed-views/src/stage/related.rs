@@ -49,8 +49,10 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
                             el(
                                 "div",
                                 (
-                                    el("div", text(item.kind))
-                                        .attr("class", format!("related-kind kind-{}", item.kind.to_lowercase())),
+                                    el("div", text(item.kind)).attr(
+                                        "class",
+                                        format!("related-kind kind-{}", item.kind.to_lowercase()),
+                                    ),
                                     el(
                                         "div",
                                         (
@@ -114,8 +116,11 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
 
     let pane: UiChild = if rows.is_empty() {
         Box::new(
-            el("div", text("Choose material with catalog relations to see suggestions."))
-                .attr("class", "related-empty"),
+            el(
+                "div",
+                text("Choose material with catalog relations to see suggestions."),
+            )
+            .attr("class", "related-empty"),
         )
     } else {
         Box::new(el("div", rows).attr("class", "related-list"))
@@ -200,8 +205,11 @@ pub(super) fn panel(ui: &UiState) -> UiChild {
             (
                 el("div", text("Related")).attr("class", "related-heading"),
                 el("div", text("What might I stage next?")).attr("class", "related-subtitle"),
-                el("div", (graph, el("div", pane).attr("class", "related-pane-col")))
-                    .attr("class", "related-body"),
+                el(
+                    "div",
+                    (graph, el("div", pane).attr("class", "related-pane-col")),
+                )
+                .attr("class", "related-body"),
                 history,
             ),
         )

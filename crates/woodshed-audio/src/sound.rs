@@ -234,12 +234,7 @@ impl Sound {
     /// index since the trigger (0 at trigger time). `sample_rate` is
     /// the engine's output rate. Returns `None` once the sound is
     /// past its duration.
-    pub fn render_sample(
-        &self,
-        local_sample: u32,
-        sample_rate: f32,
-        accent: bool,
-    ) -> Option<f32> {
+    pub fn render_sample(&self, local_sample: u32, sample_rate: f32, accent: bool) -> Option<f32> {
         match self {
             Sound::Click {
                 frequency_hz,
@@ -415,7 +410,10 @@ mod tests {
         // At +12 semitones (2x speed), a 4-sample buffer is consumed in
         // ~2 output samples instead of ~4.
         let mut s = Sound::sample_with_buffer("kick", impulse_buffer());
-        if let Sound::Sample { pitch_semitones, .. } = &mut s {
+        if let Sound::Sample {
+            pitch_semitones, ..
+        } = &mut s
+        {
             *pitch_semitones = 12.0;
         }
         // At sample 2 (output), source idx = 2 * 2.0 = 4 → out of range.
@@ -433,7 +431,10 @@ mod tests {
         match restored {
             Sound::Sample { id, buffer, .. } => {
                 assert_eq!(id, "kick");
-                assert!(buffer.is_empty(), "buffer should be empty after deserialize");
+                assert!(
+                    buffer.is_empty(),
+                    "buffer should be empty after deserialize"
+                );
             }
             _ => panic!("expected Sound::Sample"),
         }

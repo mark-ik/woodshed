@@ -68,12 +68,7 @@ pub fn export_wav(
     channels: u16,
     path: impl AsRef<Path>,
 ) -> Result<(), SampleError> {
-    let samples = render_pattern(
-        pattern,
-        sample_rate_hz as f32,
-        duration_secs,
-        channels,
-    );
+    let samples = render_pattern(pattern, sample_rate_hz as f32, duration_secs, channels);
     let spec = hound::WavSpec {
         channels,
         sample_rate: sample_rate_hz,
@@ -97,22 +92,14 @@ mod tests {
 
     #[test]
     fn render_pattern_returns_correct_buffer_length() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         let buf = render_pattern(p, 48_000.0, 1.0, 2);
         assert_eq!(buf.len(), 48_000 * 2);
     }
 
     #[test]
     fn render_pattern_produces_audio_not_silence() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         let buf = render_pattern(p, 48_000.0, 1.0, 1);
         let max_abs = buf.iter().map(|s| s.abs()).fold(0.0_f32, f32::max);
         assert!(
@@ -126,11 +113,7 @@ mod tests {
         // 120 BPM, 4/4 quarter clicks: clicks at 0.0s, 0.5s, 1.0s, 1.5s.
         // Across 2 seconds of audio there should be ~4 distinct
         // high-energy windows.
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         let buf = render_pattern(p, 48_000.0, 2.0, 1);
 
         // Bucket the buffer into 50ms windows and count windows with
@@ -155,11 +138,7 @@ mod tests {
 
     #[test]
     fn export_wav_writes_readable_file() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         let path = std::env::temp_dir().join("woodshed_export_test.wav");
         export_wav(p, 48_000, 0.5, 1, &path).unwrap();
 

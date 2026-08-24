@@ -85,9 +85,7 @@ pub fn catalog() -> &'static [ScaleFormula] {
 }
 
 /// Iterate the catalog filtered by category.
-pub fn catalog_in_category(
-    category: ScaleCategory,
-) -> impl Iterator<Item = &'static ScaleFormula> {
+pub fn catalog_in_category(category: ScaleCategory) -> impl Iterator<Item = &'static ScaleFormula> {
     catalog().iter().filter(move |f| f.category == category)
 }
 
@@ -786,10 +784,7 @@ mod tests {
         let lydian = find("Lydian");
         let c_lydian = lydian.apply_to(nat(NoteName::C, 4)).unwrap();
         // 4th degree should be F#
-        assert_eq!(
-            c_lydian[3],
-            pitch(NoteName::F, Accidental::Sharp, 4)
-        );
+        assert_eq!(c_lydian[3], pitch(NoteName::F, Accidental::Sharp, 4));
     }
 
     #[test]

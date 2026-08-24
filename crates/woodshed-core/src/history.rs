@@ -290,9 +290,7 @@ impl PracticeHistory {
     /// written before woodshed kept time answers false, which a
     /// recency-weighted reader must know before it ranks by age.
     pub fn has_times(&self) -> bool {
-        self.lineage
-            .visits()
-            .any(|(_, visit)| visit.context.dated)
+        self.lineage.visits().any(|(_, visit)| visit.context.dated)
     }
 
     /// Total engagements recorded, all subjects.
@@ -451,7 +449,13 @@ mod tests {
             Some(540_000),
         );
         for at in [1_u64, 2, 3, 4, 5] {
-            history.record(Some(at), "scale:Lydian", EngagementKind::Previewed, None, None);
+            history.record(
+                Some(at),
+                "scale:Lydian",
+                EngagementKind::Previewed,
+                None,
+                None,
+            );
         }
         assert_eq!(history.total_practiced_ms("scale:Dorian"), 540_000);
         assert_eq!(
@@ -491,7 +495,13 @@ mod tests {
     #[test]
     fn recent_reads_newest_first_and_reports_the_stated_reason() {
         let mut history = PracticeHistory::default();
-        history.record(Some(1), "scale:Major", EngagementKind::Rehearsed, None, None);
+        history.record(
+            Some(1),
+            "scale:Major",
+            EngagementKind::Rehearsed,
+            None,
+            None,
+        );
         history.record(
             Some(2),
             "chord:Major 7",
@@ -512,7 +522,13 @@ mod tests {
         // Practice moved Major -> Minor 7 along the path, but the player named
         // Dorian as the reason for the second one (a suggestion taken from a
         // frontier while the focus sat elsewhere).
-        history.record(Some(1), "scale:Major", EngagementKind::Rehearsed, None, None);
+        history.record(
+            Some(1),
+            "scale:Major",
+            EngagementKind::Rehearsed,
+            None,
+            None,
+        );
         history.record(
             Some(2),
             "chord:Minor 7",
@@ -527,7 +543,10 @@ mod tests {
             1
         );
         // ...and is not confused with a traversal that never happened.
-        assert_eq!(history.traversals("scale:Dorian", "chord:Minor 7"), (0, None));
+        assert_eq!(
+            history.traversals("scale:Dorian", "chord:Minor 7"),
+            (0, None)
+        );
         // The walked path is its own fact, with its own recency.
         assert_eq!(
             history.traversals("scale:Major", "chord:Minor 7"),
@@ -543,7 +562,13 @@ mod tests {
     #[test]
     fn a_lineage_round_trips_through_the_session_wire() {
         let mut history = PracticeHistory::default();
-        history.record(Some(1), "scale:Major", EngagementKind::Rehearsed, None, None);
+        history.record(
+            Some(1),
+            "scale:Major",
+            EngagementKind::Rehearsed,
+            None,
+            None,
+        );
         history.record(
             Some(2),
             "chord:Major 7",
@@ -585,7 +610,10 @@ mod tests {
         // The undated one stays unknown rather than becoming 1970.
         assert_eq!(history.last_seen_ms("scale:Major"), None);
         assert_eq!(history.last_seen_ms("chord:Minor 7"), Some(9_000));
-        assert!(history.has_times(), "one dated engagement is enough to rank by age");
+        assert!(
+            history.has_times(),
+            "one dated engagement is enough to rank by age"
+        );
 
         // And it persists as a lineage from here on: no flat log is written back.
         let json = serde_json::to_string(&history).unwrap();

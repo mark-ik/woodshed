@@ -144,9 +144,9 @@ fn load_wav_to_buffer(path: &Path) -> Result<SampleBuffer, SampleError> {
     // Decode all samples into a flat interleaved Vec<f32>, then
     // downmix to mono by averaging channels per frame.
     let interleaved: Vec<f32> = match (spec.sample_format, spec.bits_per_sample) {
-        (hound::SampleFormat::Float, 32) => reader
-            .samples::<f32>()
-            .collect::<Result<Vec<_>, _>>()?,
+        (hound::SampleFormat::Float, 32) => {
+            reader.samples::<f32>().collect::<Result<Vec<_>, _>>()?
+        }
         (hound::SampleFormat::Int, 16) => reader
             .samples::<i16>()
             .map(|s| s.map(|v| v as f32 / i16::MAX as f32))
@@ -273,11 +273,8 @@ mod tests {
     #[test]
     fn rehydrate_pattern_skips_click_tracks() {
         let bank = SampleBank::new();
-        let mut pattern = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let mut pattern =
+            SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         // No samples in this pattern, so nothing should attach.
         let attached = bank.rehydrate_pattern(&mut pattern);
         assert_eq!(attached, 0);

@@ -192,7 +192,12 @@ mod tests {
         let buf = render_chord(&params, 48_000);
         // ~1 ms = 48 samples. Look for at least one non-zero sample in
         // the first 100 (= 2 ms — leaves room for attack ramp).
-        let early_max = buf.data.iter().take(100).map(|s| s.abs()).fold(0.0_f32, f32::max);
+        let early_max = buf
+            .data
+            .iter()
+            .take(100)
+            .map(|s| s.abs())
+            .fold(0.0_f32, f32::max);
         assert!(
             early_max > 0.0,
             "no signal in first 2ms of strummed chord; max = {early_max}"
@@ -238,10 +243,7 @@ mod tests {
     fn more_pitches_does_not_clip_louder_than_one_pitch() {
         // Three-pitch chord shouldn't peak meaningfully higher than a
         // single pitch — the sqrt-N scaling keeps peaks bounded.
-        let single = render_chord(
-            &ChordRender::block(vec![440.0], 0.5),
-            48_000,
-        );
+        let single = render_chord(&ChordRender::block(vec![440.0], 0.5), 48_000);
         let triple = render_chord(
             &ChordRender::block(vec![261.63, 329.63, 392.00], 0.5),
             48_000,

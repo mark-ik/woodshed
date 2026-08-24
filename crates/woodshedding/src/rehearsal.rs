@@ -50,11 +50,19 @@ impl ArpeggioDirection {
 /// songs are *recipes* that fill a set with these, not variants here.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Material {
-    Scale { name: String, root: PitchClass },
-    Chord { name: String, root: PitchClass },
+    Scale {
+        name: String,
+        root: PitchClass,
+    },
+    Chord {
+        name: String,
+        root: PitchClass,
+    },
     /// A fixed playable sequence; a user/catalog exercise's steps live
     /// here, referenced by name.
-    Riff { name: String },
+    Riff {
+        name: String,
+    },
     /// A hand-drawn path: arranged notes carried *inline* as an ordered visit
     /// list of `(string_index, fret)`, plus the root they were drawn over so
     /// their degrees still name themselves. Every other material names a
@@ -81,13 +89,23 @@ impl Material {
 /// Where a card came from: the recipe that stamped it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Recipe {
-    Progression { name: String, key: PitchClass },
-    Exercise { name: String },
-    PracticeSet { name: String },
+    Progression {
+        name: String,
+        key: PitchClass,
+    },
+    Exercise {
+        name: String,
+    },
+    PracticeSet {
+        name: String,
+    },
     /// `bar` is the source bar index in the song, so a playing song engine
     /// can map its bar cursor back to the exact card (used by the
     /// song-follow clock).
-    Song { name: String, bar: usize },
+    Song {
+        name: String,
+        bar: usize,
+    },
 }
 
 /// What keeps time for the card under the cursor. A derived, runtime value
@@ -306,9 +324,7 @@ pub struct SetGraphEdge {
 /// Serializable and ordered because relation *visibility* persists as a set of
 /// these kinds: a family added later joins the set instead of adding a second
 /// boolean.
-#[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SetGraphEdgeKind {
     Next,
 }
@@ -552,7 +568,11 @@ mod tests {
         set.move_card(0, 1);
 
         let graph = set.graph();
-        assert_eq!(graph.node(staged).unwrap().number, 2, "number follows order");
+        assert_eq!(
+            graph.node(staged).unwrap().number,
+            2,
+            "number follows order"
+        );
         assert_eq!(set.cursor_id(), Some(staged), "cursor follows the card");
         let after: Vec<CardId> = set.cards.iter().map(|c| c.id).collect();
         assert_eq!(after, vec![before[1], before[0], before[2]]);
@@ -637,7 +657,11 @@ mod tests {
         let ids: Vec<CardId> = set.cards.iter().map(|c| c.id).collect();
         assert!(ids.iter().all(|id| id.is_assigned()));
         assert_ne!(ids[0], ids[1]);
-        assert_eq!(set.cursor_id(), Some(ids[1]), "the cursor still points at Two");
+        assert_eq!(
+            set.cursor_id(),
+            Some(ids[1]),
+            "the cursor still points at Two"
+        );
 
         set.push(card("Three"));
         assert!(

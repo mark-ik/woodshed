@@ -17,7 +17,7 @@
 use async_trait::async_trait;
 use muniment::backend::WriteOp;
 use muniment::{Backend, StoreError};
-use personae::{IdentityProvider, seal_bytes, unseal_bytes};
+use personae::{seal_bytes, unseal_bytes, IdentityProvider};
 
 use crate::storage::WOODSHED_SEAL_CONTEXT;
 
@@ -264,7 +264,10 @@ mod tests {
             !at_rest.windows(5).any(|w| w == b"Stage"),
             "the next write sealed what the migration read"
         );
-        assert_eq!(sealed.get("session").await.unwrap().as_deref(), Some(&read[..]));
+        assert_eq!(
+            sealed.get("session").await.unwrap().as_deref(),
+            Some(&read[..])
+        );
     }
 
     #[tokio::test]

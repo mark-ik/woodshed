@@ -21,7 +21,7 @@ use woodshed_views::theme::ThemeMode;
 use crate::audio::CpalBackend;
 use crate::midi::MidiHost;
 use crate::scenario::{Observed, ScenarioLane};
-use crate::storage::{HostBackend, open_store_as};
+use crate::storage::{open_store_as, HostBackend};
 
 /// Presented-frame timings gathered only while a Set-graph drag is active.
 /// The scenario receipt reads these, but the counters are also useful when a

@@ -77,9 +77,7 @@ pub fn catalog() -> &'static [Exercise] {
     CATALOG
 }
 
-pub fn catalog_in_category(
-    category: ExerciseCategory,
-) -> impl Iterator<Item = &'static Exercise> {
+pub fn catalog_in_category(category: ExerciseCategory) -> impl Iterator<Item = &'static Exercise> {
     catalog().iter().filter(move |e| e.category == category)
 }
 
@@ -273,7 +271,11 @@ fn pentatonic_box_shift(tuning: &Tuning, params: &ExerciseParams) -> Vec<Exercis
 
     let render_box = |steps: &mut Vec<ExerciseStep>, base: u8| {
         for str_idx in 0..n {
-            let pattern = if str_idx == 0 { box_offsets } else { upper_offsets };
+            let pattern = if str_idx == 0 {
+                box_offsets
+            } else {
+                upper_offsets
+            };
             for &(off, finger) in &pattern {
                 steps.push(ExerciseStep {
                     string_index: str_idx,
@@ -292,7 +294,11 @@ fn pentatonic_box_shift(tuning: &Tuning, params: &ExerciseParams) -> Vec<Exercis
         // Box 2 first, then box 1, descending strings
         for &base in &[s + 3, s] {
             for str_idx in (0..n).rev() {
-                let pattern = if str_idx == 0 { box_offsets } else { upper_offsets };
+                let pattern = if str_idx == 0 {
+                    box_offsets
+                } else {
+                    upper_offsets
+                };
                 for &(off, finger) in pattern.iter().rev() {
                     steps.push(ExerciseStep {
                         string_index: str_idx,
@@ -332,10 +338,26 @@ fn two_string_climb(tuning: &Tuning, params: &ExerciseParams) -> Vec<ExerciseSte
     let do_pair = |steps: &mut Vec<ExerciseStep>, lower: usize, upper: usize, base: u8| {
         for i in 0..reps {
             let f = base + i;
-            steps.push(ExerciseStep { string_index: lower, fret: f, finger: 1 });
-            steps.push(ExerciseStep { string_index: lower, fret: f + 1, finger: 2 });
-            steps.push(ExerciseStep { string_index: upper, fret: f, finger: 1 });
-            steps.push(ExerciseStep { string_index: upper, fret: f + 1, finger: 2 });
+            steps.push(ExerciseStep {
+                string_index: lower,
+                fret: f,
+                finger: 1,
+            });
+            steps.push(ExerciseStep {
+                string_index: lower,
+                fret: f + 1,
+                finger: 2,
+            });
+            steps.push(ExerciseStep {
+                string_index: upper,
+                fret: f,
+                finger: 1,
+            });
+            steps.push(ExerciseStep {
+                string_index: upper,
+                fret: f + 1,
+                finger: 2,
+            });
         }
     };
     if asc {
@@ -345,10 +367,26 @@ fn two_string_climb(tuning: &Tuning, params: &ExerciseParams) -> Vec<ExerciseSte
         // Reverse: same pair, reverse fret order
         for i in (0..reps).rev() {
             let f = s + i;
-            steps.push(ExerciseStep { string_index: 1, fret: f + 1, finger: 2 });
-            steps.push(ExerciseStep { string_index: 1, fret: f, finger: 1 });
-            steps.push(ExerciseStep { string_index: 0, fret: f + 1, finger: 2 });
-            steps.push(ExerciseStep { string_index: 0, fret: f, finger: 1 });
+            steps.push(ExerciseStep {
+                string_index: 1,
+                fret: f + 1,
+                finger: 2,
+            });
+            steps.push(ExerciseStep {
+                string_index: 1,
+                fret: f,
+                finger: 1,
+            });
+            steps.push(ExerciseStep {
+                string_index: 0,
+                fret: f + 1,
+                finger: 2,
+            });
+            steps.push(ExerciseStep {
+                string_index: 0,
+                fret: f,
+                finger: 1,
+            });
         }
     }
     steps

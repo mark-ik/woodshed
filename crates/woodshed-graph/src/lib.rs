@@ -346,7 +346,9 @@ fn relation(kind: u16) -> Relation {
 }
 
 /// The pitch classes (semitones mod 12) an interval list touches.
-fn pitch_classes<'a>(intervals: impl IntoIterator<Item = &'a woodshedding::interval::Interval>) -> BTreeSet<i32> {
+fn pitch_classes<'a>(
+    intervals: impl IntoIterator<Item = &'a woodshedding::interval::Interval>,
+) -> BTreeSet<i32> {
     intervals
         .into_iter()
         .map(|interval| interval.semitones().rem_euclid(12))
@@ -593,8 +595,7 @@ impl RelationBuilder {
         reverse: String,
     ) {
         let forward_record = MaterialRelation::new(source, target, kind, weight, forward);
-        let reverse_record =
-            MaterialRelation::new(target, source, kind.inverse(), weight, reverse);
+        let reverse_record = MaterialRelation::new(target, source, kind.inverse(), weight, reverse);
         for record in [forward_record, reverse_record] {
             self.by_source
                 .entry(record.source.clone())
@@ -605,7 +606,11 @@ impl RelationBuilder {
         }
     }
 
-    fn finish(self, names: &HashMap<String, String>, kinds: &HashMap<String, CatalogKind>) -> HashMap<String, Vec<RelatedNeighbor>> {
+    fn finish(
+        self,
+        names: &HashMap<String, String>,
+        kinds: &HashMap<String, CatalogKind>,
+    ) -> HashMap<String, Vec<RelatedNeighbor>> {
         let mut index: HashMap<String, Vec<RelatedNeighbor>> = HashMap::new();
         for (source, targets) in self.by_source {
             let mut neighbors: Vec<RelatedNeighbor> = targets
@@ -624,7 +629,10 @@ impl RelationBuilder {
                     // only one of them.
                     let bonus = ((relations.len() as u16).saturating_sub(1) * 2).min(8);
                     Some(RelatedNeighbor {
-                        name: names.get(&target).cloned().unwrap_or_else(|| target.clone()),
+                        name: names
+                            .get(&target)
+                            .cloned()
+                            .unwrap_or_else(|| target.clone()),
                         id: target,
                         kind,
                         score: best.saturating_add(bonus).min(100),
@@ -633,8 +641,11 @@ impl RelationBuilder {
                 })
                 .collect();
             neighbors.sort_by(|a, b| {
-                (std::cmp::Reverse(a.score), a.kind, a.name.as_str())
-                    .cmp(&(std::cmp::Reverse(b.score), b.kind, b.name.as_str()))
+                (std::cmp::Reverse(a.score), a.kind, a.name.as_str()).cmp(&(
+                    std::cmp::Reverse(b.score),
+                    b.kind,
+                    b.name.as_str(),
+                ))
             });
             index.insert(source, neighbors);
         }
@@ -667,7 +678,9 @@ fn build_relation_index() -> HashMap<String, Vec<RelatedNeighbor>> {
     for (source, source_node) in graph.nodes() {
         let source_name = names.get(&source_node.id).cloned().unwrap_or_default();
         for (_, target, edge) in graph.out_edges(source) {
-            let Some(target_node) = graph.node(target) else { continue };
+            let Some(target_node) = graph.node(target) else {
+                continue;
+            };
             let target_name = names.get(&target_node.id).cloned().unwrap_or_default();
             let (kind, weight, forward, reverse) = match &edge.class {
                 class if class == &RelationClass::app(FAMILY, CONTAINS) => (
@@ -918,7 +931,10 @@ mod tests {
             .map(|(_, target)| g.node(target).unwrap().id.clone())
             .collect();
         assert!(chords.contains(&chord_id("Major 7")), "I is a major 7");
-        assert!(chords.contains(&chord_id("Dominant 7")), "V is a dominant 7");
+        assert!(
+            chords.contains(&chord_id("Dominant 7")),
+            "V is a dominant 7"
+        );
         assert!(chords.contains(&chord_id("Minor 7")), "ii is a minor 7");
     }
 
@@ -933,7 +949,10 @@ mod tests {
             .map(|(_, target)| g.node(target).unwrap().id.clone())
             .collect();
         // 1-3-5-7 sits inside the major scale.
-        assert!(scales.contains(&scale_id("Major")), "Major 7 fits the Major scale");
+        assert!(
+            scales.contains(&scale_id("Major")),
+            "Major 7 fits the Major scale"
+        );
     }
 
     #[test]
@@ -986,7 +1005,8 @@ mod tests {
         assert!(
             quads
                 .iter()
-                .all(|q| q.predicate == scholia::SCHEMA_NAME || q.predicate == scholia::SCHEMA_KEYWORDS),
+                .all(|q| q.predicate == scholia::SCHEMA_NAME
+                    || q.predicate == scholia::SCHEMA_KEYWORDS),
             "only schema.org literals project; the app ring stays private"
         );
         // A known chord's title reaches RDF as schema:name.
@@ -1110,12 +1130,10 @@ mod tests {
 
         // ...versus derived from the formulas.
         let computed = relations_between(&chord_id("Major"), &chord_id("Major 7"));
-        assert!(
-            computed
-                .iter()
-                .filter(|r| r.kind != RelationKind::UsedTogether)
-                .all(|r| r.authority == RelationAuthority::Computed)
-        );
+        assert!(computed
+            .iter()
+            .filter(|r| r.kind != RelationKind::UsedTogether)
+            .all(|r| r.authority == RelationAuthority::Computed));
     }
 
     #[test]

@@ -162,11 +162,7 @@ pub struct Tuning {
 impl Tuning {
     /// Build an arbitrary user-defined tuning. Category is set to
     /// [`TuningCategory::Custom`].
-    pub fn custom(
-        name: impl Into<String>,
-        strings: Vec<Pitch>,
-        instrument: Instrument,
-    ) -> Self {
+    pub fn custom(name: impl Into<String>, strings: Vec<Pitch>, instrument: Instrument) -> Self {
         Self {
             name: name.into(),
             strings,
@@ -1547,11 +1543,7 @@ static CATALOG: &[TuningSpec] = &[
     TuningSpec {
         // Older Greek bouzouki, three-course (trichordo): DAD
         name: "Greek Trichordo (DAD)",
-        strings: &[
-            p(NoteName::D, 3),
-            p(NoteName::A, 3),
-            p(NoteName::D, 4),
-        ],
+        strings: &[p(NoteName::D, 3), p(NoteName::A, 3), p(NoteName::D, 4)],
         instrument: Instrument::Bouzouki,
         category: TuningCategory::AlternativeStandard,
     },
@@ -1587,11 +1579,7 @@ static CATALOG: &[TuningSpec] = &[
     TuningSpec {
         // Prima balalaika academic tuning: two unison E strings and an A (EEA)
         name: "Prima (EEA)",
-        strings: &[
-            p(NoteName::E, 4),
-            p(NoteName::E, 4),
-            p(NoteName::A, 4),
-        ],
+        strings: &[p(NoteName::E, 4), p(NoteName::E, 4), p(NoteName::A, 4)],
         instrument: Instrument::Balalaika,
         category: TuningCategory::Standard,
     },
@@ -1599,22 +1587,14 @@ static CATALOG: &[TuningSpec] = &[
     TuningSpec {
         // Modern Ionian DAD
         name: "D-A-D",
-        strings: &[
-            p(NoteName::D, 3),
-            p(NoteName::A, 3),
-            p(NoteName::D, 4),
-        ],
+        strings: &[p(NoteName::D, 3), p(NoteName::A, 3), p(NoteName::D, 4)],
         instrument: Instrument::MountainDulcimer,
         category: TuningCategory::Standard,
     },
     TuningSpec {
         // Older Ionian D-A-A
         name: "D-A-A",
-        strings: &[
-            p(NoteName::D, 3),
-            p(NoteName::A, 3),
-            p(NoteName::A, 3),
-        ],
+        strings: &[p(NoteName::D, 3), p(NoteName::A, 3), p(NoteName::A, 3)],
         instrument: Instrument::MountainDulcimer,
         category: TuningCategory::AlternativeStandard,
     },
@@ -1766,8 +1746,7 @@ mod tests {
         let er: Vec<_> = catalog()
             .iter()
             .filter(|s| {
-                s.category == TuningCategory::ExtendedRange
-                    && s.instrument == Instrument::Guitar
+                s.category == TuningCategory::ExtendedRange && s.instrument == Instrument::Guitar
             })
             .collect();
         assert!(er.iter().any(|s| s.strings.len() == 7));
@@ -1981,7 +1960,11 @@ mod tests {
         for inst in [Instrument::Violin, Instrument::Viola, Instrument::Cello] {
             let t = Tuning::find_for("Standard", inst).unwrap();
             for w in pitch_midis(&t).windows(2) {
-                assert_eq!(w[1] - w[0], 7, "{inst} strings should be a perfect fifth apart");
+                assert_eq!(
+                    w[1] - w[0],
+                    7,
+                    "{inst} strings should be a perfect fifth apart"
+                );
             }
         }
     }
@@ -1999,7 +1982,11 @@ mod tests {
     fn double_bass_orchestral_is_in_fourths() {
         let db = Tuning::find_for("Orchestral (fourths)", Instrument::DoubleBass).unwrap();
         for w in pitch_midis(&db).windows(2) {
-            assert_eq!(w[1] - w[0], 5, "double bass orchestral strings should be a perfect fourth apart");
+            assert_eq!(
+                w[1] - w[0],
+                5,
+                "double bass orchestral strings should be a perfect fourth apart"
+            );
         }
     }
 
@@ -2091,8 +2078,6 @@ mod tests {
         }
         // The reference: a guitar is 22, a bass longer.
         assert_eq!(Instrument::Guitar.standard_fret_count(), 22);
-        assert!(
-            Instrument::Bass.standard_fret_count() >= Instrument::Guitar.standard_fret_count()
-        );
+        assert!(Instrument::Bass.standard_fret_count() >= Instrument::Guitar.standard_fret_count());
     }
 }

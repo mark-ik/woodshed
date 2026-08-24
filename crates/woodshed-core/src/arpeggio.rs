@@ -36,7 +36,9 @@ pub fn generate_shapes(
     root: Pitch,
     bass: Interval,
 ) -> Vec<ArpeggioShape> {
-    let all = fretboard.positions_for_chord(formula, root).unwrap_or_default();
+    let all = fretboard
+        .positions_for_chord(formula, root)
+        .unwrap_or_default();
     // Anchor frets: a fret below each occurrence of the bass tone on the
     // lowest two strings, within a playable stretch of neck.
     let mut anchors: Vec<u8> = all
@@ -180,7 +182,11 @@ mod tests {
         let root = Pitch::from_midi(57, Spelling::Sharps);
         let shapes = generate_shapes(&board(), major(), root, Interval::PERFECT_UNISON);
         let positions = &shapes[0].positions;
-        let run = ArpeggioRun::new(positions, Interval::PERFECT_UNISON, ArpeggioDirection::UpDown);
+        let run = ArpeggioRun::new(
+            positions,
+            Interval::PERFECT_UNISON,
+            ArpeggioDirection::UpDown,
+        );
         assert!(!run.seq.is_empty());
         // First note of the run is the bass tone (unison from root).
         let first = run.position_at(0).unwrap();

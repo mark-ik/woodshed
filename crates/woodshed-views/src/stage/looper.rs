@@ -1,6 +1,6 @@
+use cambium::{clickable, el, text};
 use woodshed_core::audio::AudioRequest;
 use woodshed_core::song::{song_from_progression, SECTION_LABELS};
-use cambium::{clickable, el, text};
 
 use super::{UiChild, UiState};
 
@@ -72,7 +72,6 @@ fn song_deck(ui: &UiState) -> UiChild {
         .attr("class", "transport"),
     )
 }
-
 
 fn song_bar_ops(_ui: &UiState) -> UiChild {
     Box::new(

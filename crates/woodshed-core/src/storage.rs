@@ -9,8 +9,8 @@ use muniment::Backend;
 use serde::{Deserialize, Serialize};
 
 use crate::arpeggio::ArpeggioDirection;
-pub use crate::settings::RelatedSettings;
 use crate::settings::AppSettings;
+pub use crate::settings::RelatedSettings;
 use crate::{Lens, StageState};
 
 /// The two things woodshed keeps between runs, as named slots on a
@@ -297,13 +297,7 @@ mod tests {
             metronome: crate::settings::MetronomeSettings { bpm: 96.0 },
             ..AppSettings::default()
         };
-        let snap = PersistedSession::capture(
-            &stage,
-            AppSection::Settings,
-            &set,
-            &song,
-            &history,
-        );
+        let snap = PersistedSession::capture(&stage, AppSection::Settings, &set, &song, &history);
         let json = serde_json::to_string(&snap).unwrap();
         let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(
@@ -346,10 +340,13 @@ mod tests {
         let loaded = decode_session(r#"{"lens":"Chords","bpm":88.0}"#).unwrap();
         assert_eq!(loaded.session.lens, Lens::Chords);
         assert_eq!(loaded.legacy_settings.as_ref().unwrap().metronome.bpm, 88.0);
-        assert_eq!(loaded.session.section, AppSection::Stage, "missing fields default");
+        assert_eq!(
+            loaded.session.section,
+            AppSection::Stage,
+            "missing fields default"
+        );
         // Out-of-range indices clamp through the setters.
-        let huge: PersistedSession =
-            serde_json::from_str(r#"{"scale_idx":99999}"#).unwrap();
+        let huge: PersistedSession = serde_json::from_str(r#"{"scale_idx":99999}"#).unwrap();
         let mut s = StageState::new();
         huge.restore(&mut s, &AppSettings::default());
         assert!(s.scale_idx < s.scales().len());
@@ -388,5 +385,4 @@ mod tests {
         let song: PersistedSession = serde_json::from_str(r#"{"tab":"Song"}"#).unwrap();
         assert_eq!(song.section, AppSection::Looper);
     }
-
 }

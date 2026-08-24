@@ -146,11 +146,7 @@ impl ChordRole {
         }
     }
 
-    pub const fn altered(
-        degree: u8,
-        alteration: DegreeAlteration,
-        quality: RoleQuality,
-    ) -> Self {
+    pub const fn altered(degree: u8, alteration: DegreeAlteration, quality: RoleQuality) -> Self {
         Self {
             degree,
             alteration,
@@ -178,10 +174,7 @@ pub struct ProgressionChord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgressionError {
-    DegreeOutOfRange {
-        degree: u8,
-        scale_size: usize,
-    },
+    DegreeOutOfRange { degree: u8, scale_size: usize },
     UnknownChordFormula(&'static str),
     Transposition(String),
 }
@@ -344,11 +337,7 @@ static CATALOG: &[Progression] = &[
         description: "The most ubiquitous jazz progression. Half-step \
                       down from ii to V to I, with sevenths.",
         category: ProgressionCategory::Jazz,
-        roles: &[
-            R::new(2, Minor7),
-            R::new(5, Dominant7),
-            R::new(1, Major7),
-        ],
+        roles: &[R::new(2, Minor7), R::new(5, Dominant7), R::new(1, Major7)],
     },
     Progression {
         name: "iii-VI-ii-V-I (Jazz)",
@@ -450,7 +439,10 @@ mod tests {
 
     #[test]
     fn ii_v_i_in_c_produces_dm7_g7_cmaj7() {
-        let prog = catalog().iter().find(|p| p.name == "ii-V-I (Jazz)").unwrap();
+        let prog = catalog()
+            .iter()
+            .find(|p| p.name == "ii-V-I (Jazz)")
+            .unwrap();
         let chords = prog
             .apply_in_key(nat(NoteName::C, 4), major_scale())
             .unwrap();
@@ -471,13 +463,19 @@ mod tests {
 
     #[test]
     fn ii_v_i_dm7_pitches_are_d_f_a_c() {
-        let prog = catalog().iter().find(|p| p.name == "ii-V-I (Jazz)").unwrap();
+        let prog = catalog()
+            .iter()
+            .find(|p| p.name == "ii-V-I (Jazz)")
+            .unwrap();
         let chords = prog
             .apply_in_key(nat(NoteName::C, 4), major_scale())
             .unwrap();
         let dm7 = &chords[0];
         let names: Vec<NoteName> = dm7.pitches.iter().map(|p| p.name).collect();
-        assert_eq!(names, vec![NoteName::D, NoteName::F, NoteName::A, NoteName::C]);
+        assert_eq!(
+            names,
+            vec![NoteName::D, NoteName::F, NoteName::A, NoteName::C]
+        );
     }
 
     #[test]
@@ -564,9 +562,23 @@ mod tests {
         // Every RoleQuality should map to a real chord in the catalog.
         use RoleQuality::*;
         for q in [
-            Major, Minor, Diminished, Augmented, Sus2, Sus4, Major6, Minor6,
-            Major7, Minor7, Dominant7, MinorMajor7, HalfDiminished7,
-            Diminished7, Major9, Minor9, Dominant9,
+            Major,
+            Minor,
+            Diminished,
+            Augmented,
+            Sus2,
+            Sus4,
+            Major6,
+            Minor6,
+            Major7,
+            Minor7,
+            Dominant7,
+            MinorMajor7,
+            HalfDiminished7,
+            Diminished7,
+            Major9,
+            Minor9,
+            Dominant9,
         ] {
             assert!(
                 q.chord_formula().is_some(),

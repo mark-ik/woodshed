@@ -353,12 +353,12 @@ mod tests {
         lp.set_recording(true);
         lp.tick(0.5, 1.0); // cursor 0 → 1
         lp.tick(0.5, 1.0); // cursor 1 → 0 (bar boundary)
-        // Arm "off" now — will take effect at the next cursor=0.
+                           // Arm "off" now — will take effect at the next cursor=0.
         lp.arm_record(false);
         // First tick after arming: cursor=0, pending consumed → recording off.
         lp.tick(0.9, 1.0); // should NOT capture 0.9
-        // Buffer at cursor 0 was 0.5 from before; check it didn't get overwritten.
-        // We can check via the peak (no 0.9 anywhere).
+                           // Buffer at cursor 0 was 0.5 from before; check it didn't get overwritten.
+                           // We can check via the peak (no 0.9 anywhere).
         assert!(lp.peak_amplitude() < 0.55);
     }
 

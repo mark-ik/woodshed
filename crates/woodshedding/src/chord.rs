@@ -87,9 +87,7 @@ pub fn catalog() -> &'static [ChordFormula] {
 }
 
 /// Iterate the catalog filtered by category.
-pub fn catalog_in_category(
-    category: ChordCategory,
-) -> impl Iterator<Item = &'static ChordFormula> {
+pub fn catalog_in_category(category: ChordCategory) -> impl Iterator<Item = &'static ChordFormula> {
     catalog().iter().filter(move |f| f.category == category)
 }
 
@@ -567,7 +565,14 @@ mod tests {
     fn c_major_triad_is_c_e_g() {
         let major = find("Major");
         let c = major.apply_to(nat(NoteName::C, 4)).unwrap();
-        assert_eq!(c, vec![nat(NoteName::C, 4), nat(NoteName::E, 4), nat(NoteName::G, 4)]);
+        assert_eq!(
+            c,
+            vec![
+                nat(NoteName::C, 4),
+                nat(NoteName::E, 4),
+                nat(NoteName::G, 4)
+            ]
+        );
     }
 
     #[test]
@@ -671,7 +676,11 @@ mod tests {
         let c = s.apply_to(nat(NoteName::C, 4)).unwrap();
         assert_eq!(
             c,
-            vec![nat(NoteName::C, 4), nat(NoteName::F, 4), nat(NoteName::G, 4)]
+            vec![
+                nat(NoteName::C, 4),
+                nat(NoteName::F, 4),
+                nat(NoteName::G, 4)
+            ]
         );
     }
 

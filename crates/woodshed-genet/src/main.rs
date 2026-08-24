@@ -39,12 +39,12 @@ use std::rc::Rc;
 
 use cambium::{clickable, el, text as text_node};
 use cambium_genet_winit_host::{
-    HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands, run,
+    run, HostHooks, HostOptions, Init, Key, KeyPress, NamedKey, Runner, WindowCommands,
 };
 use woodshed_core::audio::AudioBackend as _;
 use woodshed_core::midi::MidiBackend as _;
 use woodshed_core::settings::WindowSettings;
-use woodshed_views::stage::{UiChild, UiState, ViewportClass, stage_root};
+use woodshed_views::stage::{stage_root, UiChild, UiState, ViewportClass};
 
 use crate::audio::CpalBackend;
 use crate::shared::Shared;

@@ -56,7 +56,10 @@ impl PracticeItem {
                     format!("{}{}", r, formula.symbol)
                 }
             }
-            Self::Exercise { exercise, starting_fret } => {
+            Self::Exercise {
+                exercise,
+                starting_fret,
+            } => {
                 format!("{} (fret {})", exercise.name, starting_fret)
             }
         }
@@ -115,7 +118,13 @@ const CIRCLE_OF_FIFTHS_ROOTS: [(NoteName, Accidental); 12] = [
 
 /// The seven diatonic modes of the major-scale family, in order.
 const DIATONIC_MODES: [&str; 7] = [
-    "Major", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Minor", "Locrian",
+    "Major",
+    "Dorian",
+    "Phrygian",
+    "Lydian",
+    "Mixolydian",
+    "Minor",
+    "Locrian",
 ];
 
 /// Standard CAGED positions for major / minor chords.
@@ -137,10 +146,7 @@ fn exercise_by_name(name: &str) -> Option<&'static Exercise> {
 
 /// Build a scale set traversing every key in chromatic order at the
 /// given starting position.
-pub fn scales_chromatic(
-    formula: &'static ScaleFormula,
-    position: u8,
-) -> PracticeSet {
+pub fn scales_chromatic(formula: &'static ScaleFormula, position: u8) -> PracticeSet {
     let items = CHROMATIC_ROOTS
         .iter()
         .map(|(n, a)| PracticeItem::Scale {
@@ -160,10 +166,7 @@ pub fn scales_chromatic(
 }
 
 /// Build a scale set traversing every key in circle-of-fifths order.
-pub fn scales_circle_of_fifths(
-    formula: &'static ScaleFormula,
-    position: u8,
-) -> PracticeSet {
+pub fn scales_circle_of_fifths(formula: &'static ScaleFormula, position: u8) -> PracticeSet {
     let items = CIRCLE_OF_FIFTHS_ROOTS
         .iter()
         .map(|(n, a)| PracticeItem::Scale {
@@ -219,11 +222,7 @@ pub fn chord_caged(formula: &'static ChordFormula, root: Pitch) -> PracticeSet {
             position: *p,
         })
         .collect();
-    let r = format!(
-        "{}{}",
-        root.name,
-        accidental_short(root.accidental)
-    );
+    let r = format!("{}{}", root.name, accidental_short(root.accidental));
     let symbol = if formula.symbol.is_empty() {
         r.clone()
     } else {
@@ -241,10 +240,7 @@ pub fn chord_caged(formula: &'static ChordFormula, root: Pitch) -> PracticeSet {
 
 /// Build an exercise set that walks the same exercise across multiple
 /// fret positions.
-pub fn exercise_positions(
-    exercise: &'static Exercise,
-    positions: &[u8],
-) -> PracticeSet {
+pub fn exercise_positions(exercise: &'static Exercise, positions: &[u8]) -> PracticeSet {
     let items = positions
         .iter()
         .map(|fret| PracticeItem::Exercise {

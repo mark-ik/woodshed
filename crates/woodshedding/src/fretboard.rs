@@ -186,18 +186,13 @@ impl Fretboard {
         Ok(self.positions_for_pitch_set(&pitches, chord.intervals))
     }
 
-    fn positions_for_pitch_set(
-        &self,
-        pitches: &[Pitch],
-        intervals: &[Interval],
-    ) -> Vec<Position> {
+    fn positions_for_pitch_set(&self, pitches: &[Pitch], intervals: &[Interval]) -> Vec<Position> {
         let mut result = Vec::new();
         for (string_index, &open) in self.tuning.strings.iter().enumerate() {
             for fret in 0..=self.fret_count {
                 let target_midi = open.midi() + fret as i32;
                 let target_pc = target_midi.rem_euclid(12) as u8;
-                if let Some(degree_idx) =
-                    pitches.iter().position(|p| p.pitch_class() == target_pc)
+                if let Some(degree_idx) = pitches.iter().position(|p| p.pitch_class() == target_pc)
                 {
                     let canonical = pitches[degree_idx];
                     let pitch = respell_at_midi(canonical.name, canonical.accidental, target_midi);
@@ -272,7 +267,9 @@ impl Fretboard {
             }
         }
 
-        let upper = lowest_fret.saturating_add(max_fret_span).min(self.fret_count);
+        let upper = lowest_fret
+            .saturating_add(max_fret_span)
+            .min(self.fret_count);
 
         let per_string: Vec<Vec<StringPlay>> = self
             .tuning
@@ -337,13 +334,9 @@ impl Fretboard {
                     opts[pick]
                 })
                 .collect();
-            if let Some(v) = self.validate_voicing(
-                combo,
-                &required_pcs,
-                root_pc,
-                max_fret_span,
-                bass,
-            ) {
+            if let Some(v) =
+                self.validate_voicing(combo, &required_pcs, root_pc, max_fret_span, bass)
+            {
                 result.push(v);
             }
         }
@@ -451,7 +444,9 @@ mod tests {
     fn c_major_scale_positions_cover_every_string() {
         let board = standard_guitar();
         let major = find_scale("Major");
-        let positions = board.positions_for_scale(major, nat(NoteName::C, 4)).unwrap();
+        let positions = board
+            .positions_for_scale(major, nat(NoteName::C, 4))
+            .unwrap();
         for s in 0..board.tuning.strings.len() {
             assert!(
                 positions.iter().any(|p| p.string_index == s),
@@ -464,7 +459,9 @@ mod tests {
     fn c_major_scale_positions_only_use_pitch_classes_in_scale() {
         let board = standard_guitar();
         let major = find_scale("Major");
-        let positions = board.positions_for_scale(major, nat(NoteName::C, 4)).unwrap();
+        let positions = board
+            .positions_for_scale(major, nat(NoteName::C, 4))
+            .unwrap();
         // C major pitch classes: 0,2,4,5,7,9,11
         let allowed = [0u8, 2, 4, 5, 7, 9, 11];
         for p in &positions {
@@ -477,7 +474,9 @@ mod tests {
         // D major has F# and C#. Fretboard positions should preserve those.
         let board = standard_guitar();
         let major = find_scale("Major");
-        let positions = board.positions_for_scale(major, nat(NoteName::D, 4)).unwrap();
+        let positions = board
+            .positions_for_scale(major, nat(NoteName::D, 4))
+            .unwrap();
         let f_sharp_count = positions
             .iter()
             .filter(|p| p.pitch.name == NoteName::F && p.pitch.accidental == Accidental::Sharp)
@@ -508,7 +507,9 @@ mod tests {
     fn c_major_chord_positions_only_contain_chord_tones() {
         let board = standard_guitar();
         let major = find_chord("Major");
-        let positions = board.positions_for_chord(major, nat(NoteName::C, 4)).unwrap();
+        let positions = board
+            .positions_for_chord(major, nat(NoteName::C, 4))
+            .unwrap();
         let allowed = [0u8, 4, 7]; // C E G
         for p in &positions {
             assert!(allowed.contains(&p.pitch.pitch_class()));
@@ -528,7 +529,10 @@ mod tests {
         assert!(
             found,
             "expected open E major shape (0-2-2-1-0-0); voicings = {:?}",
-            voicings.iter().map(|v| v.fret_pattern()).collect::<Vec<_>>()
+            voicings
+                .iter()
+                .map(|v| v.fret_pattern())
+                .collect::<Vec<_>>()
         );
     }
 
@@ -595,11 +599,11 @@ mod tests {
         let drop_d = Tuning::find_for("Drop D", Instrument::Guitar).unwrap();
         let board = Fretboard::new(drop_d, 22);
         let major = find_chord("Major");
-        let positions = board.positions_for_chord(major, nat(NoteName::D, 2)).unwrap();
+        let positions = board
+            .positions_for_chord(major, nat(NoteName::D, 2))
+            .unwrap();
         // The lowest string is D2 (open); fret 0 should yield a D position.
-        assert!(positions
-            .iter()
-            .any(|p| p.string_index == 0 && p.fret == 0));
+        assert!(positions.iter().any(|p| p.string_index == 0 && p.fret == 0));
     }
 
     #[test]
@@ -607,7 +611,9 @@ mod tests {
         let uke = Tuning::find_for("Standard (high-G)", Instrument::Ukulele).unwrap();
         let board = Fretboard::new(uke, 18);
         let major = find_chord("Major");
-        let positions = board.positions_for_chord(major, nat(NoteName::C, 4)).unwrap();
+        let positions = board
+            .positions_for_chord(major, nat(NoteName::C, 4))
+            .unwrap();
         assert!(!positions.is_empty());
     }
 
@@ -631,7 +637,11 @@ mod tests {
             .find_chord_voicings(e_major, nat(NoteName::E, 2), 0, 4)
             .unwrap();
         assert!(!voicings.is_empty());
-        assert!(voicings.len() < 200, "too many voicings: {}", voicings.len());
+        assert!(
+            voicings.len() < 200,
+            "too many voicings: {}",
+            voicings.len()
+        );
     }
 
     // === Inversions and slash chords ===
@@ -666,8 +676,14 @@ mod tests {
             .collect();
         // C=0, E=4, G=7
         assert!(bass_pcs.contains(&0), "expected root-position voicings");
-        assert!(bass_pcs.contains(&4), "expected 1st-inversion voicings (E bass)");
-        assert!(bass_pcs.contains(&7), "expected 2nd-inversion voicings (G bass)");
+        assert!(
+            bass_pcs.contains(&4),
+            "expected 1st-inversion voicings (E bass)"
+        );
+        assert!(
+            bass_pcs.contains(&7),
+            "expected 2nd-inversion voicings (G bass)"
+        );
     }
 
     #[test]
@@ -765,11 +781,7 @@ mod tests {
             )
             .unwrap();
         let v = voicings.first().expect("at least one voicing");
-        let bass_play = v
-            .strings
-            .iter()
-            .find(|s| s.is_played())
-            .unwrap();
+        let bass_play = v.strings.iter().find(|s| s.is_played()).unwrap();
         match bass_play {
             StringPlay::Played {
                 interval_from_root,
@@ -801,7 +813,10 @@ mod tests {
                     _ => None,
                 })
                 .unwrap();
-            assert_eq!(bass_pc, 0, "Root constraint must produce only C-bass voicings");
+            assert_eq!(
+                bass_pc, 0,
+                "Root constraint must produce only C-bass voicings"
+            );
         }
     }
 }

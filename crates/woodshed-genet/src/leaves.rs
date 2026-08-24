@@ -10,9 +10,9 @@ use std::hash::{Hash, Hasher};
 
 use sprigging::LeafRegistry;
 use woodshed_views::fretboard_leaf::{
-    Dot, FRETBOARD_LEAF_KEY, FretboardLeaf, MarkerStyle, Orientation, REHEARSAL_FRETBOARD_LEAF_KEY,
+    Dot, FretboardLeaf, MarkerStyle, Orientation, FRETBOARD_LEAF_KEY, REHEARSAL_FRETBOARD_LEAF_KEY,
 };
-use woodshed_views::stage::{NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY, UiState};
+use woodshed_views::stage::{UiState, NEIGHBORHOOD_LEAF_KEY, SET_GRAPH_LEAF_KEY};
 
 use crate::shared::Shared;
 
@@ -101,6 +101,9 @@ fn sync_set_graph_swatch(shared: &mut Shared, ui: &UiState, leaves: &mut LeafReg
     let mut h = hasher();
     swatch.width.hash(&mut h);
     swatch.height.hash(&mut h);
+    swatch.viewport.pan.0.to_bits().hash(&mut h);
+    swatch.viewport.pan.1.to_bits().hash(&mut h);
+    swatch.viewport.zoom.to_bits().hash(&mut h);
     for node in &swatch.graph.nodes {
         node.id.hash(&mut h);
         node.position.0.to_bits().hash(&mut h);
@@ -115,6 +118,11 @@ fn sync_set_graph_swatch(shared: &mut Shared, ui: &UiState, leaves: &mut LeafReg
             point.0.to_bits().hash(&mut h);
             point.1.to_bits().hash(&mut h);
         }
+    }
+    for footprint in &swatch.node_footprints {
+        footprint.id.hash(&mut h);
+        footprint.width.to_bits().hash(&mut h);
+        footprint.height.to_bits().hash(&mut h);
     }
     swatch.selected.hash(&mut h);
     swatch.hovered.hash(&mut h);

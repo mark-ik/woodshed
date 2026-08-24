@@ -13,7 +13,9 @@ use crate::interval::Interval;
 /// pitch-class the rehearsal card model stores; richer/UI types (an app's
 /// spelled pitch-class enum) convert in and out at the edge. Serializes as
 /// the bare `u8`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct PitchClass(u8);
 
 impl PitchClass {
@@ -230,7 +232,10 @@ impl fmt::Display for TranspositionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TranspositionError::ExtremeAccidental(n) => {
-                write!(f, "transposition produced an extreme accidental (offset {n})")
+                write!(
+                    f,
+                    "transposition produced an extreme accidental (offset {n})"
+                )
             }
         }
     }

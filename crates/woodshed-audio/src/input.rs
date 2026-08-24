@@ -28,12 +28,12 @@ use std::time::Instant;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, StreamConfig};
+use pitch_detection::detector::mcleod::McLeodDetector;
+use pitch_detection::detector::PitchDetector as McLeodTrait;
 use pitch_detector::core::NoteName as PdNoteName;
 use pitch_detector::note::detect_note_in_range;
 use pitch_detector::note::hinted::HintedNoteDetector;
 use pitch_detector::pitch::{HannedFftDetector, PowerCepstrum};
-use pitch_detection::detector::PitchDetector as McLeodTrait;
-use pitch_detection::detector::mcleod::McLeodDetector;
 
 use std::cell::RefCell;
 
@@ -117,9 +117,7 @@ const IN_TUNE_CENTS_TOLERANCE: f64 = 5.0;
 /// Mirrors pitch-detector's note-resolution math: nearest 12-TET
 /// note at A=440, cents offset signed in [-50, +50], `in_tune` if
 /// |cents| < [`IN_TUNE_CENTS_TOLERANCE`].
-fn freq_to_note_detection_result(
-    freq_hz: f64,
-) -> pitch_detector::note::NoteDetectionResult {
+fn freq_to_note_detection_result(freq_hz: f64) -> pitch_detector::note::NoteDetectionResult {
     // Semitones above A4 (440 Hz). MIDI note number = round(s) + 69.
     let semis = 12.0 * (freq_hz / 440.0).log2();
     let midi = (semis.round() as i32) + 69;
@@ -401,18 +399,12 @@ impl Analyzer for PitchAnalyzer {
                     sample_rate,
                     Some(range),
                 ),
-                (DetectorKind::Fft, None) => detect_note_in_range(
-                    signal,
-                    &mut self.fft_detector,
-                    sample_rate,
-                    range,
-                ),
-                (DetectorKind::Cepstrum, None) => detect_note_in_range(
-                    signal,
-                    &mut self.cepstrum_detector,
-                    sample_rate,
-                    range,
-                ),
+                (DetectorKind::Fft, None) => {
+                    detect_note_in_range(signal, &mut self.fft_detector, sample_rate, range)
+                }
+                (DetectorKind::Cepstrum, None) => {
+                    detect_note_in_range(signal, &mut self.cepstrum_detector, sample_rate, range)
+                }
                 // McLeod returns a raw frequency + clarity; we
                 // resolve to note name / cents locally since
                 // pitch-detector's NoteDetectionResult builder
@@ -601,7 +593,9 @@ impl Default for LooperCaptureAnalyzer {
 impl LooperCaptureAnalyzer {
     pub fn new() -> Self {
         Self {
-            ring: Arc::new(Mutex::new(VecDeque::with_capacity(LOOPER_CAPTURE_RING_LIMIT))),
+            ring: Arc::new(Mutex::new(VecDeque::with_capacity(
+                LOOPER_CAPTURE_RING_LIMIT,
+            ))),
             enabled: Arc::new(Mutex::new(false)),
         }
     }
@@ -745,8 +739,7 @@ impl InputEngineBuilder {
                         mono.clear();
                         mono.reserve(data.len() / channels.max(1));
                         for frame in data.chunks(channels) {
-                            let mean =
-                                frame.iter().copied().sum::<f32>() / channels as f32;
+                            let mean = frame.iter().copied().sum::<f32>() / channels as f32;
                             mono.push(mean);
                         }
                         let now = Instant::now();

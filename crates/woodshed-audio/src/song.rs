@@ -172,7 +172,10 @@ pub struct SongCursor {
 /// Errors from bar-manipulation operations.
 #[derive(Debug, PartialEq)]
 pub enum SongError {
-    BarIndexOutOfRange { idx: usize, len: usize },
+    BarIndexOutOfRange {
+        idx: usize,
+        len: usize,
+    },
     /// Tried to remove the last remaining bar — songs must have at
     /// least one bar.
     CannotRemoveLastBar,
@@ -277,9 +280,10 @@ impl Song {
 
     /// Borrow a specific bar.
     pub fn bar(&self, idx: usize) -> Result<&Bar, SongError> {
-        self.bars
-            .get(idx)
-            .ok_or(SongError::BarIndexOutOfRange { idx, len: self.bars.len() })
+        self.bars.get(idx).ok_or(SongError::BarIndexOutOfRange {
+            idx,
+            len: self.bars.len(),
+        })
     }
 
     pub fn bar_mut(&mut self, idx: usize) -> Result<&mut Bar, SongError> {
@@ -466,11 +470,7 @@ impl Song {
 
     /// Attach a freshly-rendered audio buffer to the bar at `idx`.
     /// Replaces any existing buffer there.
-    pub fn attach_buffer(
-        &mut self,
-        idx: usize,
-        buffer: SampleBuffer,
-    ) -> Result<(), SongError> {
+    pub fn attach_buffer(&mut self, idx: usize, buffer: SampleBuffer) -> Result<(), SongError> {
         self.bar_mut(idx)?.audio_buffer = Some(buffer);
         Ok(())
     }
@@ -611,9 +611,8 @@ mod tests {
         s.add_bar(); // 2 bars
         s.one_shot = true;
         s.playing = true;
-        let total =
-            s.bar(0).unwrap().duration_samples(48_000.0) +
-            s.bar(1).unwrap().duration_samples(48_000.0);
+        let total = s.bar(0).unwrap().duration_samples(48_000.0)
+            + s.bar(1).unwrap().duration_samples(48_000.0);
         s.advance(total + 1000, 48_000.0);
         assert!(!s.playing, "one-shot song should stop at end");
     }
@@ -654,10 +653,7 @@ mod tests {
         assert_eq!(back.name, s.name);
         assert_eq!(back.len(), 2);
         assert_eq!(back.bar(1).unwrap().bpm, 90.0);
-        assert_eq!(
-            back.bar(1).unwrap().chord_ref.as_ref().unwrap().label,
-            "Am"
-        );
+        assert_eq!(back.bar(1).unwrap().chord_ref.as_ref().unwrap().label, "Am");
     }
 
     #[test]
@@ -704,4 +700,3 @@ mod tests {
         assert!(s.bar(0).unwrap().audio_buffer.is_none());
     }
 }
-

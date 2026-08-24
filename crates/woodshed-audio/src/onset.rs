@@ -20,8 +20,8 @@ use crate::input::Analyzer;
 // Re-export the pure DSP layer so downstream `crate::onset::*` /
 // `woodshed_audio::*` paths resolve unchanged after the extraction.
 pub use audio_primitives::onset::{
-    estimate_bpm, OnsetDetector, DEFAULT_FRAME_SIZE, DEFAULT_MEDIAN_WINDOW,
-    DEFAULT_MIN_SPACING_MS, DEFAULT_THRESHOLD_MULTIPLIER,
+    estimate_bpm, OnsetDetector, DEFAULT_FRAME_SIZE, DEFAULT_MEDIAN_WINDOW, DEFAULT_MIN_SPACING_MS,
+    DEFAULT_THRESHOLD_MULTIPLIER,
 };
 
 // =================================================================

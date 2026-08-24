@@ -104,29 +104,84 @@ impl Orientation {
 
 /// Subtle, fixed dark-theme ink (like the neighbourhood leaf; palette-derived
 /// theming is a later step). Quieter and less saturated than the old CSS board.
-const C_STRING: ColorF = ColorF { r: 0.50, g: 0.52, b: 0.57, a: 0.7 };
-const C_WIRE: ColorF = ColorF { r: 0.30, g: 0.32, b: 0.37, a: 0.85 };
-const C_NUT: ColorF = ColorF { r: 0.56, g: 0.58, b: 0.63, a: 1.0 };
-const C_INLAY: ColorF = ColorF { r: 0.26, g: 0.28, b: 0.33, a: 1.0 };
-const C_NOTE: ColorF = ColorF { r: 0.34, g: 0.44, b: 0.58, a: 1.0 };
-const C_ROOT: ColorF = ColorF { r: 0.64, g: 0.52, b: 0.36, a: 1.0 };
+const C_STRING: ColorF = ColorF {
+    r: 0.50,
+    g: 0.52,
+    b: 0.57,
+    a: 0.7,
+};
+const C_WIRE: ColorF = ColorF {
+    r: 0.30,
+    g: 0.32,
+    b: 0.37,
+    a: 0.85,
+};
+const C_NUT: ColorF = ColorF {
+    r: 0.56,
+    g: 0.58,
+    b: 0.63,
+    a: 1.0,
+};
+const C_INLAY: ColorF = ColorF {
+    r: 0.26,
+    g: 0.28,
+    b: 0.33,
+    a: 1.0,
+};
+const C_NOTE: ColorF = ColorF {
+    r: 0.34,
+    g: 0.44,
+    b: 0.58,
+    a: 1.0,
+};
+const C_ROOT: ColorF = ColorF {
+    r: 0.64,
+    g: 0.52,
+    b: 0.36,
+    a: 1.0,
+};
 /// The note sounding right now during a run/arpeggiation: a bright warm accent
 /// so the step reads at a glance.
-const C_ACTIVE: ColorF = ColorF { r: 0.97, g: 0.80, b: 0.44, a: 1.0 };
+const C_ACTIVE: ColorF = ColorF {
+    r: 0.97,
+    g: 0.80,
+    b: 0.44,
+    a: 1.0,
+};
 /// A note the current mark mode silences (Solo's unmarked, Mute's marked):
 /// faint and desaturated so it reads as present-but-off, still clickable.
-const C_EXCLUDED: ColorF = ColorF { r: 0.28, g: 0.30, b: 0.35, a: 0.55 };
+const C_EXCLUDED: ColorF = ColorF {
+    r: 0.28,
+    g: 0.30,
+    b: 0.35,
+    a: 0.55,
+};
 /// The selection ring around a marked note: a cool bright accent, distinct from
 /// the warm root/active tones so "selected" never reads as "sounding".
-const C_MARK: ColorF = ColorF { r: 0.42, g: 0.80, b: 0.94, a: 1.0 };
+const C_MARK: ColorF = ColorF {
+    r: 0.42,
+    g: 0.80,
+    b: 0.94,
+    a: 1.0,
+};
 /// The colorblind root outline: a bright warm-neutral that reads as "this is the
 /// root" by shape, independent of hue.
-const C_ROOT_RING: ColorF = ColorF { r: 0.95, g: 0.93, b: 0.86, a: 1.0 };
+const C_ROOT_RING: ColorF = ColorF {
+    r: 0.95,
+    g: 0.93,
+    b: 0.86,
+    a: 1.0,
+};
 /// The touch's path trail: a translucent warm line threaded through the markers
 /// in visit order, so the treatment (which way the run climbs) is shown, not
 /// just named. Shares the active accent's hue so the trail and the sounding step
 /// read as one gesture.
-const C_PATH: ColorF = ColorF { r: 0.93, g: 0.74, b: 0.42, a: 0.55 };
+const C_PATH: ColorF = ColorF {
+    r: 0.93,
+    g: 0.74,
+    b: 0.42,
+    a: 0.55,
+};
 
 /// Marker box size (device px). The CSS label overlay reuses these so each label
 /// sits exactly over its painted marker.
@@ -335,7 +390,6 @@ impl FretboardLeaf {
             self.dirty = true;
         }
     }
-
 }
 
 impl Leaf for FretboardLeaf {
@@ -545,10 +599,30 @@ mod tests {
 
     fn leaf() -> FretboardLeaf {
         let dots = vec![
-            Dot { string_index: 0, fret: 5, is_root: true, marked: false, excluded: false },
-            Dot { string_index: 1, fret: 7, is_root: false, marked: false, excluded: false },
+            Dot {
+                string_index: 0,
+                fret: 5,
+                is_root: true,
+                marked: false,
+                excluded: false,
+            },
+            Dot {
+                string_index: 1,
+                fret: 7,
+                is_root: false,
+                marked: false,
+                excluded: false,
+            },
         ];
-        FretboardLeaf::new(6, 0, 12, Orientation::Horizontal, false, dots, MarkerStyle::Sharp)
+        FretboardLeaf::new(
+            6,
+            0,
+            12,
+            Orientation::Horizontal,
+            false,
+            dots,
+            MarkerStyle::Sharp,
+        )
     }
 
     #[test]

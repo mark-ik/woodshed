@@ -1,5 +1,5 @@
-use woodshed_core::set_from_practice;
 use cambium::{clickable, el, text};
+use woodshed_core::set_from_practice;
 
 use super::{UiChild, UiState};
 

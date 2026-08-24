@@ -25,8 +25,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use midir::{
-    Ignore, MidiInput, MidiInputConnection, MidiInputPort, MidiOutput,
-    MidiOutputConnection, MidiOutputPort,
+    Ignore, MidiInput, MidiInputConnection, MidiInputPort, MidiOutput, MidiOutputConnection,
+    MidiOutputPort,
 };
 
 /// Errors that can come out of the MIDI layer.
@@ -136,23 +136,39 @@ pub fn parse_message(bytes: &[u8]) -> Option<MidiEvent> {
             // Note Off
             let note = *bytes.get(1)?;
             let velocity = *bytes.get(2).unwrap_or(&0);
-            Some(MidiEvent::NoteOff { channel, note, velocity })
+            Some(MidiEvent::NoteOff {
+                channel,
+                note,
+                velocity,
+            })
         }
         0x90 => {
             // Note On — by convention, velocity 0 = Note Off.
             let note = *bytes.get(1)?;
             let velocity = *bytes.get(2).unwrap_or(&0);
             if velocity == 0 {
-                Some(MidiEvent::NoteOff { channel, note, velocity })
+                Some(MidiEvent::NoteOff {
+                    channel,
+                    note,
+                    velocity,
+                })
             } else {
-                Some(MidiEvent::NoteOn { channel, note, velocity })
+                Some(MidiEvent::NoteOn {
+                    channel,
+                    note,
+                    velocity,
+                })
             }
         }
         0xB0 => {
             // Control Change
             let controller = *bytes.get(1)?;
             let value = *bytes.get(2).unwrap_or(&0);
-            Some(MidiEvent::ControlChange { channel, controller, value })
+            Some(MidiEvent::ControlChange {
+                channel,
+                controller,
+                value,
+            })
         }
         _ => None,
     }
@@ -223,8 +239,7 @@ impl MidiClockSync {
             .zip(self.history.iter().skip(1))
             .map(|(a, b)| b.duration_since(*a).as_secs_f32())
             .collect();
-        let mean_secs_per_tick =
-            intervals.iter().sum::<f32>() / intervals.len() as f32;
+        let mean_secs_per_tick = intervals.iter().sum::<f32>() / intervals.len() as f32;
         if mean_secs_per_tick < 1e-6 {
             return;
         }
@@ -302,21 +317,11 @@ impl MidiOut {
         Ok(())
     }
 
-    pub fn send_note_on(
-        &mut self,
-        channel: u8,
-        note: u8,
-        velocity: u8,
-    ) -> Result<(), MidiError> {
+    pub fn send_note_on(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), MidiError> {
         self.send_raw(&[0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
 
-    pub fn send_note_off(
-        &mut self,
-        channel: u8,
-        note: u8,
-        velocity: u8,
-    ) -> Result<(), MidiError> {
+    pub fn send_note_off(&mut self, channel: u8, note: u8, velocity: u8) -> Result<(), MidiError> {
         self.send_raw(&[0x80 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
 
@@ -337,10 +342,7 @@ impl MidiOut {
     }
 }
 
-fn find_output_port(
-    output: &MidiOutput,
-    name: &str,
-) -> Result<MidiOutputPort, MidiError> {
+fn find_output_port(output: &MidiOutput, name: &str) -> Result<MidiOutputPort, MidiError> {
     for p in output.ports() {
         if let Ok(pn) = output.port_name(&p) {
             if pn == name {
@@ -351,10 +353,7 @@ fn find_output_port(
     Err(MidiError::PortNotFound(name.to_string()))
 }
 
-fn find_input_port(
-    input: &MidiInput,
-    name: &str,
-) -> Result<MidiInputPort, MidiError> {
+fn find_input_port(input: &MidiInput, name: &str) -> Result<MidiInputPort, MidiError> {
     for p in input.ports() {
         if let Ok(pn) = input.port_name(&p) {
             if pn == name {
@@ -414,10 +413,7 @@ impl MidiIn {
                 (),
             )
             .map_err(|e| MidiError::Connect(format!("{e}")))?;
-        Ok(Self {
-            state,
-            _conn: conn,
-        })
+        Ok(Self { state, _conn: conn })
     }
 
     /// Snapshot the current shared state.

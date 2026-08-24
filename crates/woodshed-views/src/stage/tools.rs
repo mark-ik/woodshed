@@ -88,7 +88,11 @@ fn tuner(ui: &UiState) -> UiChild {
                 clickable(
                     el(
                         "div",
-                        text(if ui.tuner.enabled { "Stop listening" } else { "Start listening" }),
+                        text(if ui.tuner.enabled {
+                            "Stop listening"
+                        } else {
+                            "Start listening"
+                        }),
                     )
                     .attr("class", "t-btn t-hear"),
                     |ui: &mut UiState, _| {

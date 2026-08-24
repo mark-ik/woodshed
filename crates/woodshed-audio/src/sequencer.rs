@@ -23,12 +23,24 @@ pub struct Subdivision {
 }
 
 impl Subdivision {
-    pub const QUARTER: Self = Self { divisions_per_beat: 1 };
-    pub const EIGHTH: Self = Self { divisions_per_beat: 2 };
-    pub const SIXTEENTH: Self = Self { divisions_per_beat: 4 };
-    pub const THIRTY_SECOND: Self = Self { divisions_per_beat: 8 };
-    pub const EIGHTH_TRIPLET: Self = Self { divisions_per_beat: 3 };
-    pub const SIXTEENTH_TRIPLET: Self = Self { divisions_per_beat: 6 };
+    pub const QUARTER: Self = Self {
+        divisions_per_beat: 1,
+    };
+    pub const EIGHTH: Self = Self {
+        divisions_per_beat: 2,
+    };
+    pub const SIXTEENTH: Self = Self {
+        divisions_per_beat: 4,
+    };
+    pub const THIRTY_SECOND: Self = Self {
+        divisions_per_beat: 8,
+    };
+    pub const EIGHTH_TRIPLET: Self = Self {
+        divisions_per_beat: 3,
+    };
+    pub const SIXTEENTH_TRIPLET: Self = Self {
+        divisions_per_beat: 6,
+    };
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -42,7 +54,10 @@ pub struct TimeSignature {
 
 impl TimeSignature {
     pub const fn new(numerator: u8, denominator: u8) -> Self {
-        Self { numerator, denominator }
+        Self {
+            numerator,
+            denominator,
+        }
     }
 }
 
@@ -77,25 +92,19 @@ pub struct SequencerPattern {
 impl SequencerPattern {
     /// Total step count in one bar.
     pub fn steps_per_bar(&self) -> usize {
-        self.time_signature.numerator as usize
-            * self.subdivision.divisions_per_beat as usize
+        self.time_signature.numerator as usize * self.subdivision.divisions_per_beat as usize
     }
 
     /// Wall-clock duration of one step at the current BPM.
     pub fn step_duration(&self) -> Duration {
-        let secs =
-            60.0 / (self.bpm * self.subdivision.divisions_per_beat as f32);
+        let secs = 60.0 / (self.bpm * self.subdivision.divisions_per_beat as f32);
         Duration::from_secs_f32(secs)
     }
 
     /// Standard metronome: clicks on each beat, downbeat accented.
     /// Subdivision determines internal resolution but only beat-aligned
     /// steps fire.
-    pub fn metronome(
-        bpm: f32,
-        time_signature: TimeSignature,
-        subdivision: Subdivision,
-    ) -> Self {
+    pub fn metronome(bpm: f32, time_signature: TimeSignature, subdivision: Subdivision) -> Self {
         let dpb = subdivision.divisions_per_beat as usize;
         let mut steps = Vec::with_capacity(time_signature.numerator as usize * dpb);
         for beat in 0..time_signature.numerator as usize {
@@ -131,9 +140,7 @@ impl SequencerPattern {
     ) -> Self {
         let mut p = Self::metronome(bpm, time_signature, subdivision);
         for (i, step) in p.tracks[0].steps.iter_mut().enumerate() {
-            *step = Step::Active {
-                accent: i == 0,
-            };
+            *step = Step::Active { accent: i == 0 };
         }
         p
     }
@@ -162,21 +169,14 @@ mod tests {
 
     #[test]
     fn steps_per_bar_4_4_quarter_is_4() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::new(4, 4),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::new(4, 4), Subdivision::QUARTER);
         assert_eq!(p.steps_per_bar(), 4);
     }
 
     #[test]
     fn steps_per_bar_4_4_sixteenth_is_16() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::new(4, 4),
-            Subdivision::SIXTEENTH,
-        );
+        let p =
+            SequencerPattern::metronome(120.0, TimeSignature::new(4, 4), Subdivision::SIXTEENTH);
         assert_eq!(p.steps_per_bar(), 16);
     }
 
@@ -202,33 +202,22 @@ mod tests {
 
     #[test]
     fn step_duration_120_bpm_quarter_is_500ms() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
         let ms = p.step_duration().as_millis();
         assert_eq!(ms, 500);
     }
 
     #[test]
     fn step_duration_60_bpm_eighth_is_500ms() {
-        let p = SequencerPattern::metronome(
-            60.0,
-            TimeSignature::default(),
-            Subdivision::EIGHTH,
-        );
+        let p = SequencerPattern::metronome(60.0, TimeSignature::default(), Subdivision::EIGHTH);
         let ms = p.step_duration().as_millis();
         assert_eq!(ms, 500);
     }
 
     #[test]
     fn metronome_only_beats_fire() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::new(4, 4),
-            Subdivision::SIXTEENTH,
-        );
+        let p =
+            SequencerPattern::metronome(120.0, TimeSignature::new(4, 4), Subdivision::SIXTEENTH);
         // Steps 0, 4, 8, 12 should be Active; rest Empty
         for (i, step) in p.tracks[0].steps.iter().enumerate() {
             if i % 4 == 0 {
@@ -241,11 +230,7 @@ mod tests {
 
     #[test]
     fn metronome_downbeat_is_accented() {
-        let p = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::new(4, 4),
-            Subdivision::QUARTER,
-        );
+        let p = SequencerPattern::metronome(120.0, TimeSignature::new(4, 4), Subdivision::QUARTER);
         match p.tracks[0].steps[0] {
             Step::Active { accent } => assert!(accent),
             _ => panic!("step 0 should be active"),
@@ -261,11 +246,8 @@ mod tests {
 
     #[test]
     fn pattern_round_trips_through_serde_json() {
-        let original = SequencerPattern::metronome(
-            128.0,
-            TimeSignature::new(7, 8),
-            Subdivision::EIGHTH,
-        );
+        let original =
+            SequencerPattern::metronome(128.0, TimeSignature::new(7, 8), Subdivision::EIGHTH);
         let json = serde_json::to_string(&original).unwrap();
         let restored: SequencerPattern = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.bpm, original.bpm);

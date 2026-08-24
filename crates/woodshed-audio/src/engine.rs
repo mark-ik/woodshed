@@ -37,7 +37,10 @@ impl std::fmt::Display for AudioError {
             Self::NoOutputDevice => f.write_str("no audio output device available"),
             Self::NoInputDevice => f.write_str("no audio input device available"),
             Self::UnsupportedSampleFormat(fmt) => {
-                write!(f, "audio device sample format {fmt:?} is not supported (need f32)")
+                write!(
+                    f,
+                    "audio device sample format {fmt:?} is not supported (need f32)"
+                )
             }
             Self::StreamConfig(e) => write!(f, "stream config: {e}"),
             Self::StreamBuild(e) => write!(f, "stream build: {e}"),
@@ -211,11 +214,7 @@ impl SequencerEngine {
 /// Render `output` (interleaved by `channels`) by advancing the
 /// pattern and mixing active voices. Pulled out for testability —
 /// the cpal callback just calls this under a lock.
-pub(crate) fn process_buffer(
-    state: &mut EngineState,
-    output: &mut [f32],
-    channels: u16,
-) {
+pub(crate) fn process_buffer(state: &mut EngineState, output: &mut [f32], channels: u16) {
     let chs = channels as usize;
     let frames = output.len() / chs;
 
@@ -358,16 +357,10 @@ mod tests {
     fn process_buffer_subdivision_scales_step_count() {
         // 120 BPM with 16th-note subdivision should advance 4x as many
         // steps as quarter-note subdivision in the same window.
-        let p_quarter = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::QUARTER,
-        );
-        let p_sixteenth = SequencerPattern::metronome(
-            120.0,
-            TimeSignature::default(),
-            Subdivision::SIXTEENTH,
-        );
+        let p_quarter =
+            SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::QUARTER);
+        let p_sixteenth =
+            SequencerPattern::metronome(120.0, TimeSignature::default(), Subdivision::SIXTEENTH);
         let mut quarter = EngineState::new(p_quarter, 48000.0);
         let mut sixteenth = EngineState::new(p_sixteenth, 48000.0);
         quarter.playing = true;

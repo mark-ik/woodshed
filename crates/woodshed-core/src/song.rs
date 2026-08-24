@@ -65,7 +65,10 @@ impl Default for SongBar {
 impl SongBar {
     /// The root pitch for this bar's `root_pc` (C-relative, octave 3).
     fn root_pitch(&self) -> Pitch {
-        Pitch::from_midi(ROOT_BASE_MIDI + (self.root_pc % 12) as i32, Spelling::Sharps)
+        Pitch::from_midi(
+            ROOT_BASE_MIDI + (self.root_pc % 12) as i32,
+            Spelling::Sharps,
+        )
     }
 
     /// Note name for the current root ("C", "F#") — no octave.
@@ -153,8 +156,7 @@ impl SongBar {
 }
 
 /// Common section names the editor cycles through (empty = no section).
-pub const SECTION_LABELS: [&str; 6] =
-    ["", "Intro", "Verse", "Chorus", "Bridge", "Outro"];
+pub const SECTION_LABELS: [&str; 6] = ["", "Intro", "Verse", "Chorus", "Bridge", "Outro"];
 
 /// The song document: bars plus the song-level transport flags.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
