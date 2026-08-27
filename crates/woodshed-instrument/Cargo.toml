@@ -1,0 +1,22 @@
+[package]
+name = "woodshed-instrument"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Connection and device state for a Bluetooth-controlled smart instrument, joining Woodshed's practice concepts to the instrument's own."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Path dependencies until antinode has a git remote; see
+# design_docs/2026-08-27_smart_instrument_plan.md, "Dependency form".
+antinode = { path = "../../../antinode/crates/antinode" }
+antinode-ble = { path = "../../../antinode/crates/antinode-ble" }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "time", "macros"] }

@@ -11,6 +11,9 @@ members = [
     # The chartulary substrate's first real consumer (G3): woodshed's theory
     # catalog as a content graph. Folded in from its own repo 2026-07-08.
     "crates/woodshed-graph",
+    # Bluetooth control of a smart instrument; see
+    # design_docs/2026-08-27_smart_instrument_plan.md
+    "crates/woodshed-instrument",
 ]
 
 [workspace.package]

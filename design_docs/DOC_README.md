@@ -13,6 +13,18 @@ before any other doc in this directory.
 
 ## Active Plans
 
+- [2026-08-27_smart_instrument_plan.md](2026-08-27_smart_instrument_plan.md)
+  — **Plan; nothing implemented.** Woodshed drives a HyVibe smart guitar over
+  Bluetooth through [antinode](https://crates.io/crates/antinode), whose
+  protocol is hardware-verified (see
+  `../../antinode/design_docs/2026-08-27_antinode_founding.md`). The instrument
+  exposes a metronome, tuner, looper and recorder — the same vocabulary
+  Woodshed already owns, on the other side of a wire. W1 is the seam and one
+  honest round trip; W2 joins the two metronomes; W3 is the surface a desktop
+  earns over the phone app (banks as files, the guitar's own measured body
+  resonances, speaker biquads). Two constraints are designed around rather than
+  discovered: `ReadConfig` wedges the firmware and must never be called, and
+  the equalizer and aux settings are write-only.
 - [2026-08-12_persona_picker_plan.md](2026-08-12_persona_picker_plan.md)
   — **P1 landed; P2/P3 open.** `mere-persona-picker` (the cambium view-model
   over `identity::roster`; the census's wire-now item) is wired in. P1: a
