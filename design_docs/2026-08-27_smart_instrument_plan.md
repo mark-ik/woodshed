@@ -174,10 +174,12 @@ Candidates, in rough order of value:
 
 Done-conditions, now that W1 and W2 have landed:
 
-- **Loop retrieval works and is checksum-verified.** — **implemented
-  2026-08-27; awaiting a hardware run.** `Connection::fetch_recording` streams
-  a file in chunks, folds each into the device's own checksum, and fails rather
-  than handing back bytes that do not verify.
+- **Loop retrieval works and is checksum-verified.** — **met 2026-08-27,
+  against hardware.** `/Loops/loop0031.wav` was pulled off the instrument in
+  full: 741,468 bytes, **checksum verified**, and the file on disk is a valid
+  WAV whose internal RIFF length agrees with what `GetFileInfo` reported —
+  8.41 s of mono 44.1 kHz 16-bit audio, with the vendor's `JUNK` chunk intact
+  ahead of `fmt ` and `data`.
 - **The resonance report is readable.** — **met.** `Connection::read_resonances`
   returns the instrument's measured body modes as typed rows.
 - **Bank management as files** — deferred; the reference instrument has no
@@ -198,11 +200,17 @@ answers `loop0032.wav`, which does not exist; `GetFileInfo` on it fails.
 `latest_recording_name` steps back one and confirms the file opens, so callers
 get a name they can actually use.
 
-**Throughput is the real constraint.** Replies are hex, so every byte costs two
-characters, and one reply carries about two hundred bytes of file. A 741 KB
-loop is therefore minutes rather than seconds. That makes retrieval a
-background transfer with progress, not an interactive one — which is a design
-constraint on any UI over it, not a detail.
+**Throughput is the real constraint, now measured.** 741,468 bytes took
+**620.7 seconds — about 1.2 KB/s across roughly 3,700 round trips.** Replies
+are hex, so every byte costs two characters, and one reply carries about two
+hundred bytes of file. A ten-minute wait for eight seconds of audio. That makes retrieval a background transfer with progress, not an interactive
+one — a design constraint on any UI over it rather than a detail. It also
+means bulk archival of 31 loops is a five-hour job, so the sensible product
+shape is fetching a chosen take rather than syncing everything.
+
+**The checksum identification is confirmed by this run.** A wrong polynomial
+would have failed a download that arrived perfectly; CRC-32/MPEG-2 verified
+first time over three-quarters of a megabyte.
 
 ### `SetSpeakerBiquads`: assessed, not attempted
 
