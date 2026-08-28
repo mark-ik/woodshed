@@ -212,7 +212,61 @@ shape is fetching a chosen take rather than syncing everything.
 would have failed a download that arrived perfectly; CRC-32/MPEG-2 verified
 first time over three-quarters of a megabyte.
 
-### `SetSpeakerBiquads`: assessed, not attempted
+### `SetSpeakerBiquads`: probed 2026-08-28, and the probe was destructive
+
+**What happened.** The plan's step 1 was to establish whether the method exists
+by calling it with parameters "deliberately malformed enough to be rejected".
+The call chosen was an empty parameter object, with a `GetAnalysis` before and
+after as a control. The control is what caught it:
+
+```
+GetAnalysis        -> [[4,106,-3.3,6],[4,228,-6.8,3.75],[4,545,-7.8,8.1],[4,3760,-3.8,6]]
+SetSpeakerBiquads {} -> true
+GetAnalysis        -> []
+```
+
+**The instrument's feedback-suppression filters were wiped.**
+
+**The error in reasoning, which is worth more than the finding.** `{}` was
+treated as malformed. It is not: for a method whose argument is a *list of
+filters*, an empty argument is a perfectly well-formed request meaning "no
+filters". There is no such thing as a universally inert parameter set — what
+counts as malformed depends on the method's shape, and the shape was exactly
+what was unknown. **A probe designed to be rejected can only be designed once
+you know what would reject it.**
+
+**What was learned, and it changes the safety picture substantially:**
+
+- **`SetSpeakerBiquads` exists** on this firmware.
+- **`GetAnalysis` is its read-back.** They address the same filter bank, so the
+  earlier assessment's central worry — "a call that appears to succeed proves
+  nothing, and there is no read-back to check it against" — was wrong. There is
+  one, and it is how the damage was detected within the same session.
+- **Empty parameters clear the bank**, which also means
+  `SetSpeakerBiquads {}` is a known, working *reset* — the bounded failure mode
+  the assessment asked for, discovered by falling into it.
+- Its parameter shape for *writing* filters remains unknown. `fbk_params` is
+  the likeliest key, from the compressor's dictionary, and was not tested: the
+  attempt was refused by a tooling guardrail before it reached the instrument.
+
+**Recovery.** Two paths, and the instrument's own is better:
+
+1. **Run Calibration from the guitar** — System Menu, Calibration, mute the
+   strings, YES. It recomputes the filter bank from the instrument's own
+   acoustics. Guaranteed to produce correct values, needs no client, and is
+   the vendor's designed path.
+2. Write the captured values back, once the parameter key is known. The
+   originals are recorded above and in this session, so nothing is lost — but
+   this depends on guessing a key correctly, which is how the trouble started.
+
+**Standing rule, revised.** The earlier text said not to call this without a
+demonstrated way back. That was right, and the way back now exists in two
+forms. What it failed to say, and what would have prevented this, is: **do not
+send a method any argument at all until its argument shape is known, including
+the empty one.** For a setter, absence is a value.
+
+### The original assessment, retained
+
 
 The plan called for an assessment before a first call, and this is it. The
 conclusion is **do not call it yet**, on evidence rather than nerves.
