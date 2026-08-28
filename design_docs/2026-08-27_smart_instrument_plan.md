@@ -172,7 +172,71 @@ Candidates, in rough order of value:
   (hex doubles the payload, ~200 bytes of file per call), so this is a
   background transfer, not an interactive one.
 
-Done-conditions: **deferred**, set once W1 and W2 land and Mark picks a target.
+Done-conditions, now that W1 and W2 have landed:
+
+- **Loop retrieval works and is checksum-verified.** — **implemented
+  2026-08-27; awaiting a hardware run.** `Connection::fetch_recording` streams
+  a file in chunks, folds each into the device's own checksum, and fails rather
+  than handing back bytes that do not verify.
+- **The resonance report is readable.** — **met.** `Connection::read_resonances`
+  returns the instrument's measured body modes as typed rows.
+- **Bank management as files** — deferred; the reference instrument has no
+  banks, so there is nothing to export until one exists.
+- **`SetSpeakerBiquads`** — assessed below and **not attempted**.
+
+### Findings from building it
+
+**The checksum is not the CRC-32 you would reach for.** `GetFileInfo` reports
+one computed MSB-first over the unreflected polynomial `0x04C11DB7` from an
+all-ones start with no final inversion — CRC-32/MPEG-2. A stock `crc32` crate
+returns a different number, so a perfectly intact download would appear
+corrupt. Implemented in `ringdown::crc32` with the table generated from the
+polynomial and pinned by the catalogue's published check value.
+
+**`GetLastRecordingName` does not name the last recording.** With 31 loops it
+answers `loop0032.wav`, which does not exist; `GetFileInfo` on it fails.
+`latest_recording_name` steps back one and confirms the file opens, so callers
+get a name they can actually use.
+
+**Throughput is the real constraint.** Replies are hex, so every byte costs two
+characters, and one reply carries about two hundred bytes of file. A 741 KB
+loop is therefore minutes rather than seconds. That makes retrieval a
+background transfer with progress, not an interactive one — which is a design
+constraint on any UI over it, not a detail.
+
+### `SetSpeakerBiquads`: assessed, not attempted
+
+The plan called for an assessment before a first call, and this is it. The
+conclusion is **do not call it yet**, on evidence rather than nerves.
+
+What is known: the name is in the firmware's keyword dictionary, so the string
+exists. Nothing else. Its parameters are unmapped, its units are unknown, and
+whether it is even implemented on this firmware is untested — `GetLevels` sat
+in that same dictionary and turned out not to exist.
+
+What makes it different from the other unknowns is the failure mode. It writes
+filter coefficients to the speaker path, which is the actuator driving the
+instrument's own top. A wrong biquad is not a wrong number in a display; it is
+an unstable filter on a transducer glued to a soundboard. And this project has
+already demonstrated, with `den`, that this device accepts writes it does not
+apply and returns `true` regardless — so a call that appears to succeed proves
+nothing, and there is no read-back to check it against.
+
+The order that would make it safe, if it is ever wanted:
+
+1. Establish whether the method exists at all, by calling it with parameters
+   deliberately malformed enough to be rejected, and reading the error.
+2. Find the parameter shape from the error messages rather than by guessing
+   coefficient arrays.
+3. Establish a way to *undo* it — `LaunchCalibration` may reset the filter
+   bank, but that is a guess and needs its own confirmation — **before**
+   writing anything real.
+4. Only then write a coefficient set, at a volume where an unstable filter is
+   an annoyance rather than damage.
+
+Step 3 is the one that matters. Nothing should be written to this path until
+there is a demonstrated way back, because the lesson `den` taught was cheap
+only by luck.
 
 ## Decisions (Mark's)
 

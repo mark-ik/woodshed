@@ -253,6 +253,31 @@ impl Connection {
             .collect()
     }
 
+    /// The most recent recording that can actually be opened, if any.
+    ///
+    /// The device's own "last recording" answer is the name of the *next* one,
+    /// which does not exist yet; this steps back and confirms the file opens.
+    pub async fn latest_recording(&mut self) -> Result<Option<String>, InstrumentError> {
+        Ok(self.guitar.latest_recording_name().await?)
+    }
+
+    /// Copy a recording off the instrument, verified against its checksum.
+    ///
+    /// The vendor offers this only over USB mass storage, so it is one of the
+    /// things a desktop earns outright. It is slow — replies are hex, which
+    /// doubles every byte — so `progress` is called with (bytes, total) and a
+    /// caller should show it rather than block silently.
+    pub async fn fetch_recording(
+        &mut self,
+        name: &str,
+        progress: impl FnMut(u64, u64),
+    ) -> Result<Vec<u8>, InstrumentError> {
+        Ok(self
+            .guitar
+            .read_file(name, ringdown_ble::MAX_FILE_CHUNK, progress)
+            .await?)
+    }
+
     /// Call a method by wire name, refusing the ones that break the instrument.
     ///
     /// Public so that the undocumented surface stays reachable for exploration,
