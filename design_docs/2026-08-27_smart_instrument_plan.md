@@ -5,13 +5,13 @@
 and tests clean inside the workspace. Getting there required repairing three
 stale genet overrides that had been failing the whole workspace; see Findings.
 The protocol side is done and hardware-verified; see
-`antinode/design_docs/2026-08-27_antinode_founding.md`.
+`ringdown/design_docs/2026-08-27_ringdown_founding.md`.
 
 ---
 
 ## What this is
 
-[Antinode](https://crates.io/crates/antinode) is an independent client for the
+[Ringdown](https://crates.io/crates/ringdown) is an independent client for the
 HyVibe smart guitar — an acoustic with an actuator in the body that makes the
 instrument its own amplifier, effects processor, looper and speaker. Its
 protocol was recovered from the vendor's app and confirmed against real
@@ -35,7 +35,7 @@ and the work is to join them.
 
 ## What the protocol actually offers, and what it does not
 
-Confirmed working against hardware (antinode H4, H7, H9, H13, H14, H17):
+Confirmed working against hardware (ringdown H4, H7, H9, H13, H14, H17):
 
 | Capability | Method | Note |
 |---|---|---|
@@ -53,10 +53,10 @@ Confirmed working against hardware (antinode H4, H7, H9, H13, H14, H17):
 Two constraints to design around rather than discover later:
 
 - **`ReadConfig` is unusable.** It returns nothing and wedges the firmware's
-  RPC handler until the guitar is power-cycled (antinode H18). Woodshed must
+  RPC handler until the guitar is power-cycled (ringdown H18). Woodshed must
   never call it, and the client should refuse to.
 - **The equalizer and aux settings are write-only.** Nothing reads them back
-  (antinode H19), so Woodshed's own last-written values are the only record,
+  (ringdown H19), so Woodshed's own last-written values are the only record,
   and the UI must present them as *sent* rather than as *confirmed*.
 
 ## Where the code goes
@@ -79,9 +79,9 @@ crates/woodshed-instrument/     connection, device state, concept mapping
 crates/woodshed-views/          the practice-facing surface (later phase)
 ```
 
-**Dependency form.** Antinode has no git remote yet, so this begins as a path
-dependency to `../antinode`. That is a local-development arrangement, not the
-end state: the moment antinode is pushed it becomes a git dependency in the
+**Dependency form.** Ringdown has no git remote yet, so this begins as a path
+dependency to `../ringdown`. That is a local-development arrangement, not the
+end state: the moment ringdown is pushed it becomes a git dependency in the
 same form as `genet-host-api` and the cambium crates. Recorded here so the path
 dep is understood as temporary rather than as a decision.
 
@@ -93,10 +93,10 @@ dep is understood as temporary rather than as a decision.
 
 Done-conditions:
 
-- `woodshed-instrument` exists, depends on `antinode` + `antinode-ble`, and
+- `woodshed-instrument` exists, depends on `ringdown` + `ringdown-ble`, and
   builds clean with no warnings.
 - A `Connection` type owns discover → connect → disconnect, and cannot leak a
-  connection on an error path. (Antinode's probe leaked one and it locked out
+  connection on an error path. (Ringdown's probe leaked one and it locked out
   the following run; the same mistake is easy to repeat here.)
 - `InstrumentState` holds what has actually been read — identity, firmware
   versions, battery, storage, metronome — and distinguishes *read from the
@@ -152,7 +152,7 @@ Done-conditions: **deferred**, set once W1 and W2 land and Mark picks a target.
 - **WD2 — Connection lifetime.** Connect on demand for a single action, or hold
   a session open while Woodshed runs? The instrument serves one client at a
   time, so holding it locks out the phone app.
-- **WD3 — Whether to push antinode**, converting the path dep to a git dep and
+- **WD3 — Whether to push ringdown**, converting the path dep to a git dep and
   making Woodshed buildable by anyone else.
 
 ## Open questions

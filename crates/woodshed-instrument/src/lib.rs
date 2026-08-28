@@ -3,7 +3,7 @@
 //! The guitar this drives is its own amplifier, effects processor, looper and
 //! metronome. Woodshed already owns every one of those concepts, so this crate
 //! is not an adapter between strangers — it joins the same vocabulary across a
-//! wire. [`antinode`] speaks the protocol; this decides what Woodshed does
+//! wire. [`ringdown`] speaks the protocol; this decides what Woodshed does
 //! with it.
 //!
 //! # What this crate is careful about
@@ -26,8 +26,8 @@
 
 use std::time::Duration;
 
-use antinode::rpc::{self, Method};
-use antinode_ble::{Guitar, TransportError};
+use ringdown::rpc::{self, Method};
+use ringdown_ble::{Guitar, TransportError};
 use serde_json::Value;
 
 /// How long to look for an instrument before giving up.
@@ -162,7 +162,7 @@ impl Connection {
         F: FnOnce(Connection) -> Fut,
         Fut: std::future::Future<Output = (Connection, Result<T, InstrumentError>)>,
     {
-        let found = antinode_ble::discover(scan).await?;
+        let found = ringdown_ble::discover(scan).await?;
         let guitar = Guitar::connect(&found[0]).await?;
         let (connection, outcome) = work(Connection { guitar }).await;
         let _ = connection.guitar.disconnect().await;

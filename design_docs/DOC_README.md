@@ -15,9 +15,9 @@ before any other doc in this directory.
 
 - [2026-08-27_smart_instrument_plan.md](2026-08-27_smart_instrument_plan.md)
   — **Plan; nothing implemented.** Woodshed drives a HyVibe smart guitar over
-  Bluetooth through [antinode](https://crates.io/crates/antinode), whose
+  Bluetooth through [ringdown](https://crates.io/crates/ringdown), whose
   protocol is hardware-verified (see
-  `../../antinode/design_docs/2026-08-27_antinode_founding.md`). The instrument
+  `../../ringdown/design_docs/2026-08-27_ringdown_founding.md`). The instrument
   exposes a metronome, tuner, looper and recorder — the same vocabulary
   Woodshed already owns, on the other side of a wire. W1 is the seam and one
   honest round trip; W2 joins the two metronomes; W3 is the surface a desktop

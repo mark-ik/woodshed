@@ -13,10 +13,10 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-# Path dependencies until antinode has a git remote; see
+# Path dependencies until ringdown has a git remote; see
 # design_docs/2026-08-27_smart_instrument_plan.md, "Dependency form".
-antinode = { path = "../../../antinode/crates/antinode" }
-antinode-ble = { path = "../../../antinode/crates/antinode-ble" }
+ringdown = { path = "../../../ringdown/crates/ringdown" }
+ringdown-ble = { path = "../../../ringdown/crates/ringdown-ble" }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "time", "macros"] }
