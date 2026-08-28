@@ -219,12 +219,21 @@ restore it: `den: 8` sent alone is refused outright (`UpdateMetronome` returns
 `false`), and sent alongside `bpm`, `num` and `bars` it returns `true` and
 changes nothing. `den` moved 8 → 4 and would not move back.
 
-**The naming was wrong, which is what made it dangerous.** Mark reports the
-guitar's own screen read **5/4** while the wire said `den: 8`. So the wire's
-`den` is *not* the time signature's lower number; it is some other encoding
-whose mapping is unknown. Every reading in this plan and in ringdown's
-Findings that treated `den` as a denominator — including "60 bpm in 5/8" — was
-an interpretation, not a fact, and it was wrong.
+**The naming was wrong, and the instrument's own display proves it.** The
+guitar read **5/4 before the run and 5/4 after**, while the wire's `den` went
+from 8 to 4. A field that changes by half while the displayed denominator does
+not move is not the denominator. Its meaning is unknown.
+
+`num` *is* the numerator: it went 5 → 4 → 5 across the run and the display's
+leading number tracked it. So of the three fields, `bpm` and `num` are
+understood and round-trip, and `den` is neither.
+
+Every reading in this plan and in ringdown's Findings that described the
+instrument as being "in 5/8" was an interpretation of `den`, not an
+observation, and it was wrong. The instrument was in 5/4 throughout.
+
+**Nothing user-visible was actually disturbed** — which is luck rather than
+care, since the write went out before anyone knew what the field did.
 
 **What changed as a result:**
 
