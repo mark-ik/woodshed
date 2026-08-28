@@ -249,7 +249,35 @@ you know what would reject it.**
   the likeliest key, from the compressor's dictionary, and was not tested: the
   attempt was refused by a tooling guardrail before it reached the instrument.
 
-**Recovery.** Two paths, and the instrument's own is better:
+**Recovery, revised 2026-08-28 after all three on-device paths failed.**
+
+`Calibrate`, `StartAnalysis` and `LaunchCalibration` each return `true` and
+leave `GetAnalysis` empty. So does the guitar's **own menu calibration** — the
+bank was still `[]` immediately after the owner ran it, which is the
+observation that matters most, because it rules out the client being at fault.
+
+The owner also reported that the menu calibration **makes a sound** while the
+remote calls are silent. The actuator has to drive the body to measure how it
+rings, so a silent call is not running a measurement at all.
+
+**The conclusion this points to: the phone app owns that bank.** The plausible
+division of labour is that calibration measures the instrument, the *app* reads
+the measurement, computes feedback notches from it, and writes them down with
+`SetSpeakerBiquads`. That explains all of it — why the four rows looked exactly
+like body resonances (they were derived from one), why no on-device calibration
+restores them (it was never the guitar's job), and why the only method that
+writes the bank is the one the app would use.
+
+**So the recovery is the vendor's app**: connect it, run its calibration, and
+it should push a filter set back down. Untested, and worth confirming, but it
+is the only actor known to write this bank.
+
+**A correction to the earlier entry.** It called `GetAnalysis` the read-back
+for `SetSpeakerBiquads`, and that stands. But it also implied the bank held the
+instrument's own calibration output. It does not: it holds whatever was last
+written to it, which until this session was something the app put there.
+
+*Superseded — the two paths first proposed, both of which failed:*
 
 1. **Run Calibration from the guitar** — System Menu, Calibration, mute the
    strings, YES. It recomputes the filter bank from the instrument's own
