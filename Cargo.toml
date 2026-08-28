@@ -160,13 +160,14 @@ genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch 
 # pre-rename fork in beside genet-stylo, which `links = "servo_style_crate"`
 # (one Stylo per graph) makes a hard resolution error.
 #
-# stylo_taffy must be patched for the same reason: the registry copy names
-# crates.io stylo, dragging a second Stylo in. Take the vendor crate from the
-# same moving Genet source as the rest of this graph, not a sibling path.
-stylo_taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-# genet-layout requires genet's vendored taffy fork (float-layout patches on
-# stable 0.12.1), not on crates.io.
-taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+# The stylo_taffy patch that stood here was removed 2026-08-27: genet dropped
+# Stylo, so genet.git no longer provides that package and the patch could not
+# resolve, which failed the whole workspace rather than just the Stylo lane.
+# Nothing here depends on stylo_taffy; the entry outlived its subject.
+# The taffy patch that stood here went the same way on 2026-08-27, and for the
+# same reason as stylo_taffy above: genet's vendored fork is now the renamed
+# package `genet-taffy`, which its crates git-dep by rename. A patch naming
+# plain `taffy` finds no such package and fails the workspace.
 # ipc-channel: genet's in-process fork (force-inprocess default; drops
 # the windows 0.61 pin that broke gpu-allocator/wgpu-hal unification).
 ipc-channel = { git = "https://github.com/merely-made/genet.git", branch = "main" }
@@ -189,13 +190,9 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 opt-level = 2
 [profile.dev.package.cambium-rootstock]
 opt-level = 2
-[profile.dev.package.genet-layout]
-opt-level = 2
 [profile.dev.package.genet-render-host]
 opt-level = 2
 [profile.dev.package.genet-scripted-dom]
-opt-level = 2
-[profile.dev.package.genet-stylo]
 opt-level = 2
 [profile.dev.package.netrender]
 opt-level = 2

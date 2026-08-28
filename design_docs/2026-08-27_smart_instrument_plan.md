@@ -1,11 +1,10 @@
 # Smart-instrument control: Woodshed drives a HyVibe guitar
 
 **Date:** 2026-08-27
-**Status:** in progress. **W1 is written but cannot be verified inside this
-workspace**: `crates/woodshed-instrument` exists, compiles, and passes its
-tests when built outside Woodshed, but the Woodshed workspace itself does not
-currently resolve — a pre-existing breakage unrelated to this work, recorded
-under Findings. The protocol side is done and hardware-verified; see
+**Status:** in progress. **W1 landed** — `crates/woodshed-instrument` builds
+and tests clean inside the workspace. Getting there required repairing three
+stale genet overrides that had been failing the whole workspace; see Findings.
+The protocol side is done and hardware-verified; see
 `antinode/design_docs/2026-08-27_antinode_founding.md`.
 
 ---
@@ -169,31 +168,44 @@ Done-conditions: **deferred**, set once W1 and W2 land and Mark picks a target.
 
 ## Findings
 
-**Woodshed's workspace does not currently resolve, and it is not this work's
-doing.** `cargo build` fails for every crate, including ones untouched here:
+**The workspace had stopped resolving, and one upstream commit explains all of
+it.** Every crate failed to build, including untouched ones. Three of Woodshed's
+overrides pointed at things genet had removed in a single commit,
+`55c05d11759 "Retire Stylo and the incumbent layout cone"`:
 
-```
-error: patch location `https://github.com/merely-made/genet.git?branch=main`
-       does not contain packages matching `stylo_taffy`
-```
+| Stale entry | Where | Why it broke |
+|---|---|---|
+| `stylo_taffy` | `Cargo.toml` patch + `.cargo/config.toml` | genet dropped Stylo; the package is gone |
+| `taffy` | `Cargo.toml` patch + `.cargo/config.toml` | genet's fork is now the renamed `genet-taffy` |
+| `genet-layout` | `.cargo/config.toml` + a `[profile.dev.package]` | the layout cone was retired |
 
-Woodshed's root `Cargo.toml` patches `stylo_taffy` from `genet.git` (line ~166,
-with a comment explaining that the registry copy names an incompatible taffy),
-and genet's `main` no longer provides that package. The local genet checkout
-has `support/patches/{gpu-allocator, ipc-channel, parley, sonic-rs-0.5.8,
-taffy}` — no `stylo_taffy`. Whether it was renamed, folded into `taffy`, or
-dropped is a question for genet, and **this plan does not touch genet**: it is
-another repo, and noticing a fault next door is not licence to work there.
+All four fixes are deletions. Nothing in Woodshed depends on any of them:
+`stylo_taffy` and `taffy` were patches with no dependents once genet renamed
+its vendored forks with a `genet-` prefix, and Woodshed's own `CLAUDE.md`
+already forbids depending on `genet-layout` directly. The entries outlived
+their subjects.
 
-Consequence for W1: the crate was verified by building and testing it outside
-the Woodshed workspace, where it compiles clean and its five tests pass. That
-is real verification of the code and **not** verification that Woodshed
-integrates it, which cannot be shown until the workspace resolves again.
+**The repair stayed inside Woodshed.** The fault was diagnosed in genet but
+every change is to Woodshed's own manifests, which is the difference between
+fixing your own stale references and wandering into a neighbouring repo. The
+lingering `components/genet-layout/` directory in the genet checkout, which has
+no `Cargo.toml`, is genet's business and was left alone.
+
+**Worth carrying forward:** a sibling repo retiring a component leaves this
+kind of debris in every consumer that pins it locally, and the failure surfaces
+as total — the workspace does not resolve *at all*, so it reads far more
+alarming than "one retired component is still referenced". Any future genet
+retirement should expect a sweep of consumers' `.cargo/config.toml` overrides,
+which are the copies most easily forgotten because they are not committed
+alongside the dependency that motivated them.
 
 ## Progress
 
 - **2026-08-27** — Plan written.
-- **2026-08-27 — W1 written, verification blocked.** `woodshed-instrument`
+- **2026-08-27 — W1 LANDED.** Verified inside the workspace: builds clean,
+  five tests pass, no clippy findings in this crate. Required removing three
+  stale genet overrides first (Findings).
+- **2026-08-27 — W1 written, initially unverifiable.** `woodshed-instrument`
   created: `Connection` with a scope-based release that cannot leak on an error
   path, `InstrumentState` whose fields are all optional so unread is never
   displayed as zero, `Metronome` translating the wire's `bpm`/`num`/`den` into
