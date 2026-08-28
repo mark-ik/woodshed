@@ -75,13 +75,31 @@ pub enum InstrumentError {
 /// The field names are Woodshed's rather than the wire's: the protocol calls
 /// these `bpm`, `num` and `den`, and translating once here keeps that spelling
 /// out of the rest of the application.
+///
+/// # `beat_unit` is not understood, and must not be written
+///
+/// Hardware testing on 2026-08-27 showed the wire's `den` does **not** mean
+/// what this field's name claims. A guitar whose own screen read **5/4**
+/// reported `den: 8`, so the wire value is not the time signature's lower
+/// number — it is some other encoding, and the mapping is unknown.
+///
+/// Worse, it does not round-trip. `UpdateMetronome` accepted `den: 4` and
+/// applied it, then refused to put `den: 8` back: sent alone the call returns
+/// `false`, and sent with every other field it returns `true` and changes
+/// nothing. An instrument was left in a state this crate could not restore.
+///
+/// So [`Session::sync_metronome`] sends **only `bpm` and `num`** and leaves
+/// `den` alone. Read it if you like — it is what the device said — but do not
+/// present it as a denominator and do not write it until someone has mapped
+/// what it means against the instrument's own display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Metronome {
     /// Beats per minute.
     pub bpm: u16,
-    /// Beats per bar — the time signature's upper number.
+    /// Beats per bar — the time signature's upper number, wire `num`.
     pub beats_per_bar: u8,
-    /// The note value that takes the beat — the lower number.
+    /// The wire's `den`, whose meaning is **unknown**. Not a denominator, and
+    /// never written. See the type's documentation.
     pub beat_unit: u8,
 }
 
@@ -196,12 +214,16 @@ impl Connection {
         Metronome::from_reply(&reply)
     }
 
-    /// Push a tempo and time signature to the instrument.
+    /// Push a tempo and beats-per-bar to the instrument.
+    ///
+    /// Deliberately does **not** send `den`: its meaning is unknown and it
+    /// does not round-trip, so writing it can leave an instrument in a state
+    /// this crate cannot undo. See [`Metronome`].
     pub async fn set_metronome(&mut self, m: Metronome) -> Result<(), InstrumentError> {
         let params = rpc::params::metronome(
             i64::from(m.bpm),
             Some(i64::from(m.beats_per_bar)),
-            Some(i64::from(m.beat_unit)),
+            None,
             None,
         );
         self.guitar.call(Method::UpdateMetronome, params).await?;

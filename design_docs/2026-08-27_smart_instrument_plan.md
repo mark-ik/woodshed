@@ -204,6 +204,50 @@ Done-conditions: **deferred**, set once W1 and W2 land and Mark picks a target.
 
 ## Findings
 
+**W2 hardware run, 2026-08-27: the link works, and `den` does not.**
+
+The metronome link is confirmed in both directions. `Detached` touched
+nothing; `Follow` read the instrument's tempo; `Drive` sent 96 bpm and the
+instrument reported 96 bpm back through a separate read; a second identical
+sync correctly wrote nothing. **The done-condition is met: a tempo set in
+Woodshed reaches the instrument.**
+
+**But the restore failed, and an instrument was left changed.** The run read
+`{bpm: 60, num: 5, den: 8}`, wrote its own values, then wrote the original
+back — and the instrument came back `den: 4`. Four further attempts could not
+restore it: `den: 8` sent alone is refused outright (`UpdateMetronome` returns
+`false`), and sent alongside `bpm`, `num` and `bars` it returns `true` and
+changes nothing. `den` moved 8 → 4 and would not move back.
+
+**The naming was wrong, which is what made it dangerous.** Mark reports the
+guitar's own screen read **5/4** while the wire said `den: 8`. So the wire's
+`den` is *not* the time signature's lower number; it is some other encoding
+whose mapping is unknown. Every reading in this plan and in ringdown's
+Findings that treated `den` as a denominator — including "60 bpm in 5/8" — was
+an interpretation, not a fact, and it was wrong.
+
+**What changed as a result:**
+
+- `Connection::set_metronome` no longer sends `den` at all. It writes `bpm` and
+  `num` and leaves the third field alone.
+- `Metronome::beat_unit` is documented as the raw wire value with unknown
+  meaning, explicitly not a denominator, and explicitly never written.
+- The hardware example still restores what it read, which now succeeds because
+  it no longer tries to write the field it cannot restore.
+
+**The lesson is one this project keeps relearning, in its most expensive
+form yet.** A field was named `beat_unit` because `den` looked like
+"denominator", the name was believed, and it was then *written to someone's
+instrument*. Reading an unknown field costs nothing; writing one costs a
+setting you may not be able to put back. **Do not write a field whose
+round-trip has not been demonstrated** — and demonstrate it by reading back,
+not by trusting a `true` return, which this device gives for writes it
+silently ignores.
+
+**Still open:** what `den` actually encodes. Mapping it means writing candidate
+values and reading the instrument's *screen*, which is the only ground truth,
+and that is the owner's call rather than something to sweep.
+
 **The workspace had stopped resolving, and one upstream commit explains all of
 it.** Every crate failed to build, including untouched ones. Three of Woodshed's
 overrides pointed at things genet had removed in a single commit,
