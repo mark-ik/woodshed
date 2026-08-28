@@ -208,6 +208,13 @@ one — a design constraint on any UI over it rather than a detail. It also
 means bulk archival of 31 loops is a five-hour job, so the sensible product
 shape is fetching a chosen take rather than syncing everything.
 
+**Amended 2026-08-28: browsing is cheap even though fetching is not.** Since
+`DumpFile` takes an offset and a size, a loop's *header* — tempo, length,
+format — is one 92-byte round trip rather than 3,700. Indexing the whole
+library is seconds. So the product shape sharpens from "fetch a chosen take"
+to **list everything with its tempo, fetch on demand**, which is a far better
+surface and needs no new protocol work. See ringdown's H20.
+
 **The checksum identification is confirmed by this run.** A wrong polynomial
 would have failed a download that arrived perfectly; CRC-32/MPEG-2 verified
 first time over three-quarters of a megabyte.
@@ -380,10 +387,15 @@ only by luck.
   footswitch press? Nothing unsolicited has been observed, but nothing has sat
   connected and idle for long either. If it does, Woodshed can follow the
   instrument rather than poll it.
-- What the `JUNK` chunk in a loop file's WAV header means. Labelled
-  "HyVibe loop file", carrying `1, 200, 7, 8, 4, 0`; `8` and `4` look like a
-  time signature and bar count, which would let Woodshed import a loop with its
-  tempo intact.
+- ~~What the `JUNK` chunk in a loop file's WAV header means.~~ **Mostly
+  answered 2026-08-28** — see ringdown's H20. `200` is the tempo and `7 × 4`
+  is the length in beats, both confirmed against the audio's own duration to
+  within one 2048-sample DSP block. The guess recorded here was wrong: `8` and
+  `4` are not a time signature, and `8` is not a length field at all. **A loop
+  can now be imported knowing its tempo**, which was the point of asking.
+  Still open, and needing several loops rather than one: which of the two
+  length fields counts bars and which counts beats per bar, since only their
+  product reaches the audio. `probe --index` collects exactly that.
 
 ## Findings
 
