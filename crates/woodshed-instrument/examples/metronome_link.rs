@@ -15,7 +15,7 @@
 
 use std::time::Duration;
 
-use woodshed_instrument::{InstrumentError, MetronomeLink, Metronome, Session, SyncOutcome};
+use woodshed_instrument::{InstrumentError, Metronome, MetronomeLink, Session, SyncOutcome};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {

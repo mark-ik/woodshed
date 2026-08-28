@@ -220,13 +220,9 @@ impl Connection {
     /// does not round-trip, so writing it can leave an instrument in a state
     /// this crate cannot undo. See [`Metronome`].
     pub async fn set_metronome(&mut self, m: Metronome) -> Result<(), InstrumentError> {
-        let params = rpc::params::metronome(
-            i64::from(m.bpm),
-            Some(i64::from(m.beats_per_bar)),
-            None,
-            None,
-        );
-        self.guitar.call(Method::UpdateMetronome, params).await?;
+        self.guitar
+            .call(Method::UpdateMetronome, metronome_params(m))
+            .await?;
         Ok(())
     }
 
@@ -312,10 +308,65 @@ impl Connection {
     }
 }
 
+/// The exact `params` a metronome write sends.
+///
+/// Split out from [`Connection::set_metronome`] so the refusal to write `den`
+/// can be asserted rather than merely documented. That distinction is not
+/// hypothetical: until 2026-08-28 the doc comment claimed `den` was never sent
+/// while `"den": null` went out on every write, because the builder rendered an
+/// absent `Option` as JSON null. A comment cannot fail; this can.
+fn metronome_params(m: Metronome) -> serde_json::Value {
+    rpc::params::metronome(
+        i64::from(m.bpm),
+        Some(i64::from(m.beats_per_bar)),
+        None,
+        None,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The crate's stated safety property, as an assertion: a metronome write
+    /// carries a tempo and a beats-per-bar and **nothing else**. Not "den is
+    /// null" — `den` must not appear at all, since omission means "leave it"
+    /// and null means "set it to nothing".
+    #[test]
+    fn a_metronome_write_never_mentions_den() {
+        let params = metronome_params(Metronome {
+            bpm: 96,
+            beats_per_bar: 5,
+            beat_unit: 8,
+        });
+        let object = params.as_object().expect("params must be an object");
+
+        assert!(
+            !object.contains_key("den"),
+            "den must be absent, not null: {params}"
+        );
+        assert!(!object.contains_key("bars"));
+        assert_eq!(object.len(), 2, "exactly bpm and num: {params}");
+        assert_eq!(params, json!({ "bpm": 96, "num": 5 }));
+    }
+
+    /// `beat_unit` is carried in the struct because the instrument reports it,
+    /// and is dropped on the way out. Reading it must not start writing it.
+    #[test]
+    fn beat_unit_is_read_but_never_written_back() {
+        let a = metronome_params(Metronome {
+            bpm: 120,
+            beats_per_bar: 4,
+            beat_unit: 4,
+        });
+        let b = metronome_params(Metronome {
+            bpm: 120,
+            beats_per_bar: 4,
+            beat_unit: 8,
+        });
+        assert_eq!(a, b, "beat_unit must not reach the wire");
+    }
 
     #[test]
     fn unread_state_is_empty_rather_than_zero() {
