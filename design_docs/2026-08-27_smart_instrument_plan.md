@@ -1,7 +1,8 @@
 # Smart-instrument control: Woodshed drives a HyVibe guitar
 
 **Date:** 2026-08-27
-**Status:** in progress. **W1 landed** — `crates/woodshed-instrument` builds
+**Status:** in progress. **W2 written; one hardware condition outstanding.**
+**W1 landed** — `crates/woodshed-instrument` builds
 and tests clean inside the workspace. Getting there required repairing three
 stale genet overrides that had been failing the whole workspace; see Findings.
 The protocol side is done and hardware-verified; see
@@ -116,11 +117,39 @@ tempos to drift.
 Done-conditions:
 
 - Woodshed can read the instrument's metronome and adopt it, or push its own to
-  the instrument. Which direction is the default is a **decision for Mark**,
-  not something to settle by implementation.
+  the instrument. — **met 2026-08-27.** `MetronomeLink` has three states and
+  `Session::sync_metronome` acts on whichever holds. Default is `Detached`,
+  so connecting never changes an instrument's settings by itself.
 - Changing tempo or time signature in Woodshed reaches the instrument within
-  one bar.
-- The UI shows plainly whether the instrument is following Woodshed or not.
+  one bar. — **written, not yet proven on hardware.** The write path is a
+  single RPC, and a `GetStatus` round trip measured well under a second, so
+  latency is not in doubt; what is unproven is the round trip itself. The
+  example `metronome_link` is the proof and needs a woken guitar.
+- The UI shows plainly whether the instrument is following Woodshed or not. —
+  **met 2026-08-27.** `MetronomeLink::describe` returns a phrase naming both
+  sides ("Instrument follows Woodshed"), and a test asserts every variant does
+  so rather than echoing a variant name at the player.
+
+**Design notes worth keeping.**
+
+- **The link is one setting with three states, not two switches.** Two
+  independent "follow" toggles would allow both to be on, and two metronomes
+  each adopting the other is a loop that drifts rather than settles. A test
+  asserts no state lets both sides lead — the loop-freedom argument checked
+  rather than trusted to prose.
+- **`Detached` is the default.** Connecting to an instrument should not begin
+  changing its settings.
+- **Changing the link forgets what was last pushed**, so switching back
+  re-sends. The instrument has knobs on it, and assuming it was left untouched
+  while Woodshed was not driving it would be wrong.
+- **`Drive` writes only on change**, so holding a steady tempo costs one write
+  and then nothing, which is what makes `sync_metronome` safe to call on a
+  timer.
+- **`Session` cannot release itself.** Releasing is a real exchange with the
+  device and Rust has no async `Drop`, so `release` is explicit and consuming.
+  `Drop` prints a warning if it was skipped, because a silently-held instrument
+  fails the *next* attempt and the symptom appears somewhere unrelated — this
+  project has already lost a session to exactly that.
 
 ### W3 — The surface Woodshed uniquely earns
 
@@ -209,6 +238,12 @@ alongside the dependency that motivated them.
 ## Progress
 
 - **2026-08-27** — Plan written.
+- **2026-08-27 — W2 written.** `session` module: `MetronomeLink`
+  (Detached/Follow/Drive), `SyncOutcome`, and `Session` holding the instrument
+  across actions with an explicit `release`. Thirteen tests, clippy clean. The
+  hardware proof (`examples/metronome_link`) is written and builds; it reads
+  the instrument's tempo, drives a different one, reads it back, and restores
+  what it found. Not yet run — the guitar was asleep.
 - **2026-08-27 — W1 LANDED.** Verified inside the workspace: builds clean,
   five tests pass, no clippy findings in this crate. Required removing three
   stale genet overrides first (Findings).

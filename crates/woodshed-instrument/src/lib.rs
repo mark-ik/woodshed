@@ -24,6 +24,10 @@
 //! reason for Woodshed to reach it and a real cost to trying, so the refusal
 //! lives in code rather than in a comment. See [`FORBIDDEN_METHODS`].
 
+pub mod session;
+
+pub use session::{MetronomeLink, Session, SyncOutcome};
+
 use std::time::Duration;
 
 use ringdown::rpc::{self, Method};
@@ -60,6 +64,10 @@ pub enum InstrumentError {
     /// The instrument answered, but not in the shape expected.
     #[error("could not read the instrument's reply: {0}")]
     Shape(String),
+
+    /// The session has already handed the instrument back.
+    #[error("this session has been released; open a new one to reach the instrument")]
+    Released,
 }
 
 /// A tempo and time signature, as the instrument reports them.
@@ -162,10 +170,9 @@ impl Connection {
         F: FnOnce(Connection) -> Fut,
         Fut: std::future::Future<Output = (Connection, Result<T, InstrumentError>)>,
     {
-        let found = ringdown_ble::discover(scan).await?;
-        let guitar = Guitar::connect(&found[0]).await?;
-        let (connection, outcome) = work(Connection { guitar }).await;
-        let _ = connection.guitar.disconnect().await;
+        let connection = Connection::open(scan).await?;
+        let (connection, outcome) = work(connection).await;
+        let _ = connection.disconnect().await;
         outcome
     }
 
@@ -238,6 +245,23 @@ impl Connection {
     /// The underlying client, for operations this crate has not wrapped.
     pub fn guitar(&mut self) -> &mut Guitar {
         &mut self.guitar
+    }
+
+    /// Find an instrument and connect, leaving the caller to disconnect.
+    ///
+    /// Prefer [`Connection::with`] for a single action, or [`Session`] to hold
+    /// the instrument across several. This is the shared step underneath both,
+    /// and using it directly means owning the release.
+    pub async fn open(scan: Duration) -> Result<Connection, InstrumentError> {
+        let found = ringdown_ble::discover(scan).await?;
+        let guitar = Guitar::connect(&found[0]).await?;
+        Ok(Connection { guitar })
+    }
+
+    /// Hand the instrument back.
+    pub async fn disconnect(self) -> Result<(), InstrumentError> {
+        self.guitar.disconnect().await?;
+        Ok(())
     }
 }
 
