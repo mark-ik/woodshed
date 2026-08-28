@@ -76,7 +76,7 @@ pub enum InstrumentError {
 /// these `bpm`, `num` and `den`, and translating once here keeps that spelling
 /// out of the rest of the application.
 ///
-/// # `beat_unit` is a denominator, and `UpdateMetronome` still must not write it
+/// # `beat_unit` is a denominator, writable within limits this crate declines
 ///
 /// The wire's `den` **is** the time signature's lower number. The loop files
 /// carry the same three fields in their headers, and there they account for
@@ -88,26 +88,19 @@ pub enum InstrumentError {
 /// deliberately unusual setting: the owner set **11/16 at 86** on the guitar
 /// and the method returned `{"bpm":86,"den":16,"num":11}`.
 ///
-/// **`UpdateMetronome` silently drops it.** Four writes, four failures, `true`
-/// returned every time and the value never moving:
+/// **Writing it works, with two conditions** (ringdown's founding doc, H24):
+/// the params must keep declaration order — the firmware drops a `den` that
+/// arrives before `num`, which serde_json's alphabetizing default silently
+/// caused until ringdown enabled `preserve_order` — and the value must be in
+/// the firmware's whitelist `{1, 2, 4, 16}`. The panel's 8 and 32 are
+/// silently refused over RPC with a `true` reply, so a refused write is
+/// indistinguishable from a successful one except by reading back.
 ///
-/// | write | direction | result |
-/// |---|---|---|
-/// | 16 → 32 | up | ignored, `true` |
-/// | 16 → 8 | down | ignored, `true` |
-/// | 4 → 8 | up | ignored, `true` |
-/// | 8 → 4 | — | never happened; the guitar was already at 4 |
-///
-/// Direction does not explain it and neither does range — the owner confirms
-/// 32 is a selectable setting on the instrument. The method takes `bpm` and
-/// `num`, applies both, and ignores `den` while reporting success.
-///
-/// So [`Session::sync_metronome`] sends **only `bpm` and `num`**. Not out of
-/// caution about an unknown field — the field is understood — but because a
-/// `den` sent here does nothing except make a caller believe it did something.
-///
-/// The denominator is settable on the guitar's own menu, so this is a gap in
-/// the protocol rather than in the instrument.
+/// [`Session::sync_metronome`] still sends **only `bpm` and `num`**: half the
+/// panel's denominators cannot be written, so offering denominator control
+/// would work for some signatures and silently fail for others. Whether that
+/// partial control is worth surfacing is a product decision, not a protocol
+/// limit — this doc records that it is available.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Metronome {
     /// Beats per minute.
@@ -116,8 +109,8 @@ pub struct Metronome {
     pub beats_per_bar: u8,
     /// The note a beat is — the time signature's lower number, wire `den`.
     ///
-    /// Read but **never written**: `UpdateMetronome` ignores it and reports
-    /// success anyway. See the type's documentation.
+    /// Read but not written by this crate: writable over RPC only for
+    /// `{1, 2, 4, 16}`, and refusals are silent. See the type's documentation.
     pub beat_unit: u8,
 }
 

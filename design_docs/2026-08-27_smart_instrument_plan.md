@@ -441,8 +441,9 @@ landed.
 
 - `Connection::set_metronome` no longer sends `den` at all. It writes `bpm` and
   `num` and leaves the third field alone.
-- `Metronome::beat_unit` is documented as the denominator, read but never
-  written — because writing it does nothing, not because it is mysterious.
+- `Metronome::beat_unit` is documented as the denominator, read but not
+  written — see the closure below for why that stays true even now that
+  writing it is possible.
 - The hardware example still restores what it read, which succeeds because it
   only writes the two fields the protocol actually accepts.
 
@@ -461,8 +462,23 @@ crates' documentation. **When a comparison is the evidence, both halves have to
 come from the same moment** — which for hardware means read, act, read again,
 and ask the owner what the screen says at each step.
 
-**Closed:** `den` is the time signature's denominator, readable over the
-protocol and settable only on the instrument itself.
+**Closed — twice, because the first closure was wrong (ringdown H24).** An
+earlier version of this paragraph declared `den` "not writable by anyone, the
+vendor app included"; the owner disproved that with the app in a minute. The
+real mechanism has two parts:
+
+- **Ringdown was alphabetizing its JSON keys** (serde_json's default map), and
+  the firmware's parser drops a `den` that arrives before `num`. With
+  `preserve_order` enabled and declaration order pinned by test, `den` writes.
+- **The firmware whitelists `{1, 2, 4, 16}`** — an exhaustive 1–32 (+256)
+  sweep showed every other value silently refused with a `true` reply,
+  including the 8 and 32 the guitar's own panel offers.
+
+Woodshed keeps sending only `bpm` and `num` — now as a product choice, not a
+protocol limit: denominator control that works for four values and silently
+fails for the panel's other two is worse than none until there is a UI story
+for it. A refused write is detectable only by read-back, which the `true`
+reply actively obscures.
 
 **The workspace had stopped resolving, and one upstream commit explains all of
 it.** Every crate failed to build, including untouched ones. Three of Woodshed's
