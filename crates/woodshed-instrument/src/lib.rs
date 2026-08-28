@@ -76,30 +76,44 @@ pub enum InstrumentError {
 /// these `bpm`, `num` and `den`, and translating once here keeps that spelling
 /// out of the rest of the application.
 ///
-/// # `beat_unit` is not understood, and must not be written
+/// # `beat_unit` is a denominator, and `UpdateMetronome` still must not write it
 ///
-/// Hardware testing on 2026-08-27 showed the wire's `den` does **not** mean
-/// what this field's name claims. A guitar whose own screen read **5/4**
-/// reported `den: 8`, so the wire value is not the time signature's lower
-/// number — it is some other encoding, and the mapping is unknown.
+/// The wire's `den` **is** the time signature's lower number. The loop files
+/// carry the same three fields in their headers, and there they account for
+/// every recording's duration exactly across a whole library; the instrument's
+/// owner confirms a take read as 7/8 is stored as `num: 7, den: 8`. See
+/// `ringdown::loopfile`.
 ///
-/// Worse, it does not round-trip. `UpdateMetronome` accepted `den: 4` and
-/// applied it, then refused to put `den: 8` back: sent alone the call returns
-/// `false`, and sent with every other field it returns `true` and changes
-/// nothing. An instrument was left in a state this crate could not restore.
+/// What remains wrong is `ReadMetronome` and `UpdateMetronome` specifically,
+/// and the evidence is narrow and concrete:
 ///
-/// So [`Session::sync_metronome`] sends **only `bpm` and `num`** and leaves
-/// `den` alone. Read it if you like — it is what the device said — but do not
-/// present it as a denominator and do not write it until someone has mapped
-/// what it means against the instrument's own display.
+/// - `ReadMetronome` reported `den: 8` from a guitar whose own screen read
+///   **5/4**, so what that method returns did not match the instrument's state.
+/// - `UpdateMetronome` accepted `den: 4` and then refused to put `den: 8` back:
+///   sent alone the call returns `false`, and sent with every other field it
+///   returns `true` and changes nothing. Meanwhile the screen never moved off
+///   5/4 in either direction.
+///
+/// So the caution stands and its reason has changed. This is not an unknown
+/// encoding to be mapped — it is a pair of methods that do not round-trip a
+/// field whose meaning is settled. [`Session::sync_metronome`] therefore sends
+/// **only `bpm` and `num`**, because a write it cannot undo is a write it
+/// should not make.
+///
+/// Lifting this needs one experiment rather than more reasoning: write a known
+/// time signature, read it back, and compare both against the guitar's own
+/// display. Until someone runs it, read `beat_unit` and do not write it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Metronome {
     /// Beats per minute.
     pub bpm: u16,
     /// Beats per bar — the time signature's upper number, wire `num`.
     pub beats_per_bar: u8,
-    /// The wire's `den`, whose meaning is **unknown**. Not a denominator, and
-    /// never written. See the type's documentation.
+    /// The note a beat is — the time signature's lower number, wire `den`.
+    ///
+    /// Read but **never written**: the meaning is settled, but
+    /// `UpdateMetronome` has been shown not to round-trip it. See the type's
+    /// documentation.
     pub beat_unit: u8,
 }
 
@@ -216,9 +230,11 @@ impl Connection {
 
     /// Push a tempo and beats-per-bar to the instrument.
     ///
-    /// Deliberately does **not** send `den`: its meaning is unknown and it
-    /// does not round-trip, so writing it can leave an instrument in a state
-    /// this crate cannot undo. See [`Metronome`].
+    /// Deliberately does **not** send `den`. Not because its meaning is
+    /// unknown — it is the time signature's denominator — but because
+    /// `UpdateMetronome` has been shown not to round-trip it, so writing it
+    /// can leave an instrument in a state this crate cannot undo. See
+    /// [`Metronome`].
     pub async fn set_metronome(&mut self, m: Metronome) -> Result<(), InstrumentError> {
         self.guitar
             .call(Method::UpdateMetronome, metronome_params(m))
