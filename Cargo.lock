@@ -4943,6 +4943,7 @@ dependencies = [
 [[package]]
 name = "ringdown"
 version = "0.1.0"
+source = "git+https://github.com/merely-made/ringdown.git?branch=main#064602ce79db101ee7c23ac1a0bf06933efbe309"
 dependencies = [
  "serde",
  "serde_json",
@@ -4951,6 +4952,7 @@ dependencies = [
 [[package]]
 name = "ringdown-ble"
 version = "0.0.1"
+source = "git+https://github.com/merely-made/ringdown.git?branch=main#064602ce79db101ee7c23ac1a0bf06933efbe309"
 dependencies = [
  "btleplug",
  "futures",
@@ -7740,6 +7742,10 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
+
+[[patch.unused]]
 name = "armillary"
 version = "0.1.1"
 
@@ -7790,7 +7796,3 @@ version = "0.1.2"
 [[patch.unused]]
 name = "vates"
 version = "0.1.2"
-
-[[patch.unused]]
-name = "netfetcher"
-version = "0.1.1"

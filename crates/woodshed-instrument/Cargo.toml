@@ -13,10 +13,11 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-# Path dependencies until ringdown has a git remote; see
-# design_docs/2026-08-27_smart_instrument_plan.md, "Dependency form".
-ringdown = { path = "../../../ringdown/crates/ringdown" }
-ringdown-ble = { path = "../../../ringdown/crates/ringdown-ble" }
+# Git dependencies in the same form as the genet crates, now that ringdown is
+# pushed. ringdown is also on crates.io, but ringdown-ble is publish = false,
+# so both come from the repo to keep the two halves in step.
+ringdown = { git = "https://github.com/merely-made/ringdown.git", branch = "main" }
+ringdown-ble = { git = "https://github.com/merely-made/ringdown.git", branch = "main" }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "time", "macros"] }

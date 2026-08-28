@@ -79,11 +79,11 @@ crates/woodshed-instrument/     connection, device state, concept mapping
 crates/woodshed-views/          the practice-facing surface (later phase)
 ```
 
-**Dependency form.** Ringdown has no git remote yet, so this begins as a path
-dependency to `../ringdown`. That is a local-development arrangement, not the
-end state: the moment ringdown is pushed it becomes a git dependency in the
-same form as `genet-host-api` and the cambium crates. Recorded here so the path
-dep is understood as temporary rather than as a decision.
+**Dependency form.** Git dependencies on `merely-made/ringdown`, in the same
+form as `genet-host-api` and the cambium crates. It began as a path dependency
+while ringdown had no remote and was converted on 2026-08-27 once it was
+pushed. Both halves come from the repo rather than one from crates.io, because
+`ringdown-ble` is `publish = false` and the two must stay in step.
 
 ## Phases
 
@@ -147,13 +147,20 @@ Done-conditions: **deferred**, set once W1 and W2 land and Mark picks a target.
 
 ## Decisions (Mark's)
 
-- **WD1 — Metronome authority.** Does Woodshed follow the instrument, drive it,
-  or offer both with an explicit toggle? Affects W2's shape throughout.
-- **WD2 — Connection lifetime.** Connect on demand for a single action, or hold
-  a session open while Woodshed runs? The instrument serves one client at a
-  time, so holding it locks out the phone app.
-- **WD3 — Whether to push ringdown**, converting the path dep to a git dep and
-  making Woodshed buildable by anyone else.
+- ~~**WD1 — Metronome authority.**~~ **Settled 2026-08-27: both, with an
+  explicit toggle.** Woodshed can follow the instrument or drive it, and which
+  is in force is a visible state rather than an implicit one. W2 implements the
+  toggle rather than choosing a direction.
+- ~~**WD2 — Connection lifetime.**~~ **Settled 2026-08-27: hold a session, and
+  release on demand.** The connection lives as long as Woodshed wants it, with
+  an explicit release so the phone app can be handed the instrument back
+  without quitting. That makes releasing a first-class action rather than a
+  side effect of shutdown — and `Connection::with` as written is
+  scope-shaped, so W2 needs a longer-lived form beside it.
+- ~~**WD3 — Whether to push ringdown.**~~ **Settled 2026-08-27:** pushed to
+  `merely-made/ringdown` and published as `ringdown` 0.1.0 (MPL-2.0). Woodshed
+  now takes it as a git dependency, so this workspace is buildable by anyone
+  with the genet checkout.
 
 ## Open questions
 
