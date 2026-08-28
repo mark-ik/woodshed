@@ -4943,7 +4943,7 @@ dependencies = [
 [[package]]
 name = "ringdown"
 version = "0.1.0"
-source = "git+https://github.com/merely-made/ringdown.git?branch=main#768279dd7c3f9ad3ea71e981f003a87ceb2d01f4"
+source = "git+https://github.com/merely-made/ringdown.git?branch=main#00276d8cff226afced290cc27e7f4c72760f0407"
 dependencies = [
  "serde",
  "serde_json",
@@ -4952,7 +4952,7 @@ dependencies = [
 [[package]]
 name = "ringdown-ble"
 version = "0.0.1"
-source = "git+https://github.com/merely-made/ringdown.git?branch=main#768279dd7c3f9ad3ea71e981f003a87ceb2d01f4"
+source = "git+https://github.com/merely-made/ringdown.git?branch=main#00276d8cff226afced290cc27e7f4c72760f0407"
 dependencies = [
  "btleplug",
  "futures",
@@ -6722,7 +6722,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

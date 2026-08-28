@@ -84,25 +84,30 @@ pub enum InstrumentError {
 /// owner confirms a take read as 7/8 is stored as `num: 7, den: 8`. See
 /// `ringdown::loopfile`.
 ///
-/// What remains wrong is `ReadMetronome` and `UpdateMetronome` specifically,
-/// and the evidence is narrow and concrete:
+/// `ReadMetronome` reports it correctly. Tested 2026-08-28 against a
+/// deliberately unusual setting: the owner set **11/16 at 86** on the guitar
+/// and the method returned `{"bpm":86,"den":16,"num":11}`.
 ///
-/// - `ReadMetronome` reported `den: 8` from a guitar whose own screen read
-///   **5/4**, so what that method returns did not match the instrument's state.
-/// - `UpdateMetronome` accepted `den: 4` and then refused to put `den: 8` back:
-///   sent alone the call returns `false`, and sent with every other field it
-///   returns `true` and changes nothing. Meanwhile the screen never moved off
-///   5/4 in either direction.
+/// **`UpdateMetronome` silently drops it.** Four writes, four failures, `true`
+/// returned every time and the value never moving:
 ///
-/// So the caution stands and its reason has changed. This is not an unknown
-/// encoding to be mapped — it is a pair of methods that do not round-trip a
-/// field whose meaning is settled. [`Session::sync_metronome`] therefore sends
-/// **only `bpm` and `num`**, because a write it cannot undo is a write it
-/// should not make.
+/// | write | direction | result |
+/// |---|---|---|
+/// | 16 → 32 | up | ignored, `true` |
+/// | 16 → 8 | down | ignored, `true` |
+/// | 4 → 8 | up | ignored, `true` |
+/// | 8 → 4 | — | never happened; the guitar was already at 4 |
 ///
-/// Lifting this needs one experiment rather than more reasoning: write a known
-/// time signature, read it back, and compare both against the guitar's own
-/// display. Until someone runs it, read `beat_unit` and do not write it.
+/// Direction does not explain it and neither does range — the owner confirms
+/// 32 is a selectable setting on the instrument. The method takes `bpm` and
+/// `num`, applies both, and ignores `den` while reporting success.
+///
+/// So [`Session::sync_metronome`] sends **only `bpm` and `num`**. Not out of
+/// caution about an unknown field — the field is understood — but because a
+/// `den` sent here does nothing except make a caller believe it did something.
+///
+/// The denominator is settable on the guitar's own menu, so this is a gap in
+/// the protocol rather than in the instrument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Metronome {
     /// Beats per minute.
@@ -111,9 +116,8 @@ pub struct Metronome {
     pub beats_per_bar: u8,
     /// The note a beat is — the time signature's lower number, wire `den`.
     ///
-    /// Read but **never written**: the meaning is settled, but
-    /// `UpdateMetronome` has been shown not to round-trip it. See the type's
-    /// documentation.
+    /// Read but **never written**: `UpdateMetronome` ignores it and reports
+    /// success anyway. See the type's documentation.
     pub beat_unit: u8,
 }
 
@@ -230,10 +234,9 @@ impl Connection {
 
     /// Push a tempo and beats-per-bar to the instrument.
     ///
-    /// Deliberately does **not** send `den`. Not because its meaning is
-    /// unknown — it is the time signature's denominator — but because
-    /// `UpdateMetronome` has been shown not to round-trip it, so writing it
-    /// can leave an instrument in a state this crate cannot undo. See
+    /// Deliberately does **not** send `den`. It is the time signature's
+    /// denominator, and `UpdateMetronome` ignores it while returning `true`,
+    /// so sending it would only make a caller believe the write landed. See
     /// [`Metronome`].
     pub async fn set_metronome(&mut self, m: Metronome) -> Result<(), InstrumentError> {
         self.guitar

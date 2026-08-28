@@ -407,50 +407,62 @@ instrument reported 96 bpm back through a separate read; a second identical
 sync correctly wrote nothing. **The done-condition is met: a tempo set in
 Woodshed reaches the instrument.**
 
-**But the restore failed, and an instrument was left changed.** The run read
-`{bpm: 60, num: 5, den: 8}`, wrote its own values, then wrote the original
-back — and the instrument came back `den: 4`. Four further attempts could not
-restore it: `den: 8` sent alone is refused outright (`UpdateMetronome` returns
-`false`), and sent alongside `bpm`, `num` and `bars` it returns `true` and
-changes nothing. `den` moved 8 → 4 and would not move back.
+**`den` would not restore, and the reason was misdiagnosed for a day.** The run
+read `{bpm: 60, num: 5, den: 8}`, wrote its own values, then wrote the original
+back — and a later read returned `den: 4`. Four attempts could not put 8 back:
+sent alone `UpdateMetronome` returns `false`, and sent alongside the other
+fields it returns `true` and changes nothing.
 
-**The naming was wrong, and the instrument's own display proves it.** The
-guitar read **5/4 before the run and 5/4 after**, while the wire's `den` went
-from 8 to 4. A field that changes by half while the displayed denominator does
-not move is not the denominator. Its meaning is unknown.
+**Retracted 2026-08-28 — the account below this line was wrong, and the
+correction is ringdown's H23.**
 
-`num` *is* the numerator: it went 5 → 4 → 5 across the run and the display's
-leading number tracked it. So of the three fields, `bpm` and `num` are
-understood and round-trip, and `den` is neither.
+What was concluded at the time: that `den` moved 8 → 4 because of a write, that
+the guitar's display read 5/4 throughout, and that therefore a field changing by
+half while the displayed denominator held still could not be the denominator.
 
-Every reading in this plan and in ringdown's Findings that described the
-instrument as being "in 5/8" was an interpretation of `den`, not an
-observation, and it was wrong. The instrument was in 5/4 throughout.
+What actually happened: **`den` was never written by anything sent from here.**
+`UpdateMetronome` ignores that field entirely — retested 2026-08-28 across four
+writes, up and down, including to values the instrument's own menu offers, with
+`true` returned every time and the value never moving. The 8 → 4 that was
+attributed to the run was the owner changing the setting on the guitar between
+the two reads. The 5/4 display was observed *after* that change; the `den: 8`
+read came *before* it. Two observations of different states, compared as though
+they were one.
 
-**Nothing user-visible was actually disturbed** — which is luck rather than
-care, since the write went out before anyone knew what the field did.
+So `den` **is** the denominator, `ReadMetronome` reports it correctly, and the
+instrument was in 5/8 when it said 5/8 and in 5/4 when it showed 5/4. Nothing
+was disturbed, and this time not by luck: the write that was feared never
+landed.
+
+`num` *is* the numerator and does round-trip. Of the three fields, `bpm` and
+`num` are writable and `den` is read-only over the protocol.
 
 **What changed as a result:**
 
 - `Connection::set_metronome` no longer sends `den` at all. It writes `bpm` and
   `num` and leaves the third field alone.
-- `Metronome::beat_unit` is documented as the raw wire value with unknown
-  meaning, explicitly not a denominator, and explicitly never written.
-- The hardware example still restores what it read, which now succeeds because
-  it no longer tries to write the field it cannot restore.
+- `Metronome::beat_unit` is documented as the denominator, read but never
+  written — because writing it does nothing, not because it is mysterious.
+- The hardware example still restores what it read, which succeeds because it
+  only writes the two fields the protocol actually accepts.
 
-**The lesson is one this project keeps relearning, in its most expensive
-form yet.** A field was named `beat_unit` because `den` looked like
-"denominator", the name was believed, and it was then *written to someone's
-instrument*. Reading an unknown field costs nothing; writing one costs a
-setting you may not be able to put back. **Do not write a field whose
-round-trip has not been demonstrated** — and demonstrate it by reading back,
-not by trusting a `true` return, which this device gives for writes it
-silently ignores.
+**Two lessons, and the second is the one that cost the day.**
 
-**Still open:** what `den` actually encodes. Mapping it means writing candidate
-values and reading the instrument's *screen*, which is the only ground truth,
-and that is the owner's call rather than something to sweep.
+*Do not trust a `true` return.* This device reports success for writes it
+silently discards. A write is confirmed by reading the value back, and for
+anything the player can see, by the player looking at the instrument.
+
+*An observation is evidence about the moment it was taken.* The whole `den`
+mystery came from reading the wire at one moment, comparing it to a display seen
+at another, and never re-reading after the setting changed in between. That
+manufactured a firmware fault out of two correct readings, and the invented
+fault then propagated into this plan, into ringdown's Findings, and into two
+crates' documentation. **When a comparison is the evidence, both halves have to
+come from the same moment** — which for hardware means read, act, read again,
+and ask the owner what the screen says at each step.
+
+**Closed:** `den` is the time signature's denominator, readable over the
+protocol and settable only on the instrument itself.
 
 **The workspace had stopped resolving, and one upstream commit explains all of
 it.** Every crate failed to build, including untouched ones. Three of Woodshed's
