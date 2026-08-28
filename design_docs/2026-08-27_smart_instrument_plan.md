@@ -272,6 +272,35 @@ writes the bank is the one the app would use.
 it should push a filter set back down. Untested, and worth confirming, but it
 is the only actor known to write this bank.
 
+**The calibration vocabulary, as far as it was mapped before stopping.**
+
+| Call | Fires the actuator? | Effect on `GetAnalysis` |
+|---|---|---|
+| `Calibrate` | **yes** — the excitation sweep is audible | none |
+| `StartAnalysis` | no, silent | none |
+| `LaunchCalibration` | no, silent | none |
+| guitar's own menu calibration | yes, audible | none |
+
+`StartAnalysis` immediately followed by `Calibrate` produced a **curtailed**
+excitation — the sound began and was cut short — after which the instrument
+stopped answering and the BLE connection dropped. It recovered by itself
+without a power cycle. So the two interact, and not benignly; that ordering
+should not be repeated without a reason better than curiosity.
+
+**Where this leaves the bank.** `Calibrate` fires a real measurement and
+`GetAnalysis` still reports nothing afterwards, including when read fifteen
+seconds later. The same is true of the guitar's own menu calibration. So the
+bank is not fed by calibration on any path available from here, which
+strengthens rather than weakens the conclusion that the phone app computes the
+filters and writes them down itself.
+
+**Probing stopped at this point**, and it should have stopped earlier. The
+sequence — clear the bank, then five failed restoration attempts, then briefly
+wedge the instrument — is one where each step was individually defensible and
+the aggregate was not. There is a difference between an experiment and
+persistence, and the tell is that no attempt was informed by a *model*; each
+was the next thing to try.
+
 **A correction to the earlier entry.** It called `GetAnalysis` the read-back
 for `SetSpeakerBiquads`, and that stands. But it also implied the bank held the
 instrument's own calibration output. It does not: it holds whatever was last
