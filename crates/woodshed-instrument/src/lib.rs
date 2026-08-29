@@ -363,6 +363,26 @@ mod tests {
         assert_eq!(params, json!({ "bpm": 96, "num": 5 }));
     }
 
+    /// Params must reach the instrument in declaration order. The firmware's
+    /// parser is order-sensitive — it drops a `den` that arrives before `num` —
+    /// and serde_json alphabetizes by default, which hid that for a day. The
+    /// fix is ringdown enabling `preserve_order`, and cargo feature unification
+    /// carries it here; this asserts it actually arrived rather than trusting
+    /// the dependency graph.
+    #[test]
+    fn params_reach_the_wire_in_declaration_order() {
+        let text = serde_json::to_string(&rpc::params::metronome(93, Some(6), Some(8), None))
+            .expect("params serialize");
+        let pos = |k: &str| {
+            text.find(k)
+                .unwrap_or_else(|| panic!("{k} missing in {text}"))
+        };
+        assert!(
+            pos("bpm") < pos("num") && pos("num") < pos("den"),
+            "keys alphabetized; preserve_order is not active: {text}"
+        );
+    }
+
     /// `beat_unit` is carried in the struct because the instrument reports it,
     /// and is dropped on the way out. Reading it must not start writing it.
     #[test]
