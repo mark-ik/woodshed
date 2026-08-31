@@ -274,10 +274,20 @@ impl WoodshedWorkspace {
         if !workspace_event_is_canonical(&self.workbench, &event) {
             return WorkspaceOutcome::Unchanged;
         }
+        // A split has several locally active stacks. The shared reducer correctly treats
+        // re-selecting a visible tab as a tree no-op, but Woodshed still needs to route that
+        // deliberate selection as the host's active surface.
+        let activated_panel = match event {
+            TileEvent::Activated(tile) => {
+                self.tree().find(tile).and_then(WorkspacePanel::from_tile)
+            }
+            _ => None,
+        };
         match self.workbench.apply(&event) {
             WorkbenchOutcome::Applied => match event {
                 TileEvent::Activated(tile) => {
-                    let panel = self.tree().find(tile).and_then(WorkspacePanel::from_tile);
+                    let panel = activated_panel
+                        .or_else(|| self.tree().find(tile).and_then(WorkspacePanel::from_tile));
                     self.active_panel = panel;
                     panel.map_or(WorkspaceOutcome::Changed, WorkspaceOutcome::Activated)
                 }
@@ -294,7 +304,12 @@ impl WoodshedWorkspace {
                     WorkspaceOutcome::Changed
                 }
             },
-            WorkbenchOutcome::Unchanged => WorkspaceOutcome::Unchanged,
+            WorkbenchOutcome::Unchanged => {
+                activated_panel.map_or(WorkspaceOutcome::Unchanged, |panel| {
+                    self.active_panel = Some(panel);
+                    WorkspaceOutcome::Activated(panel)
+                })
+            }
             WorkbenchOutcome::Effect(WorkbenchEffect::TearOut { tile }) => self
                 .tree()
                 .find(tile)
@@ -689,8 +704,8 @@ mod tests {
 
         let mut malformed: serde_json::Value =
             serde_json::from_str(&workspace.to_snapshot_json().unwrap()).unwrap();
-        malformed["tree"]["children"][0]["fraction"] = serde_json::json!(0.7);
-        malformed["tree"]["children"][1]["fraction"] = serde_json::json!(0.4);
+        malformed["tree"]["split"]["children"][0]["fraction"] = serde_json::json!(0.7);
+        malformed["tree"]["split"]["children"][1]["fraction"] = serde_json::json!(0.4);
         assert!(matches!(
             WoodshedWorkspace::from_snapshot_json(&serde_json::to_string(&malformed).unwrap()),
             Err(WorkspaceSnapshotError::Invalid(_))

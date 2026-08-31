@@ -157,6 +157,9 @@ persona-picker = { package = "mere-persona-picker", git = "https://github.com/me
 [patch.crates-io]
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+# Genet Livery uses its vendored Parley additions for `text-align-last` and
+# `tab-size`; workspace-root patches do not inherit through the Genet git dep.
+parley = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # NO stylo/stylo_atoms patch (2026-07-12, mirroring genet's ring-3 rename):
 # the fork is now the RENAMED `genet-stylo` family, and a `[patch]` cannot
 # rename its target. Genet's crates git-dep genet-stylo by package rename, so
