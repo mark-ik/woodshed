@@ -15,5 +15,6 @@ pub mod persona;
 pub mod settings_provider;
 pub mod stage;
 pub mod theme;
+pub mod workspace;
 
 pub use cambium;

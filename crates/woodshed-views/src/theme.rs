@@ -188,6 +188,9 @@ pub fn stage_css(p: &Palette) -> String {
 .pills {{ display: flex; margin-bottom: 10px; }}
 .pill {{ padding: 6px 14px; margin-right: 6px; border-radius: 14px; color: {text_dim}; }}
 .pill-active {{ background-color: {surface_2}; color: {tertiary}; font-weight: 600; }}
+.workspace-strip {{ display: flex; gap: 4px; margin-bottom: 8px; }}
+.workspace-panel {{ padding: 3px 9px; border-radius: 7px; color: {text_dim}; font-size: 12px; }}
+.workspace-panel-active {{ background-color: {surface_2}; color: {tertiary}; font-weight: 600; }}
 .nav-spacer {{ flex-grow: 1; }}
 .search-wrap {{ width: 240px; margin-right: 8px; box-sizing: border-box; }}
 .search-wrap input {{ display: block; width: 240px; box-sizing: border-box;

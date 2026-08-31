@@ -10,6 +10,7 @@ description = "Woodshed's Cambium view layer: view fns + CSS sheets for the Gene
 [dependencies]
 woodshed-core = { workspace = true }
 genet-host-api = { workspace = true }
+workbench = { workspace = true }
 woodshedding = { workspace = true }
 cambium = { workspace = true }
 sprigging = { workspace = true }
@@ -24,3 +25,5 @@ personae = { workspace = true }
 # For the fretboard leaf's accessibility() hook — the same accesskit sprigging's
 # Leaf trait speaks, so the neck can announce itself to assistive tech.
 accesskit = "0.24"
+serde = { workspace = true }
+serde_json = { workspace = true }

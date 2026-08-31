@@ -32,6 +32,9 @@ use woodshedding::rehearsal::{Card, CardId, FretWindow, Hold, MarkMode, Set, Tou
 use crate::fretboard_leaf::{BoardGeom, Orientation, FRETBOARD_LEAF_KEY};
 
 use crate::theme::ThemeMode;
+use crate::workspace::{
+    WoodshedWorkspace, WorkspaceEffect, WorkspaceEvent, WorkspaceOutcome, WorkspacePanel,
+};
 
 mod looper;
 mod rehearsal;
@@ -677,6 +680,12 @@ pub struct UiState {
     pub set: Set,
     pub practice_history: PracticeHistory,
     pub app_settings: AppSettings,
+    /// Woodshed's bounded workspace over the existing product surfaces. The shared component
+    /// owns its tab/split mechanics; Woodshed maps the selected panel back to these views.
+    pub workspace: WoodshedWorkspace,
+    /// Host decisions requested by workspace gestures. A tear-out is deliberately only a typed
+    /// request here; desktop window creation remains a host policy.
+    pub workspace_effects: Vec<WorkspaceEffect>,
     /// Rehearsal dwell transport running (transient).
     pub rehearsal_running: bool,
     pub song: SongDoc,
@@ -818,6 +827,8 @@ impl UiState {
             set: Set::default(),
             practice_history: PracticeHistory::default(),
             app_settings,
+            workspace: WoodshedWorkspace::new(),
+            workspace_effects: Vec::new(),
             rehearsal_running: false,
             song: SongDoc::default(),
             song_playing: false,
@@ -864,6 +875,54 @@ impl UiState {
             persona_switch_requested: false,
             seal: None,
             stage,
+        }
+    }
+
+    /// Apply a shared-workbench event, then route only the selected Woodshed surface. Existing
+    /// product pages remain their own renderers; this is their bounded workspace entry point.
+    pub fn apply_workspace_event(&mut self, event: WorkspaceEvent) -> WorkspaceOutcome {
+        let outcome = self.workspace.apply(event);
+        match outcome {
+            WorkspaceOutcome::Activated(panel) => self.show_workspace_panel(panel),
+            WorkspaceOutcome::Effect(effect) => self.workspace_effects.push(effect),
+            WorkspaceOutcome::Changed | WorkspaceOutcome::Unchanged => {}
+        }
+        outcome
+    }
+
+    pub fn activate_workspace_panel(&mut self, panel: WorkspacePanel) {
+        let _ = self.apply_workspace_event(WorkspaceEvent::activate(panel));
+        // The represented section may have changed through an unrepresented legacy pill (Tools
+        // or Looper) while this panel stayed active. Selecting an already-active tab still has
+        // to return the host to the surface it names.
+        self.show_workspace_panel(panel);
+    }
+
+    /// Route the legacy section pills through the workspace when that section has a workspace
+    /// panel. Looper and Tools remain deliberately outside this four-panel first slice.
+    pub fn select_app_section(&mut self, section: AppSection) {
+        let panel = match section {
+            AppSection::Stage => Some(WorkspacePanel::Practice),
+            AppSection::Rehearsal => Some(WorkspacePanel::Set),
+            AppSection::Settings => Some(WorkspacePanel::Settings),
+            AppSection::Looper | AppSection::Tools => None,
+        };
+        if let Some(panel) = panel {
+            self.activate_workspace_panel(panel);
+        } else {
+            self.section = section;
+        }
+    }
+
+    fn show_workspace_panel(&mut self, panel: WorkspacePanel) {
+        match panel {
+            WorkspacePanel::Practice => self.section = AppSection::Stage,
+            WorkspacePanel::Set => self.section = AppSection::Rehearsal,
+            WorkspacePanel::Related => {
+                self.section = AppSection::Stage;
+                self.related_expanded = true;
+            }
+            WorkspacePanel::Settings => self.section = AppSection::Settings,
         }
     }
 
@@ -1499,9 +1558,31 @@ fn pill(section: AppSection, active: bool) -> UiChild {
         el("span", text(section.label()))
             .attr("class", if active { "pill pill-active" } else { "pill" }),
         move |ui: &mut UiState, _| {
-            ui.section = section;
+            ui.select_app_section(section);
         },
     ))
+}
+
+/// A compact projection of the shared workspace tree. The component's surface renderer can
+/// replace this strip later; today this keeps the shared root visibly driven by the same typed
+/// tab events without replacing Stage, Rehearsal, or Settings themselves.
+fn workspace_strip(ui: &UiState) -> UiChild {
+    let active = ui.workspace.active_panel();
+    let panels: Vec<UiChild> = WorkspacePanel::ALL
+        .into_iter()
+        .map(|panel| {
+            let class = if active == Some(panel) {
+                "workspace-panel workspace-panel-active"
+            } else {
+                "workspace-panel"
+            };
+            Box::new(clickable(
+                el("span", text(panel.label())).attr("class", class),
+                move |ui: &mut UiState, _| ui.activate_workspace_panel(panel),
+            )) as UiChild
+        })
+        .collect();
+    Box::new(el("div", panels).attr("class", "workspace-strip"))
 }
 
 fn header(ui: &UiState) -> UiChild {
@@ -2455,7 +2536,11 @@ pub fn stage_root(ui: &UiState) -> UiChild {
     Box::new(
         el(
             "div",
-            (el("div", nav).attr("class", "pills"), tab_content(ui)),
+            (
+                workspace_strip(ui),
+                el("div", nav).attr("class", "pills"),
+                tab_content(ui),
+            ),
         )
         .attr(
             "class",
@@ -2472,6 +2557,39 @@ mod evidence_tests {
         let mut ui = UiState::new();
         ui.stage_current(None);
         ui
+    }
+
+    #[test]
+    fn workspace_panels_route_to_existing_product_surfaces() {
+        let mut ui = UiState::new();
+        ui.activate_workspace_panel(WorkspacePanel::Set);
+        assert_eq!(ui.section, AppSection::Rehearsal);
+
+        ui.activate_workspace_panel(WorkspacePanel::Related);
+        assert_eq!(ui.section, AppSection::Stage);
+        assert!(ui.related_expanded);
+
+        ui.activate_workspace_panel(WorkspacePanel::Settings);
+        assert_eq!(ui.section, AppSection::Settings);
+    }
+
+    #[test]
+    fn section_pills_keep_represented_workspace_panels_in_sync() {
+        let mut ui = UiState::new();
+        ui.select_app_section(AppSection::Rehearsal);
+        assert_eq!(ui.workspace.active_panel(), Some(WorkspacePanel::Set));
+        assert_eq!(ui.section, AppSection::Rehearsal);
+
+        ui.select_app_section(AppSection::Settings);
+        assert_eq!(ui.workspace.active_panel(), Some(WorkspacePanel::Settings));
+        assert_eq!(ui.section, AppSection::Settings);
+
+        ui.select_app_section(AppSection::Looper);
+        assert_eq!(ui.section, AppSection::Looper);
+        assert_eq!(ui.workspace.active_panel(), Some(WorkspacePanel::Settings));
+
+        ui.select_app_section(AppSection::Settings);
+        assert_eq!(ui.section, AppSection::Settings);
     }
 
     #[test]
