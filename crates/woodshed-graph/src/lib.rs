@@ -997,7 +997,7 @@ mod tests {
     #[test]
     fn the_catalog_projects_names_but_keeps_private_relations_private() {
         let graph = build_catalog_graph("woodshed:catalog");
-        let quads = scholia::to_quads(graph.graph());
+        let quads = chartulary::rdf::to_quads(graph.graph());
 
         // woodshed's relations (Contains, FitsInScale) are its private family, so
         // every projected triple is a curated literal; not one music relation
@@ -1005,13 +1005,13 @@ mod tests {
         assert!(
             quads
                 .iter()
-                .all(|q| q.predicate == scholia::SCHEMA_NAME
-                    || q.predicate == scholia::SCHEMA_KEYWORDS),
+                .all(|q| q.predicate == chartulary::rdf::SCHEMA_NAME
+                    || q.predicate == chartulary::rdf::SCHEMA_KEYWORDS),
             "only schema.org literals project; the app ring stays private"
         );
         // A known chord's title reaches RDF as schema:name.
-        assert!(quads.iter().any(|q| q.predicate == scholia::SCHEMA_NAME
-            && matches!(&q.object, scholia::Term::Literal { value, .. } if value == "Major 7")));
+        assert!(quads.iter().any(|q| q.predicate == chartulary::rdf::SCHEMA_NAME
+            && matches!(&q.object, chartulary::rdf::Term::Literal { value, .. } if value == "Major 7")));
     }
 
     #[test]

@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "chartulary"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "codicil",
  "muniment",
@@ -5138,15 +5138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scholia"
-version = "0.1.1"
-dependencies = [
- "chartulary",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7297,7 +7288,6 @@ name = "woodshed-graph"
 version = "0.1.0"
 dependencies = [
  "chartulary",
- "scholia",
  "woodshedding",
 ]
 

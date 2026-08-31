@@ -65,5 +65,5 @@ alone.
 
 ## Not yet
 
-G4 is scholia, the RDF projection over the semantic ring. G5 is mere's re-base onto
+G4 is `chartulary::rdf`, the RDF projection over the semantic ring. G5 is mere's re-base onto
 the substrate.
