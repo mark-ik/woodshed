@@ -115,6 +115,7 @@ pub enum WorkspaceOutcome {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorkspaceSnapshot {
     tree: TileTree,
+    active_panel: Option<WorkspacePanel>,
 }
 
 /// Errors at Woodshed's durable workspace boundary.
@@ -140,6 +141,7 @@ impl std::error::Error for WorkspaceSnapshotError {}
 #[derive(Deserialize, Serialize)]
 struct WorkspaceSnapshotDto {
     tree: WorkspaceTreeDto,
+    active_panel: Option<WorkspacePanel>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -181,6 +183,9 @@ enum WorkspaceAxisDto {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WoodshedWorkspace {
     workbench: Workbench,
+    /// The panel Woodshed most recently routed. A split has several stack-local active indices,
+    /// so that presentation state cannot be inferred from the first tree branch.
+    active_panel: Option<WorkspacePanel>,
 }
 
 impl Default for WoodshedWorkspace {
@@ -200,6 +205,7 @@ impl WoodshedWorkspace {
                     .collect(),
                 0,
             )),
+            active_panel: Some(WorkspacePanel::Practice),
         }
     }
 
@@ -208,18 +214,20 @@ impl WoodshedWorkspace {
     }
 
     pub fn active_panel(&self) -> Option<WorkspacePanel> {
-        active_tile(self.tree()).and_then(WorkspacePanel::from_tile)
+        self.active_panel
     }
 
     pub fn snapshot(&self) -> WorkspaceSnapshot {
         WorkspaceSnapshot {
             tree: self.tree().clone(),
+            active_panel: self.active_panel,
         }
     }
 
     pub fn restore(snapshot: WorkspaceSnapshot) -> Self {
         Self {
             workbench: Workbench::new(snapshot.tree),
+            active_panel: snapshot.active_panel,
         }
     }
 
@@ -229,9 +237,7 @@ impl WoodshedWorkspace {
     /// ratios, and active indices. It does not make the shared component responsible for
     /// Woodshed's session format or accept arbitrary host content on restore.
     pub fn to_snapshot_json(&self) -> Result<String, WorkspaceSnapshotError> {
-        let dto = WorkspaceSnapshotDto {
-            tree: WorkspaceTreeDto::from_tree(self.tree()),
-        };
+        let dto = WorkspaceSnapshotDto::from_workspace(self)?;
         serde_json::to_string(&dto).map_err(WorkspaceSnapshotError::Encode)
     }
 
@@ -244,24 +250,49 @@ impl WoodshedWorkspace {
             .map_err(WorkspaceSnapshotError::Decode)?;
         let mut panels = BTreeSet::new();
         let tree = dto.tree.into_tree(&mut panels, true)?;
+        if let Some(panel) = dto.active_panel {
+            if !panels.contains(&panel.tile_id().0) {
+                return Err(WorkspaceSnapshotError::Invalid(format!(
+                    "active panel {} is not present in the workspace",
+                    panel.label()
+                )));
+            }
+        } else if !panels.is_empty() {
+            return Err(WorkspaceSnapshotError::Invalid(
+                "a non-empty workspace must name its active panel".to_string(),
+            ));
+        }
         Ok(Self {
             workbench: Workbench::new(tree),
+            active_panel: dto.active_panel,
         })
     }
 
     /// Apply a typed gesture, retaining actual tile custody until Woodshed accepts a tear-out.
     pub fn apply(&mut self, event: WorkspaceEvent) -> WorkspaceOutcome {
         let WorkspaceEvent::Tile(event) = event;
+        if !workspace_event_is_canonical(&self.workbench, &event) {
+            return WorkspaceOutcome::Unchanged;
+        }
         match self.workbench.apply(&event) {
             WorkbenchOutcome::Applied => match event {
-                TileEvent::Activated(tile) => self
-                    .tree()
-                    .find(tile)
-                    .and_then(WorkspacePanel::from_tile)
-                    .map_or(WorkspaceOutcome::Changed, WorkspaceOutcome::Activated),
-                TileEvent::Closed(_)
-                | TileEvent::Dragged { .. }
-                | TileEvent::DividerMoved { .. } => WorkspaceOutcome::Changed,
+                TileEvent::Activated(tile) => {
+                    let panel = self.tree().find(tile).and_then(WorkspacePanel::from_tile);
+                    self.active_panel = panel;
+                    panel.map_or(WorkspaceOutcome::Changed, WorkspaceOutcome::Activated)
+                }
+                TileEvent::Closed(tile) => {
+                    if self
+                        .active_panel
+                        .is_some_and(|panel| panel.tile_id() == tile)
+                    {
+                        self.active_panel = first_active_panel(self.tree());
+                    }
+                    WorkspaceOutcome::Changed
+                }
+                TileEvent::Dragged { .. } | TileEvent::DividerMoved { .. } => {
+                    WorkspaceOutcome::Changed
+                }
             },
             WorkbenchOutcome::Unchanged => WorkspaceOutcome::Unchanged,
             WorkbenchOutcome::Effect(WorkbenchEffect::TearOut { tile }) => self
@@ -275,29 +306,54 @@ impl WoodshedWorkspace {
     }
 }
 
+impl WorkspaceSnapshotDto {
+    fn from_workspace(workspace: &WoodshedWorkspace) -> Result<Self, WorkspaceSnapshotError> {
+        let mut panels = BTreeSet::new();
+        WorkspaceTreeDto::validate_tree(workspace.tree(), &mut panels, true)?;
+        if let Some(panel) = workspace.active_panel {
+            if !panels.contains(&panel.tile_id().0) {
+                return Err(WorkspaceSnapshotError::Invalid(format!(
+                    "active panel {} is not present in the workspace",
+                    panel.label()
+                )));
+            }
+        } else if !panels.is_empty() {
+            return Err(WorkspaceSnapshotError::Invalid(
+                "a non-empty workspace must name its active panel".to_string(),
+            ));
+        }
+        Ok(Self {
+            tree: WorkspaceTreeDto::from_tree(workspace.tree())?,
+            active_panel: workspace.active_panel,
+        })
+    }
+}
+
 impl WorkspaceTreeDto {
-    fn from_tree(tree: &TileTree) -> Self {
+    fn from_tree(tree: &TileTree) -> Result<Self, WorkspaceSnapshotError> {
         match tree {
-            TileTree::Split { axis, children } => Self::Split {
+            TileTree::Split { axis, children } => Ok(Self::Split {
                 axis: match axis {
                     SplitAxis::Row => WorkspaceAxisDto::Row,
                     SplitAxis::Column => WorkspaceAxisDto::Column,
                 },
                 children: children
                     .iter()
-                    .map(|branch| WorkspaceBranchDto {
-                        fraction: branch.fraction,
-                        tree: Self::from_tree(&branch.tree),
+                    .map(|branch| {
+                        Ok(WorkspaceBranchDto {
+                            fraction: branch.fraction,
+                            tree: Self::from_tree(&branch.tree)?,
+                        })
                     })
-                    .collect(),
-            },
-            TileTree::Stack(stack) => Self::Stack {
+                    .collect::<Result<Vec<_>, WorkspaceSnapshotError>>()?,
+            }),
+            TileTree::Stack(stack) => Ok(Self::Stack {
                 tabs: stack
                     .tabs
                     .iter()
                     .map(|tile| {
                         let panel = WorkspacePanel::from_tile(tile)
-                            .expect("Woodshed workspace contains only known panels");
+                            .expect("validated Woodshed workspace contains only known panels");
                         let ContentSource::Open { kind, id } = &tile.content else {
                             unreachable!("known Woodshed panels always use open lanes");
                         };
@@ -311,8 +367,75 @@ impl WorkspaceTreeDto {
                     })
                     .collect(),
                 active: stack.active,
-            },
+            }),
         }
+    }
+
+    fn validate_tree(
+        tree: &TileTree,
+        panels: &mut BTreeSet<u64>,
+        is_root: bool,
+    ) -> Result<(), WorkspaceSnapshotError> {
+        match tree {
+            TileTree::Split { children, .. } => {
+                if children.len() < 2 {
+                    return Err(WorkspaceSnapshotError::Invalid(
+                        "a split must have at least two children".to_string(),
+                    ));
+                }
+                let mut fraction_sum = 0.0;
+                for child in children {
+                    if !child.fraction.is_finite() || child.fraction <= 0.0 {
+                        return Err(WorkspaceSnapshotError::Invalid(
+                            "split fractions must be finite and positive".to_string(),
+                        ));
+                    }
+                    fraction_sum += child.fraction;
+                    Self::validate_tree(&child.tree, panels, false)?;
+                }
+                if (fraction_sum - 1.0).abs() > 0.0001 {
+                    return Err(WorkspaceSnapshotError::Invalid(
+                        "split fractions must sum to one".to_string(),
+                    ));
+                }
+            }
+            TileTree::Stack(stack) => {
+                if stack.tabs.is_empty() && !is_root {
+                    return Err(WorkspaceSnapshotError::Invalid(
+                        "only the root stack may be empty".to_string(),
+                    ));
+                }
+                if stack.active >= stack.tabs.len() && !stack.tabs.is_empty() {
+                    return Err(WorkspaceSnapshotError::Invalid(
+                        "active tab index is outside its stack".to_string(),
+                    ));
+                }
+                if stack.tabs.is_empty() && stack.active != 0 {
+                    return Err(WorkspaceSnapshotError::Invalid(
+                        "an empty stack must have active index zero".to_string(),
+                    ));
+                }
+                for tile in &stack.tabs {
+                    let Some(panel) = WorkspacePanel::from_tile(tile) else {
+                        return Err(WorkspaceSnapshotError::Invalid(
+                            "an unregistered panel appears in the workspace".to_string(),
+                        ));
+                    };
+                    if !panels.insert(tile.id.0) {
+                        return Err(WorkspaceSnapshotError::Invalid(
+                            "a panel appears more than once".to_string(),
+                        ));
+                    }
+                    if !panel.validates_tile(tile) {
+                        return Err(WorkspaceSnapshotError::Invalid(format!(
+                            "{} does not match Woodshed's registered lane",
+                            panel.label()
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn into_tree(
@@ -403,19 +526,54 @@ impl WorkspaceTreeDto {
     }
 }
 
-fn active_tile(tree: &TileTree) -> Option<&Tile> {
+fn first_active_panel(tree: &TileTree) -> Option<WorkspacePanel> {
     match tree {
-        TileTree::Stack(stack) => stack.tabs.get(stack.active),
-        TileTree::Split { children, .. } => {
-            children.iter().find_map(|branch| active_tile(&branch.tree))
-        }
+        TileTree::Stack(stack) => stack
+            .tabs
+            .get(stack.active)
+            .and_then(WorkspacePanel::from_tile),
+        TileTree::Split { children, .. } => children
+            .iter()
+            .find_map(|branch| first_active_panel(&branch.tree)),
     }
+}
+
+/// Reject divider requests that the shared reducer permits structurally but that cannot enter
+/// Woodshed's durable presentation format. The component retains generic mechanics; this host
+/// owns the canonical ratio policy required to save and restore its workspace.
+fn workspace_event_is_canonical(workbench: &Workbench, event: &TileEvent) -> bool {
+    let TileEvent::DividerMoved { split, fractions } = event else {
+        return true;
+    };
+    workbench
+        .tree()
+        .fractions_at(split)
+        .is_some_and(|existing| {
+            existing.len() == fractions.len()
+                && fractions
+                    .iter()
+                    .all(|fraction| fraction.is_finite() && *fraction > 0.0)
+                && (fractions.iter().sum::<f32>() - 1.0).abs() <= 0.0001
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use workbench::DropTarget;
+    use workbench::{DropTarget, Edge, TilePath};
+
+    fn split_workspace(workspace: &mut WoodshedWorkspace) {
+        assert_eq!(
+            workspace.apply(WorkspaceEvent::Tile(TileEvent::Dragged {
+                tile: WorkspacePanel::Settings.tile_id(),
+                to: DropTarget::Edge {
+                    tile: WorkspacePanel::Practice.tile_id(),
+                    edge: Edge::Right,
+                },
+            })),
+            WorkspaceOutcome::Changed
+        );
+    }
 
     #[test]
     fn panels_use_stable_ids_and_open_content_lanes() {
@@ -454,6 +612,19 @@ mod tests {
     }
 
     #[test]
+    fn split_activation_retains_the_panel_routed_by_the_host() {
+        let mut workspace = WoodshedWorkspace::new();
+        split_workspace(&mut workspace);
+        assert_eq!(workspace.active_panel(), Some(WorkspacePanel::Practice));
+
+        assert_eq!(
+            workspace.apply(WorkspaceEvent::activate(WorkspacePanel::Settings)),
+            WorkspaceOutcome::Activated(WorkspacePanel::Settings)
+        );
+        assert_eq!(workspace.active_panel(), Some(WorkspacePanel::Settings));
+    }
+
+    #[test]
     fn outside_drop_requests_a_typed_tear_out_without_losing_the_panel() {
         let mut workspace = WoodshedWorkspace::new();
         let before = workspace.snapshot();
@@ -486,17 +657,44 @@ mod tests {
     #[test]
     fn host_snapshot_json_round_trips_the_tree_and_active_panel() {
         let mut workspace = WoodshedWorkspace::new();
-        workspace.apply(WorkspaceEvent::activate(WorkspacePanel::Related));
+        split_workspace(&mut workspace);
+        workspace.apply(WorkspaceEvent::activate(WorkspacePanel::Settings));
         let json = workspace.to_snapshot_json().unwrap();
         assert!(json
             .as_bytes()
-            .windows(b"woodshed.related".len())
-            .any(|window| { window == b"woodshed.related" }));
+            .windows(b"woodshed.settings".len())
+            .any(|window| { window == b"woodshed.settings" }));
+        assert!(json.contains("\"axis\":\"row\""));
+        assert!(json.contains("\"fraction\":0.5"));
 
         let restored = WoodshedWorkspace::from_snapshot_json(&json).unwrap();
         assert_eq!(restored.snapshot(), workspace.snapshot());
-        assert_eq!(restored.active_panel(), Some(WorkspacePanel::Related));
+        assert_eq!(restored.active_panel(), Some(WorkspacePanel::Settings));
         assert_eq!(restored.to_snapshot_json().unwrap(), json);
+    }
+
+    #[test]
+    fn malformed_divider_never_enters_or_restores_from_the_workspace_snapshot() {
+        let mut workspace = WoodshedWorkspace::new();
+        split_workspace(&mut workspace);
+        let before = workspace.snapshot();
+        assert_eq!(
+            workspace.apply(WorkspaceEvent::Tile(TileEvent::DividerMoved {
+                split: TilePath(vec![]),
+                fractions: vec![0.7, 0.4],
+            })),
+            WorkspaceOutcome::Unchanged
+        );
+        assert_eq!(workspace.snapshot(), before);
+
+        let mut malformed: serde_json::Value =
+            serde_json::from_str(&workspace.to_snapshot_json().unwrap()).unwrap();
+        malformed["tree"]["children"][0]["fraction"] = serde_json::json!(0.7);
+        malformed["tree"]["children"][1]["fraction"] = serde_json::json!(0.4);
+        assert!(matches!(
+            WoodshedWorkspace::from_snapshot_json(&serde_json::to_string(&malformed).unwrap()),
+            Err(WorkspaceSnapshotError::Invalid(_))
+        ));
     }
 
     #[test]

@@ -142,6 +142,11 @@ pub struct PersistedSession {
     /// Typed catalog engagement used by Related ranking and future history
     /// views. Defaults empty for sessions written before the field existed.
     pub practice_history: crate::history::PracticeHistory,
+    /// Desktop-host workspace presentation policy, encoded by Woodshed's view
+    /// layer. The portable core retains these opaque bytes in the existing
+    /// session slot without learning the shared Workbench schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_json: Option<String>,
 }
 
 impl Default for PersistedSession {
@@ -169,6 +174,7 @@ impl PersistedSession {
             set: set.clone(),
             song: song.clone(),
             practice_history: practice_history.clone(),
+            workspace_json: None,
             section,
             lens: stage.lens,
             root_idx: stage.root_idx,

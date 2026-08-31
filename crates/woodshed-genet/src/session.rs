@@ -45,10 +45,12 @@ pub fn restore(storage: &SessionStore<HostBackend>, ui: &mut UiState) {
     let mut app_settings = stored_settings.clone().unwrap_or_default();
     let Some(json) = storage.load() else {
         if stored_settings.is_some() {
-            ui.apply_persisted(
+            if let Some(error) = ui.apply_persisted(
                 &woodshed_core::storage::PersistedSession::default(),
                 app_settings,
-            );
+            ) {
+                eprintln!("[woodshed-genet] ignoring invalid workspace snapshot: {error}");
+            }
         }
         return;
     };
@@ -59,7 +61,9 @@ pub fn restore(storage: &SessionStore<HostBackend>, ui: &mut UiState) {
                     app_settings = legacy;
                 }
             }
-            ui.apply_persisted(&loaded.session, app_settings);
+            if let Some(error) = ui.apply_persisted(&loaded.session, app_settings) {
+                eprintln!("[woodshed-genet] ignoring invalid workspace snapshot: {error}");
+            }
         }
         Err(error) => eprintln!("[woodshed-genet] ignoring corrupt session: {error}"),
     }
@@ -69,6 +73,7 @@ pub fn restore(storage: &SessionStore<HostBackend>, ui: &mut UiState) {
 mod tests {
     use super::*;
     use woodshed_core::settings::WindowSettings;
+    use woodshed_views::workspace::WorkspacePanel;
 
     #[test]
     fn settings_apply_without_a_practice_session() {
@@ -89,5 +94,27 @@ mod tests {
         restore(&storage, &mut ui);
 
         assert_eq!(ui.app_settings, settings);
+    }
+
+    #[test]
+    fn host_session_restores_the_workspace_policy() {
+        let backend: HostBackend = Box::new(muniment::MemoryBackend::default());
+        let storage = SessionStore::new(backend);
+        let mut saved = UiState::new();
+        saved.activate_workspace_panel(WorkspacePanel::Related);
+        let saved_session = saved.to_persisted();
+        let saved_workspace = saved_session.workspace_json.clone();
+        storage.save(&serde_json::to_string(&saved_session).unwrap());
+
+        let mut restored = UiState::new();
+        restore(&storage, &mut restored);
+
+        assert_eq!(
+            restored.workspace.active_panel(),
+            Some(WorkspacePanel::Related)
+        );
+        assert_eq!(restored.section, woodshed_core::storage::AppSection::Stage);
+        assert!(restored.related_expanded);
+        assert_eq!(restored.to_persisted().workspace_json, saved_workspace);
     }
 }

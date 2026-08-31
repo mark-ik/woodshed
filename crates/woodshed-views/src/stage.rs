@@ -1513,18 +1513,28 @@ impl UiState {
 
     /// Snapshot the persistable subset (the W0.2 seam's payload).
     pub fn to_persisted(&self) -> PersistedSession {
-        PersistedSession::capture(
+        let mut session = PersistedSession::capture(
             &self.stage,
             self.section,
             &self.set,
             &self.song,
             &self.practice_history,
-        )
+        );
+        session.workspace_json = Some(
+            self.workspace
+                .to_snapshot_json()
+                .expect("Woodshed only persists canonical workspace events"),
+        );
+        session
     }
 
     /// Restore a persisted session (indices clamp; unknown theme names
     /// fall back to the default).
-    pub fn apply_persisted(&mut self, session: &PersistedSession, app_settings: AppSettings) {
+    pub fn apply_persisted(
+        &mut self,
+        session: &PersistedSession,
+        app_settings: AppSettings,
+    ) -> Option<crate::workspace::WorkspaceSnapshotError> {
         session.restore(&mut self.stage, &app_settings);
         self.set = session.set.clone();
         self.song = session.song.clone();
@@ -1547,6 +1557,26 @@ impl UiState {
         self.root_dd = SelectState::new(self.stage.root_idx);
         self.set_arrangement_dd = SelectState::new(self.app_settings.stage.set_arrangement.index())
             .with_label("Set arrangement");
+        let workspace_error = session.workspace_json.as_deref().and_then(|json| {
+            match WoodshedWorkspace::from_snapshot_json(json) {
+                Ok(workspace) => {
+                    self.workspace = workspace;
+                    None
+                }
+                Err(error) => Some(error),
+            }
+        });
+        if matches!(self.section, AppSection::Looper | AppSection::Tools) {
+            return workspace_error;
+        }
+        if workspace_error.is_none() && session.workspace_json.is_some() {
+            if let Some(panel) = self.workspace.active_panel() {
+                self.show_workspace_panel(panel);
+            }
+        } else {
+            self.select_app_section(session.section);
+        }
+        workspace_error
     }
 }
 
@@ -2552,6 +2582,7 @@ pub fn stage_root(ui: &UiState) -> UiChild {
 #[cfg(test)]
 mod evidence_tests {
     use super::*;
+    use workbench::{DropTarget, Edge, TileEvent};
 
     fn staged_set() -> UiState {
         let mut ui = UiState::new();
@@ -2570,6 +2601,24 @@ mod evidence_tests {
         assert!(ui.related_expanded);
 
         ui.activate_workspace_panel(WorkspacePanel::Settings);
+        assert_eq!(ui.section, AppSection::Settings);
+    }
+
+    #[test]
+    fn workspace_split_activation_routes_the_selected_panel() {
+        let mut ui = UiState::new();
+        assert_eq!(
+            ui.apply_workspace_event(WorkspaceEvent::Tile(TileEvent::Dragged {
+                tile: WorkspacePanel::Settings.tile_id(),
+                to: DropTarget::Edge {
+                    tile: WorkspacePanel::Practice.tile_id(),
+                    edge: Edge::Right,
+                },
+            })),
+            WorkspaceOutcome::Changed
+        );
+        ui.activate_workspace_panel(WorkspacePanel::Settings);
+        assert_eq!(ui.workspace.active_panel(), Some(WorkspacePanel::Settings));
         assert_eq!(ui.section, AppSection::Settings);
     }
 
