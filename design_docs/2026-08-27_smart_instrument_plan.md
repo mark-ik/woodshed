@@ -381,6 +381,34 @@ only by luck.
   now takes it as a git dependency, so this workspace is buildable by anyone
   with the genet checkout.
 
+## The vendor app overwrites the instrument on connect
+
+Recorded 2026-09-01 (ringdown H32) and a constraint on every feature in this
+plan: **the HyVibe app pushes its stored profile to the guitar whenever it
+connects, replacing whatever is there.** A chain Woodshed had written and a
+slot name the owner had read on the panel were both gone after the app was
+opened. The app never reads the instrument's state, so it cannot know.
+
+What this means for Woodshed's instrument surface:
+
+- Anything Woodshed writes — metronome, preset selection, effects, names —
+  **lasts until the phone app next connects.** The UI must say so plainly
+  rather than present a write as durable: "sent to the guitar; the HyVibe app
+  will overwrite it when it connects" is the honest state.
+- The instrument enforces one *connection* at a time but not one *authority*
+  at a time. Woodshed and the app can alternate, and each time the app takes a
+  turn Woodshed's changes are lost.
+- Re-pushing is cheap and Woodshed can detect the need: `RemoveEffect`
+  answers `false` on an empty chain, so remove-until-`false` counts what a
+  chain holds (ringdown H31), and Woodshed can compare that to what it last
+  wrote. Anything Woodshed treats as its own state should be kept locally and
+  re-sent, not assumed to live on the guitar.
+
+This is the strongest argument yet for the content model this plan and the
+mere discussion converge on: **Woodshed's record is the source of truth for
+Woodshed's tones, and the guitar is a sink for them** — which is exactly the
+relationship the vendor app already has with it.
+
 ## Open questions
 
 - Does the instrument emit anything unprompted — a knob turn, a bank switch, a
