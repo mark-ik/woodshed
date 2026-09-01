@@ -2,9 +2,9 @@ use cambium::{clickable, el, map_state, select, text};
 use genet_host_api::settings::{
     SettingControl, SettingValue, SettingsProjection, SettingsProvider,
 };
-use genet_host_api::tile::SettingsRef;
 use woodshed_core::audio::{AudioRequest, CalibrationStatus};
 use woodshedding::rehearsal::SetGraphEdgeKind;
+use workbench::SettingsRef;
 
 use super::{BoardLayout, SettingsPage, UiChild, UiState};
 use crate::settings_provider::{WoodshedSettingsProvider, APPEARANCE_REFERENCE};

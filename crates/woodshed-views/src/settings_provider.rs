@@ -8,8 +8,8 @@ use genet_host_api::settings::{
     SettingControl, SettingMovement, SettingMutability, SettingOption, SettingScope,
     SettingSecurity, SettingSpec, SettingValue, SettingsError, SettingsProvider,
 };
-use genet_host_api::tile::SettingsRef;
 use woodshed_core::settings::AppSettings;
+use workbench::SettingsRef;
 
 use crate::theme::ThemeMode;
 
