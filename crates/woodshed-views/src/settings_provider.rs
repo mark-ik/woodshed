@@ -4,7 +4,7 @@
 //! Settings views a provider-shaped description and typed write path without
 //! moving persistence into the host contract.
 
-use genet_host_api::settings::{
+use mere_surface_api::settings::{
     SettingControl, SettingMovement, SettingMutability, SettingOption, SettingScope,
     SettingSecurity, SettingSpec, SettingValue, SettingsError, SettingsProvider,
 };

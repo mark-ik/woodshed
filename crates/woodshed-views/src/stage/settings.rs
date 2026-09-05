@@ -1,5 +1,5 @@
 use cambium::{clickable, el, map_state, select, text};
-use genet_host_api::settings::{
+use mere_surface_api::settings::{
     SettingControl, SettingValue, SettingsProjection, SettingsProvider,
 };
 use woodshed_core::audio::{AudioRequest, CalibrationStatus};
